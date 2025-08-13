@@ -5,6 +5,8 @@ import '../widgets/bottom_tools_sheet.dart';
 import '../widgets/side_drawer.dart';
 import '../theme/design_tokens.dart';
 import '../icons/lucide_adapter.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_provider.dart';
  
 
 class HomePage extends StatefulWidget {
@@ -64,7 +66,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         ],
       ),
       drawer: SideDrawer(
-        userName: Localizations.localeOf(context).languageCode == 'zh' ? '小明' : 'Alex',
+        userName: context.watch<UserProvider>().name,
         assistantName: Localizations.localeOf(context).languageCode == 'zh' ? '默认助手' : 'Default Assistant',
       ),
       body: Stack(

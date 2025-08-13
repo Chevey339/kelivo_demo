@@ -4,6 +4,7 @@ import '../icons/lucide_adapter.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../models/chat_item.dart';
+import '../providers/user_provider.dart';
 
 class SideDrawer extends StatefulWidget {
   const SideDrawer({
@@ -223,7 +224,7 @@ class _SideDrawerState extends State<SideDrawer> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                 children: [
-                  // 1. 用户信息区
+                  // 1. 用户信息区（点击昵称可修改）
                   Row(
                     children: [
                       avatarDefault(widget.userName, size: 48),
@@ -232,12 +233,21 @@ class _SideDrawerState extends State<SideDrawer> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(widget.userName,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: textBase,
-                                )),
+                            InkWell(
+                              borderRadius: BorderRadius.circular(6),
+                              onTap: () => _editUserName(context),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 2),
+                                child: Text(
+                                  widget.userName,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: textBase,
+                                  ),
+                                ),
+                              ),
+                            ),
                             const SizedBox(height: 2),
                             Text(_greeting(context),
                                 style: TextStyle(color: textBase, fontSize: 13)),
@@ -459,6 +469,99 @@ class _SideDrawerState extends State<SideDrawer> {
         ),
       ),
     );
+  }
+}
+
+extension on _SideDrawerState {
+  Future<void> _editUserName(BuildContext context) async {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final initial = widget.userName;
+    final controller = TextEditingController(text: initial);
+    const maxLen = 24;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        String value = controller.text;
+        bool valid(String v) => v.trim().isNotEmpty && v.trim() != initial;
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              backgroundColor: cs.surface,
+              title: Text(zh ? '设置昵称' : 'Set Nickname'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    maxLength: maxLen,
+                    textInputAction: TextInputAction.done,
+                    onChanged: (v) => setLocal(() => value = v),
+                    onSubmitted: (_) {
+                      if (valid(value)) Navigator.of(ctx).pop(true);
+                    },
+                    decoration: InputDecoration(
+                      labelText: zh ? '昵称' : 'Nickname',
+                      hintText: zh ? '输入新的昵称' : 'Enter new nickname',
+                      filled: true,
+                      fillColor: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
+                      counterText: '',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.transparent),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.transparent),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: cs.primary.withOpacity(0.4)),
+                      ),
+                    ),
+                    style: TextStyle(fontSize: 15, color: Theme.of(ctx).textTheme.bodyMedium?.color),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '${value.trim().length}/$maxLen',
+                      style: TextStyle(color: cs.onSurface.withOpacity(0.45), fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: Text(zh ? '取消' : 'Cancel'),
+                ),
+                TextButton(
+                  onPressed: valid(value) ? () => Navigator.of(ctx).pop(true) : null,
+                  child: Text(
+                    zh ? '保存' : 'Save',
+                    style: TextStyle(
+                      color: valid(value) ? cs.primary : cs.onSurface.withOpacity(0.38),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (ok == true) {
+      final text = controller.text.trim();
+      if (text.isNotEmpty) {
+        await context.read<UserProvider>().setName(text);
+      }
+    }
   }
 }
 

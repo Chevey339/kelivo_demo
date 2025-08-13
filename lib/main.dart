@@ -6,7 +6,7 @@ import 'theme/theme_factory.dart';
 import 'package:provider/provider.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'providers/chat_provider.dart';
-import 'models/chat_item.dart';
+import 'providers/user_provider.dart';
 
 void main() {
   runApp(const MyApp());
@@ -20,7 +20,8 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => ChatProvider(seed: _seedChats())),
+        ChangeNotifierProvider(create: (_) => ChatProvider()),
+        ChangeNotifierProvider(create: (_) => UserProvider()),
       ],
       child: Builder(
         builder: (context) {
@@ -55,11 +56,4 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
-List<ChatItem> _seedChats() => <ChatItem>[
-      ChatItem(id: 'c1', title: '新建对话', created: DateTime.now().subtract(const Duration(minutes: 30))),
-      ChatItem(id: 'c2', title: '需求讨论', created: DateTime.now().subtract(const Duration(hours: 2))),
-      ChatItem(id: 'c3', title: '设计评审纪要', created: DateTime.now().subtract(const Duration(days: 1, hours: 1))),
-      ChatItem(id: 'c4', title: '技术栈选择', created: DateTime.now().subtract(const Duration(days: 3))),
-    ];
  
