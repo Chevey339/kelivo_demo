@@ -5,6 +5,10 @@ import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../models/chat_item.dart';
 import '../providers/user_provider.dart';
+import 'package:flutter/services.dart';
+import 'dart:io' show File;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:image_picker/image_picker.dart';
 
 class SideDrawer extends StatefulWidget {
   const SideDrawer({
@@ -192,8 +196,77 @@ class _SideDrawerState extends State<SideDrawer> {
     final rest = base.where((c) => !pinnedIds.contains(c.id)).toList();
     final groups = _groupByDate(context, rest);
 
-    // Default text avatar: light theme color background + theme color text
-    Widget avatarDefault(String name, {double size = 40}) {
+    // Avatar renderer: emoji / url / file / default initial
+    Widget avatarWidget(String name, UserProvider up, {double size = 40}) {
+      final type = up.avatarType;
+      final value = up.avatarValue;
+      if (type == 'emoji' && value != null && value.isNotEmpty) {
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: cs.primary.withOpacity(0.15),
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            value,
+            style: TextStyle(fontSize: size * 0.5),
+          ),
+        );
+      }
+      if (type == 'url' && value != null && value.isNotEmpty) {
+        return ClipOval(
+          child: Image.network(
+            value,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (c, e, s) => Container(
+              width: size,
+              height: size,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: cs.primary.withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Text('?', style: TextStyle(color: cs.primary, fontSize: size * 0.42, fontWeight: FontWeight.w700)),
+            ),
+          ),
+        );
+      }
+      if (type == 'file' && value != null && value.isNotEmpty && !kIsWeb) {
+        return ClipOval(
+          child: Image(
+            image: FileImage(File(value)),
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+          ),
+        );
+      }
+      // default: initial
+      final letter = name.isNotEmpty ? name.characters.first : '?';
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: cs.primary.withOpacity(0.15),
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          letter,
+          style: TextStyle(
+            color: cs.primary,
+            fontSize: size * 0.42,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+    }
+
+    Widget assistantAvatar(String name, {double size = 28}) {
       final letter = name.isNotEmpty ? name.characters.first : '?';
       return Container(
         width: size,
@@ -227,7 +300,11 @@ class _SideDrawerState extends State<SideDrawer> {
                   // 1. 用户信息区（点击昵称可修改）
                   Row(
                     children: [
-                      avatarDefault(widget.userName, size: 48),
+                      InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () => _editAvatar(context),
+                        child: avatarWidget(widget.userName, context.watch<UserProvider>(), size: 48),
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -388,7 +465,7 @@ class _SideDrawerState extends State<SideDrawer> {
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               child: Row(
                                 children: [
-                                  avatarDefault(widget.assistantName, size: 28),
+                                  assistantAvatar(widget.assistantName, size: 28),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
@@ -473,6 +550,361 @@ class _SideDrawerState extends State<SideDrawer> {
 }
 
 extension on _SideDrawerState {
+  Future<void> _editAvatar(BuildContext context) async {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text(zh ? '选择图片' : 'Choose Image'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await _pickLocalImage(context);
+                },
+              ),
+              ListTile(
+                title: Text(zh ? '选择表情' : 'Choose Emoji'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  final emoji = await _pickEmoji(context);
+                  if (emoji != null) {
+                    await context.read<UserProvider>().setAvatarEmoji(emoji);
+                  }
+                },
+              ),
+              ListTile(
+                title: Text(zh ? '输入链接' : 'Enter Link'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await _inputAvatarUrl(context);
+                },
+              ),
+              ListTile(
+                title: Text(zh ? '使用QQ头像' : 'Import from QQ'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await _inputQQAvatar(context);
+                },
+              ),
+              ListTile(
+                title: Text(zh ? '重置' : 'Reset'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await context.read<UserProvider>().resetAvatar();
+                },
+              ),
+              const SizedBox(height: 4),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<String?> _pickEmoji(BuildContext context) async {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    // Provide input to allow any emoji via system emoji keyboard,
+    // plus a large set of quick picks for convenience.
+    final controller = TextEditingController();
+    String value = '';
+    bool validGrapheme(String s) {
+      final trimmed = s.characters.take(1).toString().trim();
+      return trimmed.isNotEmpty && trimmed == s.trim();
+    }
+    final List<String> quick = const [
+      '😀','😁','😂','🤣','😃','😄','😅','😊','😍','😘','😗','😙','😚','🙂','🤗','🤩','🫶','🤝','👍','👎','👋','🙏','💪','🔥','✨','🌟','💡','🎉','🎊','🎈','🌈','☀️','🌙','⭐','⚡','☁️','❄️','🌧️','🍎','🍊','🍋','🍉','🍇','🍓','🍒','🍑','🥭','🍍','🥝','🍅','🥕','🌽','🍞','🧀','🍔','🍟','🍕','🌮','🌯','🍣','🍜','🍰','🍪','🍩','🍫','🍻','☕','🧋','🥤','⚽','🏀','🏈','🎾','🏐','🎮','🎧','🎸','🎹','🎺','📚','✏️','💼','💻','🖥️','📱','🛩️','✈️','🚗','🚕','🚙','🚌','🚀','🛰️','🧠','🫀','💊','🩺','🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵'
+    ];
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          // Revert to non-scrollable dialog but cap grid height
+          // based on available height when keyboard is visible.
+          final media = MediaQuery.of(ctx);
+          final avail = media.size.height - media.viewInsets.bottom;
+          final double gridHeight = (avail * 0.28).clamp(120.0, 220.0);
+          return AlertDialog(
+            scrollable: true,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: cs.surface,
+            title: Text(zh ? '选择表情' : 'Choose Emoji'),
+            content: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: cs.primary.withOpacity(0.08),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(value.isEmpty ? '🙂' : value.characters.take(1).toString(), style: const TextStyle(fontSize: 40)),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    onChanged: (v) => setLocal(() => value = v),
+                    onSubmitted: (_) {
+                      if (validGrapheme(value)) Navigator.of(ctx).pop(value.characters.take(1).toString());
+                    },
+                    decoration: InputDecoration(
+                      hintText: zh ? '输入或粘贴任意表情' : 'Type or paste any emoji',
+                      filled: true,
+                      fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.transparent),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.transparent),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: cs.primary.withOpacity(0.4)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: gridHeight,
+                    child: GridView.builder(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 8,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                      ),
+                      itemCount: quick.length,
+                      itemBuilder: (c, i) {
+                        final e = quick[i];
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => Navigator.of(ctx).pop(e),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: cs.primary.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(e, style: const TextStyle(fontSize: 20)),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(zh ? '取消' : 'Cancel'),
+              ),
+              TextButton(
+                onPressed: validGrapheme(value) ? () => Navigator.of(ctx).pop(value.characters.take(1).toString()) : null,
+                child: Text(
+                  zh ? '保存' : 'Save',
+                  style: TextStyle(
+                    color: validGrapheme(value) ? cs.primary : cs.onSurface.withOpacity(0.38),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          );
+        });
+      },
+    );
+  }
+
+  Future<void> _inputAvatarUrl(BuildContext context) async {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final controller = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        bool valid(String s) => s.trim().startsWith('http://') || s.trim().startsWith('https://');
+        String value = '';
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: cs.surface,
+            title: Text(zh ? '输入图片链接' : 'Enter Image URL'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: zh ? '例如: https://example.com/avatar.png' : 'e.g. https://example.com/avatar.png',
+                filled: true,
+                fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.transparent),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.transparent),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: cs.primary.withOpacity(0.4)),
+                ),
+              ),
+              onChanged: (v) => setLocal(() => value = v),
+              onSubmitted: (_) {
+                if (valid(value)) Navigator.of(ctx).pop(true);
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(zh ? '取消' : 'Cancel'),
+              ),
+              TextButton(
+                onPressed: valid(value) ? () => Navigator.of(ctx).pop(true) : null,
+                child: Text(
+                  zh ? '保存' : 'Save',
+                  style: TextStyle(
+                    color: valid(value) ? cs.primary : cs.onSurface.withOpacity(0.38),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          );
+        });
+      },
+    );
+    if (ok == true) {
+      final url = controller.text.trim();
+      if (url.isNotEmpty) {
+        await context.read<UserProvider>().setAvatarUrl(url);
+      }
+    }
+  }
+
+  Future<void> _inputQQAvatar(BuildContext context) async {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final controller = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        String value = '';
+        bool valid(String s) => RegExp(r'^[0-9]{5,12}$').hasMatch(s.trim());
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: cs.surface,
+            title: Text(zh ? '从QQ导入头像' : 'Import from QQ'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                hintText: zh ? '输入QQ号码（5-12位）' : 'Enter QQ number (5-12 digits)',
+                filled: true,
+                fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.transparent),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.transparent),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: cs.primary.withOpacity(0.4)),
+                ),
+              ),
+              onChanged: (v) => setLocal(() => value = v),
+              onSubmitted: (_) {
+                if (valid(value)) Navigator.of(ctx).pop(true);
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(zh ? '取消' : 'Cancel'),
+              ),
+              TextButton(
+                onPressed: valid(value) ? () => Navigator.of(ctx).pop(true) : null,
+                child: Text(
+                  zh ? '保存' : 'Save',
+                  style: TextStyle(
+                    color: valid(value) ? cs.primary : cs.onSurface.withOpacity(0.38),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          );
+        });
+      },
+    );
+    if (ok == true) {
+      final qq = controller.text.trim();
+      if (qq.isNotEmpty) {
+        final url = 'http://q2.qlogo.cn/headimg_dl?dst_uin=' + qq + '&spec=100';
+        await context.read<UserProvider>().setAvatarUrl(url);
+      }
+    }
+  }
+
+  Future<void> _pickLocalImage(BuildContext context) async {
+    if (kIsWeb) {
+      await _inputAvatarUrl(context);
+      return;
+    }
+    try {
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        imageQuality: 90,
+      );
+      if (!mounted) return;
+      if (file != null) {
+        await context.read<UserProvider>().setAvatarFilePath(file.path);
+        return;
+      }
+    } on PlatformException catch (e) {
+      // Gracefully degrade when plugin channel isn't available or permission denied.
+      if (!mounted) return;
+      final zh = Localizations.localeOf(context).languageCode == 'zh';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(zh ? '无法打开相册，试试输入图片链接' : 'Unable to open gallery. Try entering an image URL.')),
+      );
+      await _inputAvatarUrl(context);
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      final zh = Localizations.localeOf(context).languageCode == 'zh';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(zh ? '发生错误，试试输入图片链接' : 'Something went wrong. Try entering an image URL.')),
+      );
+      await _inputAvatarUrl(context);
+      return;
+    }
+  }
   Future<void> _editUserName(BuildContext context) async {
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     final initial = widget.userName;
