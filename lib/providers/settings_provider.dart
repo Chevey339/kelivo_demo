@@ -94,6 +94,12 @@ class ProviderConfig {
   final String? chatPath; // openai only
   final bool? useResponseApi; // openai only
   final bool? vertexAI; // google only
+  // Per-provider proxy
+  final bool? proxyEnabled;
+  final String? proxyHost;
+  final String? proxyPort;
+  final String? proxyUsername;
+  final String? proxyPassword;
 
   ProviderConfig({
     required this.enabled,
@@ -103,6 +109,11 @@ class ProviderConfig {
     this.chatPath,
     this.useResponseApi,
     this.vertexAI,
+    this.proxyEnabled,
+    this.proxyHost,
+    this.proxyPort,
+    this.proxyUsername,
+    this.proxyPassword,
   });
 
   ProviderConfig copyWith({
@@ -113,6 +124,11 @@ class ProviderConfig {
     String? chatPath,
     bool? useResponseApi,
     bool? vertexAI,
+    bool? proxyEnabled,
+    String? proxyHost,
+    String? proxyPort,
+    String? proxyUsername,
+    String? proxyPassword,
   }) => ProviderConfig(
         enabled: enabled ?? this.enabled,
         name: name ?? this.name,
@@ -121,6 +137,11 @@ class ProviderConfig {
         chatPath: chatPath ?? this.chatPath,
         useResponseApi: useResponseApi ?? this.useResponseApi,
         vertexAI: vertexAI ?? this.vertexAI,
+        proxyEnabled: proxyEnabled ?? this.proxyEnabled,
+        proxyHost: proxyHost ?? this.proxyHost,
+        proxyPort: proxyPort ?? this.proxyPort,
+        proxyUsername: proxyUsername ?? this.proxyUsername,
+        proxyPassword: proxyPassword ?? this.proxyPassword,
       );
 
   Map<String, dynamic> toJson() => {
@@ -131,6 +152,11 @@ class ProviderConfig {
         'chatPath': chatPath,
         'useResponseApi': useResponseApi,
         'vertexAI': vertexAI,
+        'proxyEnabled': proxyEnabled,
+        'proxyHost': proxyHost,
+        'proxyPort': proxyPort,
+        'proxyUsername': proxyUsername,
+        'proxyPassword': proxyPassword,
       };
 
   factory ProviderConfig.fromJson(Map<String, dynamic> json) => ProviderConfig(
@@ -141,6 +167,11 @@ class ProviderConfig {
         chatPath: json['chatPath'] as String?,
         useResponseApi: json['useResponseApi'] as bool?,
         vertexAI: json['vertexAI'] as bool?,
+        proxyEnabled: json['proxyEnabled'] as bool?,
+        proxyHost: json['proxyHost'] as String?,
+        proxyPort: json['proxyPort'] as String?,
+        proxyUsername: json['proxyUsername'] as String?,
+        proxyPassword: json['proxyPassword'] as String?,
       );
 
   static ProviderKind classify(String key) {
@@ -174,6 +205,11 @@ class ProviderConfig {
           apiKey: '',
           baseUrl: _defaultBase(key),
           vertexAI: false,
+          proxyEnabled: false,
+          proxyHost: '',
+          proxyPort: '8080',
+          proxyUsername: '',
+          proxyPassword: '',
         );
       case ProviderKind.claude:
         return ProviderConfig(
@@ -181,6 +217,11 @@ class ProviderConfig {
           name: displayName ?? key,
           apiKey: '',
           baseUrl: _defaultBase(key),
+          proxyEnabled: false,
+          proxyHost: '',
+          proxyPort: '8080',
+          proxyUsername: '',
+          proxyPassword: '',
         );
       case ProviderKind.openai:
       default:
@@ -191,6 +232,11 @@ class ProviderConfig {
           baseUrl: _defaultBase(key),
           chatPath: '/chat/completions',
           useResponseApi: false,
+          proxyEnabled: false,
+          proxyHost: '',
+          proxyPort: '8080',
+          proxyUsername: '',
+          proxyPassword: '',
         );
     }
   }
