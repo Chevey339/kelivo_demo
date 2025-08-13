@@ -35,6 +35,12 @@ class Lucide {
   static const IconData BadgeInfo = lucide.LucideIcons.badgeInfo;
   static const IconData Library = lucide.LucideIcons.library;
   static const IconData Share2 = lucide.LucideIcons.share2;
+  static const IconData Share = lucide.LucideIcons.share;
   static const IconData MessageCircleWarning = lucide.LucideIcons.messageCircleWarning;
   static const IconData ChevronDown = lucide.LucideIcons.chevronDown;
+  static const IconData Import = lucide.LucideIcons.import;
+  static const IconData GripHorizontal = lucide.LucideIcons.gripHorizontal;
+  static const IconData Settings2 = lucide.LucideIcons.settings2;
+  static const IconData Network = lucide.LucideIcons.network;
+  static const IconData Cable = lucide.LucideIcons.cable;
 }

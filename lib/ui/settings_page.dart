@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../icons/lucide_adapter.dart';
-import '../theme/theme_provider.dart';
+import '../providers/settings_provider.dart';
+import 'providers_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -9,7 +10,7 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final themeProvider = context.watch<ThemeProvider>();
+    final settings = context.watch<SettingsProvider>();
 
     String modeLabel(ThemeMode m) {
       final zh = Localizations.localeOf(context).languageCode == 'zh';
@@ -56,7 +57,7 @@ class SettingsPage extends StatelessWidget {
         },
       );
       if (selected != null) {
-        context.read<ThemeProvider>().setThemeMode(selected);
+        await context.read<SettingsProvider>().setThemeMode(selected);
       }
     }
 
@@ -114,7 +115,7 @@ class SettingsPage extends StatelessWidget {
             icon: Lucide.SunMoon,
             title: Localizations.localeOf(context).languageCode == 'zh' ? '颜色模式' : 'Color Mode',
             trailing: _ModePill(
-              label: modeLabel(themeProvider.themeMode),
+              label: modeLabel(settings.themeMode),
               onTap: pickThemeMode,
             ),
           ),
@@ -133,7 +134,13 @@ class SettingsPage extends StatelessWidget {
 
           header(Localizations.localeOf(context).languageCode == 'zh' ? '模型与服务' : 'Models & Services'),
           SettingRow(icon: Lucide.Heart, title: Localizations.localeOf(context).languageCode == 'zh' ? '默认模型' : 'Default Model', onTap: () {}),
-          SettingRow(icon: Lucide.Boxes, title: Localizations.localeOf(context).languageCode == 'zh' ? '提供商' : 'Providers', onTap: () {}),
+          SettingRow(
+            icon: Lucide.Boxes,
+            title: Localizations.localeOf(context).languageCode == 'zh' ? '提供商' : 'Providers',
+            onTap: () {
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProvidersPage()));
+            },
+          ),
           SettingRow(icon: Lucide.Earth, title: Localizations.localeOf(context).languageCode == 'zh' ? '搜索服务' : 'Search', onTap: () {}),
           SettingRow(icon: Lucide.Volume2, title: Localizations.localeOf(context).languageCode == 'zh' ? '语音服务' : 'TTS', onTap: () {}),
           SettingRow(icon: Lucide.Terminal, title: Localizations.localeOf(context).languageCode == 'zh' ? 'MCP' : 'MCP', onTap: () {}),
@@ -260,4 +267,3 @@ class _ModePill extends StatelessWidget {
     );
   }
 }
-

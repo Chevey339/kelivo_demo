@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'ui/home_page.dart';
-import 'theme/theme_provider.dart';
+// Theme is now managed in SettingsProvider
 import 'theme/theme_factory.dart';
 import 'package:provider/provider.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'providers/chat_provider.dart';
 import 'providers/user_provider.dart';
+import 'providers/settings_provider.dart';
 
 void main() {
   runApp(const MyApp());
@@ -19,13 +20,13 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => UserProvider()),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
       ],
       child: Builder(
         builder: (context) {
-          final themeProvider = Provider.of<ThemeProvider>(context, listen: true);
+          final settings = context.watch<SettingsProvider>();
           return DynamicColorBuilder(
             builder: (lightDynamic, darkDynamic) {
               final light = buildLightTheme(lightDynamic);
@@ -46,7 +47,7 @@ class MyApp extends StatelessWidget {
                 ],
                 theme: light,
                 darkTheme: dark,
-                themeMode: themeProvider.themeMode,
+                themeMode: settings.themeMode,
                 home: const HomePage(),
               );
             },
