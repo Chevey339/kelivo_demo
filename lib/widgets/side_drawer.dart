@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../models/chat_item.dart';
 import '../providers/user_provider.dart';
+import '../ui/settings_page.dart';
 import 'package:flutter/services.dart';
 import 'dart:io' show File;
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -519,7 +520,12 @@ class _SideDrawerState extends State<SideDrawer> {
                           borderRadius: BorderRadius.circular(12),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(12),
-                            onTap: () {},
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => const SettingsPage()),
+                              );
+                            },
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               child: Row(
@@ -588,7 +594,7 @@ extension on _SideDrawerState {
                 },
               ),
               ListTile(
-                title: Text(zh ? '使用QQ头像' : 'Import from QQ'),
+                title: Text(zh ? 'QQ头像' : 'Import from QQ'),
                 onTap: () async {
                   Navigator.of(ctx).pop();
                   await _inputQQAvatar(context);
@@ -813,7 +819,7 @@ extension on _SideDrawerState {
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             backgroundColor: cs.surface,
-            title: Text(zh ? '从QQ导入头像' : 'Import from QQ'),
+            title: Text(zh ? '使用QQ头像' : 'Import from QQ'),
             content: TextField(
               controller: controller,
               autofocus: true,

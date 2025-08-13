@@ -8,9 +8,11 @@ class Lucide {
   static const IconData MessageCirclePlus = lucide.LucideIcons.messageCirclePlus;
   static const IconData Box = lucide.LucideIcons.box;
   static const IconData Globe = lucide.LucideIcons.earth;
+  static const IconData Earth = lucide.LucideIcons.earth;
   static const IconData Plus = lucide.LucideIcons.plus;
   static const IconData X = lucide.LucideIcons.x;
   static const IconData ArrowUp = lucide.LucideIcons.arrowUp;
+  static const IconData ArrowLeft = lucide.LucideIcons.arrowLeft;
   static const IconData Camera = lucide.LucideIcons.camera;
   static const IconData Image = lucide.LucideIcons.image;
   static const IconData Upload = lucide.LucideIcons.upload;
@@ -21,4 +23,18 @@ class Lucide {
   static const IconData Edit = lucide.LucideIcons.book;
   static const IconData Pin = lucide.LucideIcons.pin;
   static const IconData Trash = lucide.LucideIcons.trash2;
+  static const IconData SunMoon = lucide.LucideIcons.sunMoon;
+  static const IconData Palette = lucide.LucideIcons.palette;
+  static const IconData Monitor = lucide.LucideIcons.monitor;
+  static const IconData Heart = lucide.LucideIcons.heart;
+  static const IconData Boxes = lucide.LucideIcons.boxes;
+  static const IconData Volume2 = lucide.LucideIcons.volume2;
+  static const IconData Terminal = lucide.LucideIcons.terminal;
+  static const IconData Database = lucide.LucideIcons.database;
+  static const IconData HardDrive = lucide.LucideIcons.hardDrive;
+  static const IconData BadgeInfo = lucide.LucideIcons.badgeInfo;
+  static const IconData Library = lucide.LucideIcons.library;
+  static const IconData Share2 = lucide.LucideIcons.share2;
+  static const IconData MessageCircleWarning = lucide.LucideIcons.messageCircleWarning;
+  static const IconData ChevronDown = lucide.LucideIcons.chevronDown;
 }
