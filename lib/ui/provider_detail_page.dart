@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../icons/lucide_adapter.dart';
 import '../providers/settings_provider.dart';
+import '../providers/model_provider.dart';
 
 class ProviderDetailPage extends StatefulWidget {
   const ProviderDetailPage({super.key, required this.keyName, required this.displayName});
@@ -215,22 +216,32 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   }
 
   Widget _buildModelsTab(BuildContext context, ColorScheme cs, bool zh) {
+    final cfg = context.watch<SettingsProvider>().getProviderConfig(widget.keyName, defaultName: widget.displayName);
+    final models = cfg.models;
     return Stack(
       children: [
-        Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(zh ? '暂无模型' : 'No Models', style: TextStyle(fontSize: 18, color: cs.onSurface)),
-              const SizedBox(height: 6),
-              Text(
-                zh ? '点击下方按钮添加模型' : 'Tap the buttons below to add models',
-                style: TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(0.7)),
-                textAlign: TextAlign.center,
-              ),
-            ],
+        if (models.isEmpty)
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(zh ? '暂无模型' : 'No Models', style: TextStyle(fontSize: 18, color: cs.onSurface)),
+                const SizedBox(height: 6),
+                Text(
+                  zh ? '点击下方按钮添加模型' : 'Tap the buttons below to add models',
+                  style: TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(0.7)),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          )
+        else
+          ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            itemBuilder: (c, i) => _ModelCard(modelId: models[i]),
+            separatorBuilder: (c, i) => const SizedBox(height: 10),
+            itemCount: models.length,
           ),
-        ),
         Positioned(
           left: 0,
           right: 0,
@@ -247,7 +258,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                 children: [
                   InkWell(
                     customBorder: const CircleBorder(),
-                    onTap: () {},
+                    onTap: () => _showModelPicker(context),
                     child: Container(
                       decoration: const BoxDecoration(shape: BoxShape.circle),
                       padding: const EdgeInsets.all(10),
@@ -426,7 +437,242 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(zh ? '已保存' : 'Saved')));
   }
+
+  Future<void> _showModelPicker(BuildContext context) async {
+    final cs = Theme.of(context).colorScheme;
+    final settings = context.read<SettingsProvider>();
+    final cfg = settings.getProviderConfig(widget.keyName, defaultName: widget.displayName);
+    final controller = TextEditingController();
+    List<dynamic> items = const [];
+    bool loading = true;
+    String error = '';
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: cs.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          final zhLocal = Localizations.localeOf(ctx).languageCode == 'zh';
+          Future<void> _load() async {
+            try {
+              final list = await ProviderManager.listModels(cfg);
+              setLocal(() {
+                items = list;
+                loading = false;
+              });
+            } catch (e) {
+              setLocal(() {
+                items = const [];
+                loading = false;
+                error = '$e';
+              });
+            }
+          }
+
+          if (loading) {
+            // kick off loading once
+            Future.microtask(_load);
+          }
+
+          final selected = settings.getProviderConfig(widget.keyName, defaultName: widget.displayName).models.toSet();
+          final query = controller.text.trim().toLowerCase();
+          final filtered = [
+            for (final m in items)
+              if (m is ModelInfo && (query.isEmpty || m.id.toLowerCase().contains(query))) m
+          ];
+
+          return SafeArea(
+            top: false,
+            child: DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.7,
+              maxChildSize: 0.95,
+              minChildSize: 0.4,
+              builder: (c, scrollController) {
+                return Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    Container(width: 40, height: 4, decoration: BoxDecoration(color: cs.onSurface.withOpacity(0.2), borderRadius: BorderRadius.circular(999))),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: loading
+                          ? const Center(child: CircularProgressIndicator())
+                          : error.isNotEmpty
+                              ? Center(child: Text(error, style: TextStyle(color: cs.error)))
+                              : ListView.builder(
+                                  controller: scrollController,
+                                  itemCount: filtered.length,
+                                  itemBuilder: (c, i) {
+                                    final m = filtered[i] as ModelInfo;
+                                    final added = selected.contains(m.id);
+                                    return ListTile(
+                                      leading: _BrandAvatar(name: m.id, size: 28),
+                                      title: Text(m.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                      subtitle: _modelTagWrap(context, m),
+                                      trailing: IconButton(
+                                        onPressed: () async {
+                                          final old = settings.getProviderConfig(widget.keyName, defaultName: widget.displayName);
+                                          final list = old.models.toList();
+                                          if (added) {
+                                            list.removeWhere((e) => e == m.id);
+                                          } else {
+                                            list.add(m.id);
+                                          }
+                                          await settings.setProviderConfig(widget.keyName, old.copyWith(models: list));
+                                          setLocal(() {});
+                                        },
+                                        icon: Icon(added ? Lucide.Minus : Lucide.Plus, color: added ? cs.onSurface : cs.primary),
+                                      ),
+                                    );
+                                  },
+                                ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(ctx).padding.bottom + 12),
+                      child: TextField(
+                        controller: controller,
+                        onChanged: (_) => setLocal(() {}),
+                        decoration: InputDecoration(
+                          hintText: zhLocal ? '输入模型名称筛选' : 'Type model name to filter',
+                          filled: true,
+                          fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.4))),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          );
+        });
+      },
+    );
+  }
+
+  Widget _capPill(BuildContext context, IconData icon, String label) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(color: cs.primary.withOpacity(0.10), borderRadius: BorderRadius.circular(999)),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: cs.primary),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(fontSize: 11, color: cs.primary)),
+      ]),
+    );
+  }
 }
+
+class _ModelCard extends StatelessWidget {
+  const _ModelCard({required this.modelId});
+  final String modelId;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Material(
+      color: cs.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {},
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              _BrandAvatar(name: modelId, size: 28),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(modelId, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    _modelTagWrap(context, _infer(modelId)),
+                  ],
+                ),
+              ),
+              Icon(Lucide.Settings2, size: 18, color: cs.onSurface.withOpacity(0.7)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  ModelInfo _infer(String id) {
+    // build a minimal ModelInfo and let registry infer
+    return ModelRegistry.infer(ModelInfo(id: id, displayName: id));
+  }
+
+  Widget _pill(BuildContext context, IconData icon, String label) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(color: cs.primary.withOpacity(0.10), borderRadius: BorderRadius.circular(999)),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: cs.primary),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(fontSize: 11, color: cs.primary)),
+      ]),
+    );
+  }
+}
+
+Widget _modelTagWrap(BuildContext context, ModelInfo m) {
+  final cs = Theme.of(context).colorScheme;
+  final zh = Localizations.localeOf(context).languageCode == 'zh';
+  List<Widget> chips = [];
+  // type tag
+  chips.add(Container(
+    decoration: BoxDecoration(color: cs.primary.withOpacity(0.10), borderRadius: BorderRadius.circular(999)),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    child: Text(m.type == ModelType.chat ? (zh ? '聊天' : 'Chat') : (zh ? '嵌入' : 'Embedding'), style: TextStyle(fontSize: 11, color: cs.primary)),
+  ));
+  // modality tag capsule
+  chips.add(Container(
+    decoration: BoxDecoration(color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5), borderRadius: BorderRadius.circular(999)),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      for (final mod in m.input)
+        Padding(
+          padding: const EdgeInsets.only(right: 2),
+          child: Icon(mod == Modality.text ? Lucide.Type : Lucide.Image, size: 12, color: cs.onSurface.withOpacity(0.7)),
+        ),
+      Icon(Lucide.ChevronRight, size: 12, color: cs.onSurface.withOpacity(0.7)),
+      for (final mod in m.output)
+        Padding(
+          padding: const EdgeInsets.only(left: 2),
+          child: Icon(mod == Modality.text ? Lucide.Type : Lucide.Image, size: 12, color: cs.onSurface.withOpacity(0.7)),
+        ),
+    ]),
+  ));
+  // abilities capsules (icon-only)
+  for (final ab in m.abilities) {
+    if (ab == ModelAbility.tool) {
+      chips.add(Container(
+        decoration: BoxDecoration(color: cs.primary.withOpacity(0.10), borderRadius: BorderRadius.circular(999)),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        child: Icon(Lucide.Hammer, size: 12, color: cs.primary),
+      ));
+    } else if (ab == ModelAbility.reasoning) {
+      chips.add(Container(
+        decoration: BoxDecoration(color: cs.secondary.withOpacity(0.12), borderRadius: BorderRadius.circular(999)),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        child: SvgPicture.asset('assets/icons/deepthink.svg', width: 12, height: 12, colorFilter: ColorFilter.mode(cs.secondary, BlendMode.srcIn)),
+      ));
+    }
+  }
+  return Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: chips);
+}
+
 
 // Legacy page-based implementations removed in favor of swipeable PageView tabs.
 

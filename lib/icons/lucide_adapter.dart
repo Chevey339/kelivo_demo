@@ -43,4 +43,11 @@ class Lucide {
   static const IconData Settings2 = lucide.LucideIcons.settings2;
   static const IconData Network = lucide.LucideIcons.network;
   static const IconData Cable = lucide.LucideIcons.cable;
+  static const IconData FileText = lucide.LucideIcons.fileText;
+  static const IconData Wrench = lucide.LucideIcons.wrench;
+  static const IconData Minus = lucide.LucideIcons.minus;
+  static const IconData Type = lucide.LucideIcons.type;
+  static const IconData ChevronRight = lucide.LucideIcons.chevronRight;
+  static const IconData Hammer = lucide.LucideIcons.hammer;
+  static const IconData Brain = lucide.LucideIcons.brain;
 }
