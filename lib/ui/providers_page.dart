@@ -45,12 +45,12 @@ class _ProvidersPageState extends State<ProvidersPage> {
         actions: [
           IconButton(
             tooltip: zh ? '导入' : 'Import',
-            icon: Icon(Lucide.Import, color: cs.primary),
+            icon: Icon(Lucide.Import, color: cs.onSurface),
             onPressed: () => _showImportSheet(context),
           ),
           IconButton(
             tooltip: zh ? '新增' : 'Add',
-            icon: Icon(Lucide.Plus, color: cs.primary),
+            icon: Icon(Lucide.Plus, color: cs.onSurface),
             onPressed: () {},
           ),
         ],
@@ -68,7 +68,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
               mainAxisSpacing: spacing,
               crossAxisSpacing: spacing,
               childAspectRatio: ratio,
-              dragStartDelay: const Duration(milliseconds: 120),
+              dragStartDelay: const Duration(milliseconds: 380),
               onReorder: (oldIndex, newIndex) async {
                 final moved = items[oldIndex];
                 final mut = List<_Provider>.of(items);
@@ -152,7 +152,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: Icon(Lucide.Camera, color: cs.primary),
+                leading: Icon(Lucide.Camera, color: cs.onSurface),
                 title: Text(zh ? '扫码导入' : 'Scan to import'),
                 onTap: () {
                   Navigator.of(ctx).pop();
@@ -162,7 +162,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
                 },
               ),
               ListTile(
-                leading: Icon(Lucide.Image, color: cs.primary),
+                leading: Icon(Lucide.Image, color: cs.onSurface),
                 title: Text(zh ? '从相册选取' : 'Pick from gallery'),
                 onTap: () {
                   Navigator.of(ctx).pop();
@@ -190,8 +190,8 @@ class _ProviderCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = provider.enabled
-        ? (isDark ? Colors.white10 : const Color(0xFFF7F7F9))
-        : cs.errorContainer.withOpacity(0.25);
+        ? (isDark ? Colors.white12 : const Color(0xFFF7F7F9))
+        : (isDark ? cs.errorContainer.withOpacity(0.30) : cs.errorContainer.withOpacity(0.25));
 
     final statusBg = provider.enabled ? Colors.green.withOpacity(0.12) : Colors.orange.withOpacity(0.15);
     final statusFg = provider.enabled ? Colors.green.shade700 : Colors.orange.shade700;
@@ -354,37 +354,73 @@ class _BrandAvatar extends StatelessWidget {
     return null;
   }
 
+  bool _preferMonochromeWhite(String n) {
+    final k = n.toLowerCase();
+    if (RegExp(r'openai|gpt|o\d').hasMatch(k)) return true;
+    if (RegExp(r'grok|xai').hasMatch(k)) return true;
+    if (RegExp(r'openrouter').hasMatch(k)) return true;
+    return false;
+  }
+
+  bool _tintPurpleSilicon(String n) {
+    final k = n.toLowerCase();
+    return RegExp(r'silicon|硅基').hasMatch(k);
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final asset = _assetForName(name);
     final circle = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: cs.primary.withOpacity(0.1),
+        color: isDark ? Colors.white10 : cs.primary.withOpacity(0.1),
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
       child: asset == null
           ? Text(name.isNotEmpty ? name.characters.first.toUpperCase() : '?',
               style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: size * 0.42))
-          : _IconAsset(asset: asset, size: size * 0.62),
+          : _IconAsset(
+              asset: asset,
+              size: size * 0.62,
+              monochromeWhite: isDark && _preferMonochromeWhite(name),
+              tintColor: _tintPurpleSilicon(name) ? const Color(0xFF7C4DFF) : null,
+            ),
     );
     return circle;
   }
 }
 
 class _IconAsset extends StatelessWidget {
-  const _IconAsset({required this.asset, required this.size});
+  const _IconAsset({required this.asset, required this.size, this.monochromeWhite = false, this.tintColor});
   final String asset;
   final double size;
+  final bool monochromeWhite;
+  final Color? tintColor;
   @override
   Widget build(BuildContext context) {
     if (asset.endsWith('.svg')) {
-      return SvgPicture.asset(asset, width: size, height: size, fit: BoxFit.contain);
+      return SvgPicture.asset(
+        asset,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        colorFilter: monochromeWhite
+            ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)
+            : (tintColor != null ? ColorFilter.mode(tintColor!, BlendMode.srcIn) : null),
+      );
     }
-    return Image.asset(asset, width: size, height: size, fit: BoxFit.contain);
+    return Image.asset(
+      asset,
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      color: monochromeWhite ? Colors.white : tintColor,
+      colorBlendMode: (monochromeWhite || tintColor != null) ? BlendMode.srcIn : null,
+    );
   }
 }
 

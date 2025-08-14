@@ -184,7 +184,7 @@ class _SideDrawerState extends State<SideDrawer> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final textBase = isDark ? cs.tertiary : Colors.black; // 纯黑（白天），夜间自动适配
+    final textBase = isDark ? Colors.white : Colors.black; // 纯黑（白天），夜间自动适配
     final chatProvider = context.watch<ChatProvider>();
     final all = chatProvider.chats;
     final pinnedIds = chatProvider.pinnedIds;

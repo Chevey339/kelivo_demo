@@ -89,7 +89,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         actions: [
           IconButton(
             tooltip: zh ? '分享' : 'Share',
-            icon: Icon(Lucide.Share, color: cs.primary),
+            icon: Icon(Lucide.Share, color: cs.onSurface),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text(zh ? '分享暂未实现' : 'Share not implemented')),
@@ -118,6 +118,9 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
           unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
           selectedIconTheme: const IconThemeData(size: 20),
           unselectedIconTheme: const IconThemeData(size: 20),
+          backgroundColor: cs.surface,
+          selectedItemColor: cs.primary,
+          unselectedItemColor: cs.onSurface.withOpacity(0.7),
           currentIndex: _index,
           onTap: (i) {
             setState(() => _index = i);
@@ -458,19 +461,44 @@ class _BrandAvatar extends StatelessWidget {
     return null;
   }
 
+  bool _preferMonochromeWhite(String n) {
+    final k = n.toLowerCase();
+    if (RegExp(r'openai|gpt|o\d').hasMatch(k)) return true;
+    if (RegExp(r'grok|xai').hasMatch(k)) return true;
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final asset = _assetForName(name);
+    final lower = name.toLowerCase();
+    final bool _mono = isDark && (RegExp(r'openai|gpt|o\\d').hasMatch(lower) || RegExp(r'grok|xai').hasMatch(lower) || RegExp(r'openrouter').hasMatch(lower));
+    final bool _purple = RegExp(r'silicon|硅基').hasMatch(lower);
     return CircleAvatar(
       radius: size / 2,
-      backgroundColor: cs.primary.withOpacity(0.1),
+      backgroundColor: isDark ? Colors.white10 : cs.primary.withOpacity(0.1),
       child: asset == null
           ? Text(name.isNotEmpty ? name.characters.first.toUpperCase() : '?',
               style: TextStyle(color: cs.primary, fontSize: size * 0.5, fontWeight: FontWeight.w700))
           : (asset.endsWith('.svg')
-              ? SvgPicture.asset(asset, width: size * 0.7, height: size * 0.7)
-              : Image.asset(asset, width: size * 0.7, height: size * 0.7, fit: BoxFit.contain)),
+              ? SvgPicture.asset(
+                  asset,
+                  width: size * 0.7,
+                  height: size * 0.7,
+                  colorFilter: _mono
+                      ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)
+                      : (_purple ? const ColorFilter.mode(Color(0xFF7C4DFF), BlendMode.srcIn) : null),
+                )
+              : Image.asset(
+                  asset,
+                  width: size * 0.7,
+                  height: size * 0.7,
+                  fit: BoxFit.contain,
+                  color: _mono ? Colors.white : (_purple ? const Color(0xFF7C4DFF) : null),
+                  colorBlendMode: (_mono || _purple) ? BlendMode.srcIn : null,
+                )),
     );
   }
 }
