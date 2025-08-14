@@ -10,6 +10,7 @@ class ChatInputBar extends StatefulWidget {
     this.onToggleSearch,
     this.onMore,
     this.moreOpen = false,
+    this.focusNode,
   });
 
   final ValueChanged<String>? onSend;
@@ -17,6 +18,7 @@ class ChatInputBar extends StatefulWidget {
   final ValueChanged<bool>? onToggleSearch;
   final VoidCallback? onMore;
   final bool moreOpen;
+  final FocusNode? focusNode;
 
   @override
   State<ChatInputBar> createState() => _ChatInputBarState();
@@ -72,10 +74,12 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                 child: TextField(
                   controller: _controller,
+                  focusNode: widget.focusNode,
                   onChanged: (_) => setState(() {}),
                   minLines: 1,
                   maxLines: 5,
                   textInputAction: TextInputAction.newline,
+                  autofocus: false,
                   decoration: InputDecoration(
                     hintText: _hint(context),
                     border: InputBorder.none,

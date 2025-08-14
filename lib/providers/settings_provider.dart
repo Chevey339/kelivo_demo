@@ -15,6 +15,8 @@ class SettingsProvider extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
 
   Map<String, ProviderConfig> _providerConfigs = {};
+  Map<String, ProviderConfig> get providerConfigs => Map.unmodifiable(_providerConfigs);
+  bool get hasAnyActiveModel => _providerConfigs.values.any((c) => c.enabled && c.models.isNotEmpty);
   ProviderConfig getProviderConfig(String key, {String? defaultName}) {
     final existed = _providerConfigs[key];
     if (existed != null) return existed;
@@ -228,12 +230,20 @@ class ProviderConfig {
   }
 
   static ProviderConfig defaultsFor(String key, {String? displayName}) {
+    bool _defaultEnabled(String k) {
+      final s = k.toLowerCase();
+      if (s.contains('openai')) return true;
+      if (s.contains('gemini') || s.contains('google')) return true;
+      if (s.contains('silicon')) return true;
+      if (s.contains('openrouter')) return true;
+      return false; // others disabled by default
+    }
     final kind = classify(key);
     switch (kind) {
       case ProviderKind.google:
         return ProviderConfig(
           id: key,
-          enabled: true,
+          enabled: _defaultEnabled(key),
           name: displayName ?? key,
           apiKey: '',
           baseUrl: _defaultBase(key),
@@ -251,7 +261,7 @@ class ProviderConfig {
       case ProviderKind.claude:
         return ProviderConfig(
           id: key,
-          enabled: true,
+          enabled: _defaultEnabled(key),
           name: displayName ?? key,
           apiKey: '',
           baseUrl: _defaultBase(key),
@@ -267,7 +277,7 @@ class ProviderConfig {
       default:
         return ProviderConfig(
           id: key,
-          enabled: true,
+          enabled: _defaultEnabled(key),
           name: displayName ?? key,
           apiKey: '',
           baseUrl: _defaultBase(key),

@@ -19,6 +19,15 @@ ThemeData buildLightTheme(ColorScheme? dynamicScheme) {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: scheme.inverseSurface,
+      contentTextStyle: TextStyle(color: scheme.onInverseSurface, fontSize: 14, fontWeight: FontWeight.w500),
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      actionTextColor: scheme.primary,
+      disabledActionTextColor: scheme.onInverseSurface.withOpacity(0.5),
+    ),
     appBarTheme: AppBarTheme(
       backgroundColor: scheme.surface,
       surfaceTintColor: scheme.surface,
@@ -59,6 +68,15 @@ ThemeData buildDarkTheme(ColorScheme? dynamicScheme) {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: scheme.inverseSurface,
+      contentTextStyle: TextStyle(color: scheme.onInverseSurface, fontSize: 14, fontWeight: FontWeight.w500),
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      actionTextColor: scheme.primary,
+      disabledActionTextColor: scheme.onInverseSurface.withOpacity(0.6),
+    ),
     appBarTheme: AppBarTheme(
       backgroundColor: scheme.surface,
       surfaceTintColor: scheme.surface,
@@ -81,4 +99,3 @@ ThemeData buildDarkTheme(ColorScheme? dynamicScheme) {
     ),
   );
 }
-

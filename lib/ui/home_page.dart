@@ -6,6 +6,7 @@ import '../widgets/side_drawer.dart';
 import '../theme/design_tokens.dart';
 import '../icons/lucide_adapter.dart';
 import 'package:provider/provider.dart';
+import '../main.dart';
 import '../providers/user_provider.dart';
  
 
@@ -16,10 +17,11 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
+class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin, RouteAware {
   bool _toolsOpen = false;
   static const double _sheetHeight = 160; // height of tools area
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final FocusNode _inputFocus = FocusNode();
 
   String _titleForLocale(BuildContext context) {
     final lang = Localizations.localeOf(context).languageCode;
@@ -28,6 +30,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   void _toggleTools() {
     setState(() => _toolsOpen = !_toolsOpen);
+  }
+
+  void _dismissKeyboard() {
+    _inputFocus.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+    FocusScope.of(context).unfocus();
   }
 
   @override
@@ -116,11 +124,40 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               child: ChatInputBar(
                 onMore: _toggleTools,
                 moreOpen: _toolsOpen,
+                focusNode: _inputFocus,
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) {
+      routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void dispose() {
+    _inputFocus.dispose();
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPushNext() {
+    // Navigating away: drop focus so it won't be restored.
+    _dismissKeyboard();
+  }
+
+  @override
+  void didPopNext() {
+    // Returning to this page: ensure keyboard stays closed unless user taps.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _dismissKeyboard());
   }
 }

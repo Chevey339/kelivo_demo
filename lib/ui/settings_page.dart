@@ -84,31 +84,31 @@ class SettingsPage extends StatelessWidget {
       ),
       body: ListView(
         children: [
-          // 可选未配置警告卡片
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Material(
-              color: cs.errorContainer.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Icon(Lucide.MessageCircleWarning, size: 18, color: cs.error),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        Localizations.localeOf(context).languageCode == 'zh'
-                            ? '部分服务未配置，某些功能可能不可用'
-                            : 'Some services are not configured; features may be limited.',
-                        style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.8)),
+          if (!settings.hasAnyActiveModel)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Material(
+                color: cs.errorContainer.withOpacity(0.30),
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Icon(Lucide.MessageCircleWarning, size: 18, color: cs.error),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          Localizations.localeOf(context).languageCode == 'zh'
+                              ? '部分服务未配置，某些功能可能不可用'
+                              : 'Some services are not configured; features may be limited.',
+                          style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.8)),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
           header(Localizations.localeOf(context).languageCode == 'zh' ? '通用设置' : 'General'),
           SettingRow(

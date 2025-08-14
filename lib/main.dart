@@ -9,6 +9,7 @@ import 'providers/chat_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/settings_provider.dart';
 
+final RouteObserver<ModalRoute<dynamic>> routeObserver = RouteObserver<ModalRoute<dynamic>>();
 void main() {
   runApp(const MyApp());
 }
@@ -48,6 +49,7 @@ class MyApp extends StatelessWidget {
                 theme: light,
                 darkTheme: dark,
                 themeMode: settings.themeMode,
+                navigatorObservers: <NavigatorObserver>[routeObserver],
                 home: const HomePage(),
               );
             },

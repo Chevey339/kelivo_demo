@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'settings_provider.dart';
 
 enum ModelType { chat, embedding }
@@ -70,23 +72,48 @@ abstract class BaseProvider {
   Future<List<ModelInfo>> listModels(ProviderConfig cfg);
 }
 
+class _Http {
+  static http.Client clientFor(ProviderConfig cfg) {
+    final enabled = cfg.proxyEnabled == true;
+    final host = (cfg.proxyHost ?? '').trim();
+    final portStr = (cfg.proxyPort ?? '').trim();
+    final user = (cfg.proxyUsername ?? '').trim();
+    final pass = (cfg.proxyPassword ?? '').trim();
+    if (enabled && host.isNotEmpty && portStr.isNotEmpty) {
+      final port = int.tryParse(portStr) ?? 8080;
+      final io = HttpClient();
+      io.findProxy = (uri) => 'PROXY $host:$port';
+      if (user.isNotEmpty) {
+        io.addProxyCredentials(host, port, '', HttpClientBasicCredentials(user, pass));
+      }
+      return IOClient(io);
+    }
+    return http.Client();
+  }
+}
+
 class OpenAIProvider extends BaseProvider {
   @override
   Future<List<ModelInfo>> listModels(ProviderConfig cfg) async {
     if (cfg.apiKey.isEmpty) return [];
-    final uri = Uri.parse('${cfg.baseUrl}/models');
-    final res = await http.get(uri, headers: {
-      'Authorization': 'Bearer ${cfg.apiKey}',
-    });
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      final data = (jsonDecode(res.body)['data'] as List?) ?? [];
-      return [
-        for (final e in data)
-          if (e is Map && e['id'] is String)
-            ModelRegistry.infer(ModelInfo(id: e['id'] as String, displayName: e['id'] as String))
-      ];
+    final client = _Http.clientFor(cfg);
+    try {
+      final uri = Uri.parse('${cfg.baseUrl}/models');
+      final res = await client.get(uri, headers: {
+        'Authorization': 'Bearer ${cfg.apiKey}',
+      });
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final data = (jsonDecode(res.body)['data'] as List?) ?? [];
+        return [
+          for (final e in data)
+            if (e is Map && e['id'] is String)
+              ModelRegistry.infer(ModelInfo(id: e['id'] as String, displayName: e['id'] as String))
+        ];
+      }
+      return [];
+    } finally {
+      client.close();
     }
-    return [];
   }
 }
 
@@ -95,24 +122,29 @@ class ClaudeProvider extends BaseProvider {
   @override
   Future<List<ModelInfo>> listModels(ProviderConfig cfg) async {
     if (cfg.apiKey.isEmpty) return [];
-    final uri = Uri.parse('${cfg.baseUrl}/models');
-    final res = await http.get(uri, headers: {
-      'x-api-key': cfg.apiKey,
-      'anthropic-version': anthropicVersion,
-    });
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      final obj = jsonDecode(res.body) as Map<String, dynamic>;
-      final data = (obj['data'] as List?) ?? [];
-      return [
-        for (final e in data)
-          if (e is Map && e['id'] is String)
-            ModelRegistry.infer(ModelInfo(
-              id: e['id'] as String,
-              displayName: (e['display_name'] as String?) ?? (e['id'] as String),
-            ))
-      ];
+    final client = _Http.clientFor(cfg);
+    try {
+      final uri = Uri.parse('${cfg.baseUrl}/models');
+      final res = await client.get(uri, headers: {
+        'x-api-key': cfg.apiKey,
+        'anthropic-version': anthropicVersion,
+      });
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final obj = jsonDecode(res.body) as Map<String, dynamic>;
+        final data = (obj['data'] as List?) ?? [];
+        return [
+          for (final e in data)
+            if (e is Map && e['id'] is String)
+              ModelRegistry.infer(ModelInfo(
+                id: e['id'] as String,
+                displayName: (e['display_name'] as String?) ?? (e['id'] as String),
+              ))
+        ];
+      }
+      return [];
+    } finally {
+      client.close();
     }
-    return [];
   }
 }
 
@@ -132,31 +164,36 @@ class GoogleProvider extends BaseProvider {
 
   @override
   Future<List<ModelInfo>> listModels(ProviderConfig cfg) async {
-    final url = _buildUrl(cfg);
-    final res = await http.get(Uri.parse(url), headers: {
-      if (cfg.vertexAI == true && cfg.apiKey.isNotEmpty) 'Authorization': 'Bearer ${cfg.apiKey}',
-    });
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      final obj = jsonDecode(res.body) as Map<String, dynamic>;
-      final arr = (obj['models'] as List?) ?? [];
-      final out = <ModelInfo>[];
-      for (final e in arr) {
-        if (e is Map) {
-          final name = (e['name'] as String?) ?? '';
-          final id = name.contains('/') ? name.split('/').last : name;
-          final displayName = (e['displayName'] as String?) ?? id;
-          final methods = (e['supportedGenerationMethods'] as List?)?.map((m) => m.toString()).toSet() ?? {};
-          if (!(methods.contains('generateContent') || methods.contains('embedContent'))) continue;
-          out.add(ModelRegistry.infer(ModelInfo(
-            id: id,
-            displayName: displayName,
-            type: methods.contains('generateContent') ? ModelType.chat : ModelType.embedding,
-          )));
+    final client = _Http.clientFor(cfg);
+    try {
+      final url = _buildUrl(cfg);
+      final res = await client.get(Uri.parse(url), headers: {
+        if (cfg.vertexAI == true && cfg.apiKey.isNotEmpty) 'Authorization': 'Bearer ${cfg.apiKey}',
+      });
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final obj = jsonDecode(res.body) as Map<String, dynamic>;
+        final arr = (obj['models'] as List?) ?? [];
+        final out = <ModelInfo>[];
+        for (final e in arr) {
+          if (e is Map) {
+            final name = (e['name'] as String?) ?? '';
+            final id = name.contains('/') ? name.split('/').last : name;
+            final displayName = (e['displayName'] as String?) ?? id;
+            final methods = (e['supportedGenerationMethods'] as List?)?.map((m) => m.toString()).toSet() ?? {};
+            if (!(methods.contains('generateContent') || methods.contains('embedContent'))) continue;
+            out.add(ModelRegistry.infer(ModelInfo(
+              id: id,
+              displayName: displayName,
+              type: methods.contains('generateContent') ? ModelType.chat : ModelType.embedding,
+            )));
+          }
         }
+        return out;
       }
-      return out;
+      return [];
+    } finally {
+      client.close();
     }
-    return [];
   }
 }
 

@@ -108,9 +108,9 @@ class _ProvidersPageState extends State<ProvidersPage> {
         _p('OpenAI', 'OpenAI', enabled: true, models: 0),
         _p('Gemini', 'Gemini', enabled: true, models: 0),
         _p(zh ? '硅基流动' : 'SiliconFlow', 'SiliconFlow', enabled: true, models: 0),
-        _p('DeepSeek', 'DeepSeek', enabled: true, models: 0),
         _p('OpenRouter', 'OpenRouter', enabled: true, models: 0),
-        _p(zh ? '通义千问' : 'Qwen', 'Qwen', enabled: false, models: 0),
+        _p('DeepSeek', 'DeepSeek', enabled: false, models: 0),
+        _p(zh ? '阿里云千问' : 'Aliyun', 'Aliyun', enabled: false, models: 0),
         _p(zh ? '智谱' : 'Zhipu AI', 'Zhipu AI', enabled: false, models: 0),
         _p('Claude', 'Claude', enabled: false, models: 0),
         // _p(zh ? '腾讯混元' : 'Hunyuan', 'Hunyuan', enabled: false, models: 0),
@@ -187,14 +187,17 @@ class _ProviderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    final cfg = settings.getProviderConfig(provider.keyName, defaultName: provider.name);
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = provider.enabled
+    final enabled = cfg.enabled;
+    final bg = enabled
         ? (isDark ? Colors.white12 : const Color(0xFFF7F7F9))
         : (isDark ? cs.errorContainer.withOpacity(0.30) : cs.errorContainer.withOpacity(0.25));
 
-    final statusBg = provider.enabled ? Colors.green.withOpacity(0.12) : Colors.orange.withOpacity(0.15);
-    final statusFg = provider.enabled ? Colors.green.shade700 : Colors.orange.shade700;
+    final statusBg = enabled ? Colors.green.withOpacity(0.12) : Colors.orange.withOpacity(0.15);
+    final statusFg = enabled ? Colors.green.shade700 : Colors.orange.shade700;
     final modelsBg = cs.primary.withOpacity(0.12);
     final modelsFg = cs.primary;
 
@@ -223,7 +226,7 @@ class _ProviderCard extends StatelessWidget {
                 children: [
                   _BrandAvatar(name: provider.keyName, size: compact ? 40 : 44),
                   Text(
-                    provider.name,
+                    (cfg.name.isNotEmpty ? cfg.name : provider.name),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
@@ -235,8 +238,8 @@ class _ProviderCard extends StatelessWidget {
                           alignment: Alignment.centerLeft,
                           child: _Pill(
                             text: (Localizations.localeOf(context).languageCode == 'zh')
-                                ? (provider.enabled ? '启用' : '禁用')
-                                : (provider.enabled ? 'Enabled' : 'Disabled'),
+                                ? (enabled ? '启用' : '禁用')
+                                : (enabled ? 'Enabled' : 'Disabled'),
                             bg: statusBg,
                             fg: statusFg,
                           ),
@@ -244,8 +247,8 @@ class _ProviderCard extends StatelessWidget {
                       ),
                       _Pill(
                         text: (Localizations.localeOf(context).languageCode == 'zh')
-                            ? '${provider.modelCount}个模型'
-                            : '${provider.modelCount} models',
+                            ? '${cfg.models.length}个模型'
+                            : '${cfg.models.length} models',
                         bg: modelsBg,
                         fg: modelsFg,
                       ),
