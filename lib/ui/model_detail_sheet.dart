@@ -140,7 +140,7 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     return DraggableScrollableSheet(
       expand: false,
-      initialChildSize: 0.7,
+      initialChildSize: 0.8,
       maxChildSize: 0.95,
       minChildSize: 0.4,
       builder: (c, scrollController) {

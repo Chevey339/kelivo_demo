@@ -5,6 +5,7 @@ import '../icons/lucide_adapter.dart';
 import '../providers/settings_provider.dart';
 import 'model_detail_sheet.dart';
 import '../providers/model_provider.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 class ProviderDetailPage extends StatefulWidget {
   const ProviderDetailPage({super.key, required this.keyName, required this.displayName});
@@ -237,11 +238,133 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
             ),
           )
         else
-          ListView.separated(
+          ReorderableListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-            itemBuilder: (c, i) => _ModelCard(providerKey: widget.keyName, modelId: models[i]),
-            separatorBuilder: (c, i) => const SizedBox(height: 10),
             itemCount: models.length,
+            onReorder: (oldIndex, newIndex) async {
+              if (newIndex > oldIndex) newIndex -= 1;
+              final id = models[oldIndex];
+              final list = List<String>.from(models);
+              final item = list.removeAt(oldIndex);
+              list.insert(newIndex, item);
+              setState(() {});
+              await context.read<SettingsProvider>().setProviderConfig(
+                widget.keyName,
+                cfg.copyWith(models: list),
+              );
+            },
+            proxyDecorator: (child, index, animation) {
+              return AnimatedBuilder(
+                animation: animation,
+                builder: (context, _) {
+                  final t = Curves.easeOutBack.transform(animation.value);
+                  return Transform.scale(
+                    scale: 0.98 + 0.02 * t,
+                    child: Material(
+                      elevation: 8 * t,
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      child: child,
+                    ),
+                  );
+                },
+                child: child,
+              );
+            },
+            itemBuilder: (c, i) {
+              final id = models[i];
+              final cs = Theme.of(context).colorScheme;
+              final zh = Localizations.localeOf(context).languageCode == 'zh';
+              return KeyedSubtree(
+                key: ValueKey('reorder-model-$id'),
+                child: ReorderableDelayedDragStartListener(
+                  index: i,
+                  child: Slidable(
+                    key: ValueKey('model-$id'),
+                    endActionPane: ActionPane(
+                      motion: const StretchMotion(),
+                      extentRatio: 0.42,
+                      children: [
+                        CustomSlidableAction(
+                          autoClose: true,
+                          backgroundColor: Colors.transparent,
+                          child: Container(
+                            width: double.infinity,
+                            height: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).brightness == Brightness.dark ? cs.error.withOpacity(0.22) : cs.error.withOpacity(0.14),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: cs.error.withOpacity(0.35)),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            alignment: Alignment.center,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Lucide.Trash2, color: cs.error, size: 18),
+                                  const SizedBox(width: 6),
+                                  Text(zh ? '删除' : 'Delete', style: TextStyle(color: cs.error, fontWeight: FontWeight.w700)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          onPressed: (_) async {
+                            final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (dctx) => AlertDialog(
+                                backgroundColor: cs.surface,
+                                title: Text(zh ? '确认删除' : 'Confirm Delete'),
+                                content: Text(zh ? '删除后可通过撤销恢复。是否删除？' : 'This can be undone via Undo. Delete?'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.of(dctx).pop(false), child: Text(zh ? '取消' : 'Cancel')),
+                                  TextButton(onPressed: () => Navigator.of(dctx).pop(true), child: Text(zh ? '删除' : 'Delete')),
+                                ],
+                              ),
+                            );
+                            if (ok != true) return;
+                            final settings = context.read<SettingsProvider>();
+                            final old = settings.getProviderConfig(widget.keyName, defaultName: widget.displayName);
+                            final prevList = List<String>.from(old.models);
+                            final prevOverrides = Map<String, dynamic>.from(old.modelOverrides);
+                            final removeIndex = prevList.indexOf(id);
+                            final newList = prevList.where((e) => e != id).toList();
+                            final newOverrides = Map<String, dynamic>.from(prevOverrides)..remove(id);
+                            await settings.setProviderConfig(widget.keyName, old.copyWith(models: newList, modelOverrides: newOverrides));
+                            if (!mounted) return;
+                            final snack = SnackBar(
+                              content: Text(zh ? '已删除模型' : 'Model deleted'),
+                              action: SnackBarAction(
+                                label: zh ? '撤销' : 'Undo',
+                                onPressed: () async {
+                                  final cfg2 = context.read<SettingsProvider>().getProviderConfig(widget.keyName, defaultName: widget.displayName);
+                                  final restoredList = List<String>.from(cfg2.models);
+                                  if (!restoredList.contains(id)) {
+                                    if (removeIndex >= 0 && removeIndex <= restoredList.length) {
+                                      restoredList.insert(removeIndex, id);
+                                    } else {
+                                      restoredList.add(id);
+                                    }
+                                  }
+                                  final restoredOverrides = Map<String, dynamic>.from(cfg2.modelOverrides);
+                                  if (!restoredOverrides.containsKey(id) && prevOverrides.containsKey(id)) {
+                                    restoredOverrides[id] = prevOverrides[id];
+                                  }
+                                  await settings.setProviderConfig(widget.keyName, cfg2.copyWith(models: restoredList, modelOverrides: restoredOverrides));
+                                },
+                              ),
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(snack);
+                          },
+                        ),
+                      ],
+                    ),
+                    child: _ModelCard(providerKey: widget.keyName, modelId: id),
+                  ),
+                ),
+              );
+            },
           ),
         Positioned(
           left: 0,
@@ -401,19 +524,20 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
 
   Future<void> _save() async {
     final settings = context.read<SettingsProvider>();
-    final cfg = ProviderConfig(
-      id: widget.keyName,
+    final old = settings.getProviderConfig(widget.keyName, defaultName: widget.displayName);
+    final updated = old.copyWith(
       enabled: _enabled,
       name: _nameCtrl.text.trim().isEmpty ? widget.displayName : _nameCtrl.text.trim(),
       apiKey: _keyCtrl.text.trim(),
       baseUrl: _baseCtrl.text.trim(),
-      chatPath: _kind == ProviderKind.openai ? _pathCtrl.text.trim() : null,
-      useResponseApi: _kind == ProviderKind.openai ? _useResp : null,
-      vertexAI: _kind == ProviderKind.google ? _vertexAI : null,
-      location: _kind == ProviderKind.google ? _locationCtrl.text.trim() : null,
-      projectId: _kind == ProviderKind.google ? _projectCtrl.text.trim() : null,
+      chatPath: _kind == ProviderKind.openai ? _pathCtrl.text.trim() : old.chatPath,
+      useResponseApi: _kind == ProviderKind.openai ? _useResp : old.useResponseApi,
+      vertexAI: _kind == ProviderKind.google ? _vertexAI : old.vertexAI,
+      location: _kind == ProviderKind.google ? _locationCtrl.text.trim() : old.location,
+      projectId: _kind == ProviderKind.google ? _projectCtrl.text.trim() : old.projectId,
+      // preserve models and modelOverrides and proxy fields implicitly via copyWith
     );
-    await settings.setProviderConfig(widget.keyName, cfg);
+    await settings.setProviderConfig(widget.keyName, updated);
     if (!mounted) return;
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(zh ? '已保存' : 'Saved')));
@@ -578,6 +702,29 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   }
 }
 
+Widget _buildDismissBg(BuildContext context, {required bool alignStart}) {
+  final cs = Theme.of(context).colorScheme;
+  return Container(
+    decoration: BoxDecoration(
+      color: cs.error.withOpacity(0.12),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    alignment: alignStart ? Alignment.centerLeft : Alignment.centerRight,
+    child: Row(
+      mainAxisAlignment: alignStart ? MainAxisAlignment.start : MainAxisAlignment.end,
+      children: [
+        Icon(Lucide.Trash2, color: cs.error, size: 20),
+        const SizedBox(width: 6),
+        Text(
+          Localizations.localeOf(context).languageCode == 'zh' ? '删除' : 'Delete',
+          style: TextStyle(color: cs.error, fontWeight: FontWeight.w600),
+        ),
+      ],
+    ),
+  );
+}
+
 class _ModelCard extends StatelessWidget {
   const _ModelCard({required this.providerKey, required this.modelId});
   final String providerKey;
@@ -686,6 +833,8 @@ class _ModelCard extends StatelessWidget {
     );
   }
 }
+
+// Using flutter_slidable for reliable swipe actions with confirm + undo.
 
 Widget _modelTagWrap(BuildContext context, ModelInfo m) {
   final cs = Theme.of(context).colorScheme;
