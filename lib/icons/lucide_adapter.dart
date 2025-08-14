@@ -50,4 +50,6 @@ class Lucide {
   static const IconData ChevronRight = lucide.LucideIcons.chevronRight;
   static const IconData Hammer = lucide.LucideIcons.hammer;
   static const IconData Brain = lucide.LucideIcons.brain;
+  static const IconData Check = lucide.LucideIcons.check;
+  static const IconData Trash2 = lucide.LucideIcons.trash2;
 }

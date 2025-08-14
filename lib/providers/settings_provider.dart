@@ -98,6 +98,9 @@ class ProviderConfig {
   final String? location; // google vertex ai only
   final String? projectId; // google vertex ai only
   final List<String> models; // placeholder for future model management
+  // Per-model overrides (by model id)
+  // {'<modelId>': {'name': String?, 'type': 'chat'|'embedding', 'input': ['text','image'], 'output': [...], 'abilities': ['tool','reasoning']}}
+  final Map<String, dynamic> modelOverrides;
   // Per-provider proxy
   final bool? proxyEnabled;
   final String? proxyHost;
@@ -117,6 +120,7 @@ class ProviderConfig {
     this.location,
     this.projectId,
     this.models = const [],
+    this.modelOverrides = const {},
     this.proxyEnabled,
     this.proxyHost,
     this.proxyPort,
@@ -136,6 +140,7 @@ class ProviderConfig {
     String? location,
     String? projectId,
     List<String>? models,
+    Map<String, dynamic>? modelOverrides,
     bool? proxyEnabled,
     String? proxyHost,
     String? proxyPort,
@@ -153,6 +158,7 @@ class ProviderConfig {
         location: location ?? this.location,
         projectId: projectId ?? this.projectId,
         models: models ?? this.models,
+        modelOverrides: modelOverrides ?? this.modelOverrides,
         proxyEnabled: proxyEnabled ?? this.proxyEnabled,
         proxyHost: proxyHost ?? this.proxyHost,
         proxyPort: proxyPort ?? this.proxyPort,
@@ -172,6 +178,7 @@ class ProviderConfig {
         'location': location,
         'projectId': projectId,
         'models': models,
+        'modelOverrides': modelOverrides,
         'proxyEnabled': proxyEnabled,
         'proxyHost': proxyHost,
         'proxyPort': proxyPort,
@@ -191,6 +198,7 @@ class ProviderConfig {
         location: json['location'] as String?,
         projectId: json['projectId'] as String?,
         models: (json['models'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+        modelOverrides: (json['modelOverrides'] as Map?)?.map((k, v) => MapEntry(k.toString(), v)) ?? const {},
         proxyEnabled: json['proxyEnabled'] as bool?,
         proxyHost: json['proxyHost'] as String?,
         proxyPort: json['proxyPort'] as String?,
@@ -233,6 +241,7 @@ class ProviderConfig {
           location: '',
           projectId: '',
           models: const [],
+          modelOverrides: const {},
           proxyEnabled: false,
           proxyHost: '',
           proxyPort: '8080',
@@ -247,6 +256,7 @@ class ProviderConfig {
           apiKey: '',
           baseUrl: _defaultBase(key),
           models: const [],
+          modelOverrides: const {},
           proxyEnabled: false,
           proxyHost: '',
           proxyPort: '8080',
@@ -264,6 +274,7 @@ class ProviderConfig {
           chatPath: '/chat/completions',
           useResponseApi: false,
           models: const [],
+          modelOverrides: const {},
           proxyEnabled: false,
           proxyHost: '',
           proxyPort: '8080',

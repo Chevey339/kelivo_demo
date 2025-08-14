@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../icons/lucide_adapter.dart';
 import '../providers/settings_provider.dart';
+import 'model_detail_sheet.dart';
 import '../providers/model_provider.dart';
 
 class ProviderDetailPage extends StatefulWidget {
@@ -238,7 +239,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         else
           ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-            itemBuilder: (c, i) => _ModelCard(modelId: models[i]),
+            itemBuilder: (c, i) => _ModelCard(providerKey: widget.keyName, modelId: models[i]),
             separatorBuilder: (c, i) => const SizedBox(height: 10),
             itemCount: models.length,
           ),
@@ -268,7 +269,9 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                   const SizedBox(width: 10),
                   InkWell(
                     borderRadius: BorderRadius.circular(999),
-                    onTap: () {},
+                    onTap: () async {
+                      await showCreateModelSheet(context, providerKey: widget.keyName);
+                    },
                     child: Container(
                       decoration: BoxDecoration(
                         color: cs.primary.withOpacity(0.10),
@@ -487,20 +490,24 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
 
           return SafeArea(
             top: false,
-            child: DraggableScrollableSheet(
-              expand: false,
-              initialChildSize: 0.7,
-              maxChildSize: 0.95,
-              minChildSize: 0.4,
-              builder: (c, scrollController) {
-                return Column(
-                  children: [
-                    const SizedBox(height: 8),
-                    Container(width: 40, height: 4, decoration: BoxDecoration(color: cs.onSurface.withOpacity(0.2), borderRadius: BorderRadius.circular(999))),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: loading
-                          ? const Center(child: CircularProgressIndicator())
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+              child: DraggableScrollableSheet(
+                expand: false,
+                initialChildSize: 0.7,
+                maxChildSize: 0.95,
+                minChildSize: 0.4,
+                builder: (c, scrollController) {
+                  return Column(
+                    children: [
+                      const SizedBox(height: 8),
+                      Container(width: 40, height: 4, decoration: BoxDecoration(color: cs.onSurface.withOpacity(0.2), borderRadius: BorderRadius.circular(999))),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: loading
+                            ? const Center(child: CircularProgressIndicator())
                           : error.isNotEmpty
                               ? Center(child: Text(error, style: TextStyle(color: cs.error)))
                               : ListView.builder(
@@ -531,24 +538,25 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                                   },
                                 ),
                     ),
-                    Padding(
-                      padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(ctx).padding.bottom + 12),
-                      child: TextField(
-                        controller: controller,
-                        onChanged: (_) => setLocal(() {}),
-                        decoration: InputDecoration(
-                          hintText: zhLocal ? '输入模型名称筛选' : 'Type model name to filter',
-                          filled: true,
-                          fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.4))),
+                      Padding(
+                        padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(ctx).padding.bottom + 12),
+                        child: TextField(
+                          controller: controller,
+                          onChanged: (_) => setLocal(() {}),
+                          decoration: InputDecoration(
+                            hintText: zhLocal ? '输入模型名称筛选' : 'Type model name to filter',
+                            filled: true,
+                            fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.4))),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
           );
         });
@@ -571,7 +579,8 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
 }
 
 class _ModelCard extends StatelessWidget {
-  const _ModelCard({required this.modelId});
+  const _ModelCard({required this.providerKey, required this.modelId});
+  final String providerKey;
   final String modelId;
 
   @override
@@ -593,13 +602,20 @@ class _ModelCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(modelId, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                    Text(_displayName(context), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
-                    _modelTagWrap(context, _infer(modelId)),
+                    _modelTagWrap(context, _effective(context)),
                   ],
                 ),
               ),
-              Icon(Lucide.Settings2, size: 18, color: cs.onSurface.withOpacity(0.7)),
+              IconButton(
+                tooltip: Localizations.localeOf(context).languageCode == 'zh' ? '编辑' : 'Edit',
+                icon: Icon(Lucide.Settings2, size: 18, color: cs.onSurface.withOpacity(0.7)),
+                onPressed: () async {
+                  await showModelDetailSheet(context, providerKey: providerKey, modelId: modelId);
+                  // Force refresh by getting provider and doing nothing; outer ListView watches provider changes
+                },
+              ),
             ],
           ),
         ),
@@ -610,6 +626,51 @@ class _ModelCard extends StatelessWidget {
   ModelInfo _infer(String id) {
     // build a minimal ModelInfo and let registry infer
     return ModelRegistry.infer(ModelInfo(id: id, displayName: id));
+  }
+
+  ModelInfo _effective(BuildContext context) {
+    final base = _infer(modelId);
+    final cfg = context.watch<SettingsProvider>().getProviderConfig(providerKey);
+    final ov = cfg.modelOverrides[modelId] as Map?;
+    if (ov == null) return base;
+    ModelType? type;
+    final t = (ov['type'] as String?) ?? '';
+    if (t == 'embedding') type = ModelType.embedding; else if (t == 'chat') type = ModelType.chat;
+    List<Modality>? input;
+    if (ov['input'] is List) {
+      input = [
+        for (final e in (ov['input'] as List)) (e.toString() == 'image' ? Modality.image : Modality.text)
+      ];
+    }
+    List<Modality>? output;
+    if (ov['output'] is List) {
+      output = [
+        for (final e in (ov['output'] as List)) (e.toString() == 'image' ? Modality.image : Modality.text)
+      ];
+    }
+    List<ModelAbility>? abilities;
+    if (ov['abilities'] is List) {
+      abilities = [
+        for (final e in (ov['abilities'] as List)) (e.toString() == 'reasoning' ? ModelAbility.reasoning : ModelAbility.tool)
+      ];
+    }
+    return base.copyWith(
+      displayName: (ov['name'] as String?)?.isNotEmpty == true ? ov['name'] as String : base.displayName,
+      type: type ?? base.type,
+      input: input ?? base.input,
+      output: output ?? base.output,
+      abilities: abilities ?? base.abilities,
+    );
+  }
+
+  String _displayName(BuildContext context) {
+    final cfg = context.watch<SettingsProvider>().getProviderConfig(providerKey);
+    final ov = cfg.modelOverrides[modelId] as Map?;
+    if (ov != null) {
+      final n = (ov['name'] as String?)?.trim();
+      if (n != null && n.isNotEmpty) return n;
+    }
+    return modelId;
   }
 
   Widget _pill(BuildContext context, IconData icon, String label) {
@@ -629,28 +690,37 @@ class _ModelCard extends StatelessWidget {
 Widget _modelTagWrap(BuildContext context, ModelInfo m) {
   final cs = Theme.of(context).colorScheme;
   final zh = Localizations.localeOf(context).languageCode == 'zh';
+  final isDark = Theme.of(context).brightness == Brightness.dark;
   List<Widget> chips = [];
   // type tag
   chips.add(Container(
-    decoration: BoxDecoration(color: cs.primary.withOpacity(0.10), borderRadius: BorderRadius.circular(999)),
+    decoration: BoxDecoration(
+      color: isDark ? cs.primary.withOpacity(0.25) : cs.primary.withOpacity(0.15),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: cs.primary.withOpacity(0.2), width: 0.5),
+    ),
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    child: Text(m.type == ModelType.chat ? (zh ? '聊天' : 'Chat') : (zh ? '嵌入' : 'Embedding'), style: TextStyle(fontSize: 11, color: cs.primary)),
+    child: Text(m.type == ModelType.chat ? (zh ? '聊天' : 'Chat') : (zh ? '嵌入' : 'Embedding'), style: TextStyle(fontSize: 11, color: isDark ? cs.primary : cs.primary.withOpacity(0.9), fontWeight: FontWeight.w500)),
   ));
   // modality tag capsule
   chips.add(Container(
-    decoration: BoxDecoration(color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5), borderRadius: BorderRadius.circular(999)),
+    decoration: BoxDecoration(
+      color: isDark ? cs.tertiary.withOpacity(0.25) : cs.tertiary.withOpacity(0.15),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: cs.tertiary.withOpacity(0.2), width: 0.5),
+    ),
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     child: Row(mainAxisSize: MainAxisSize.min, children: [
       for (final mod in m.input)
         Padding(
           padding: const EdgeInsets.only(right: 2),
-          child: Icon(mod == Modality.text ? Lucide.Type : Lucide.Image, size: 12, color: cs.onSurface.withOpacity(0.7)),
+          child: Icon(mod == Modality.text ? Lucide.Type : Lucide.Image, size: 12, color: isDark ? cs.tertiary : cs.tertiary.withOpacity(0.9)),
         ),
-      Icon(Lucide.ChevronRight, size: 12, color: cs.onSurface.withOpacity(0.7)),
+      Icon(Lucide.ChevronRight, size: 12, color: isDark ? cs.tertiary : cs.tertiary.withOpacity(0.9)),
       for (final mod in m.output)
         Padding(
           padding: const EdgeInsets.only(left: 2),
-          child: Icon(mod == Modality.text ? Lucide.Type : Lucide.Image, size: 12, color: cs.onSurface.withOpacity(0.7)),
+          child: Icon(mod == Modality.text ? Lucide.Type : Lucide.Image, size: 12, color: isDark ? cs.tertiary : cs.tertiary.withOpacity(0.9)),
         ),
     ]),
   ));
@@ -658,15 +728,23 @@ Widget _modelTagWrap(BuildContext context, ModelInfo m) {
   for (final ab in m.abilities) {
     if (ab == ModelAbility.tool) {
       chips.add(Container(
-        decoration: BoxDecoration(color: cs.primary.withOpacity(0.10), borderRadius: BorderRadius.circular(999)),
+        decoration: BoxDecoration(
+          color: isDark ? cs.primary.withOpacity(0.25) : cs.primary.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: cs.primary.withOpacity(0.2), width: 0.5),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        child: Icon(Lucide.Hammer, size: 12, color: cs.primary),
+        child: Icon(Lucide.Hammer, size: 12, color: isDark ? cs.primary : cs.primary.withOpacity(0.9)),
       ));
     } else if (ab == ModelAbility.reasoning) {
       chips.add(Container(
-        decoration: BoxDecoration(color: cs.secondary.withOpacity(0.12), borderRadius: BorderRadius.circular(999)),
+        decoration: BoxDecoration(
+          color: isDark ? cs.secondary.withOpacity(0.3) : cs.secondary.withOpacity(0.18),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: cs.secondary.withOpacity(0.25), width: 0.5),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        child: SvgPicture.asset('assets/icons/deepthink.svg', width: 12, height: 12, colorFilter: ColorFilter.mode(cs.secondary, BlendMode.srcIn)),
+        child: SvgPicture.asset('assets/icons/deepthink.svg', width: 12, height: 12, colorFilter: ColorFilter.mode(isDark ? cs.secondary : cs.secondary.withOpacity(0.9), BlendMode.srcIn)),
       ));
     }
   }
