@@ -22,6 +22,9 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   final _keyCtrl = TextEditingController();
   final _baseCtrl = TextEditingController();
   final _pathCtrl = TextEditingController();
+  // Google Vertex AI extras
+  final _locationCtrl = TextEditingController();
+  final _projectCtrl = TextEditingController();
   bool _enabled = true;
   bool _useResp = false; // openai
   bool _vertexAI = false; // google
@@ -45,6 +48,8 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     _pathCtrl.text = _cfg.chatPath ?? '/chat/completions';
     _useResp = _cfg.useResponseApi ?? false;
     _vertexAI = _cfg.vertexAI ?? false;
+    _locationCtrl.text = _cfg.location ?? '';
+    _projectCtrl.text = _cfg.projectId ?? '';
     // proxy
     _proxyEnabled = _cfg.proxyEnabled ?? false;
     _proxyHostCtrl.text = _cfg.proxyHost ?? '';
@@ -60,6 +65,8 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     _keyCtrl.dispose();
     _baseCtrl.dispose();
     _pathCtrl.dispose();
+    _locationCtrl.dispose();
+    _projectCtrl.dispose();
     _proxyHostCtrl.dispose();
     _proxyPortCtrl.dispose();
     _proxyUserCtrl.dispose();
@@ -170,6 +177,12 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         if (_kind == ProviderKind.google) ...[
           const SizedBox(height: 12),
           _checkboxRow(context, title: zh ? 'Vertex AI' : 'Vertex AI', value: _vertexAI, onChanged: (v) => setState(() => _vertexAI = v)),
+          if (_vertexAI) ...[
+            const SizedBox(height: 12),
+            _inputRow(context, label: zh ? '区域 Location' : 'Location', controller: _locationCtrl, hint: 'us-central1'),
+            const SizedBox(height: 12),
+            _inputRow(context, label: zh ? '项目 ID' : 'Project ID', controller: _projectCtrl, hint: 'my-project-id'),
+          ],
         ],
         const SizedBox(height: 16),
         Row(
@@ -375,6 +388,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   Future<void> _save() async {
     final settings = context.read<SettingsProvider>();
     final cfg = ProviderConfig(
+      id: widget.keyName,
       enabled: _enabled,
       name: _nameCtrl.text.trim().isEmpty ? widget.displayName : _nameCtrl.text.trim(),
       apiKey: _keyCtrl.text.trim(),
@@ -382,6 +396,8 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
       chatPath: _kind == ProviderKind.openai ? _pathCtrl.text.trim() : null,
       useResponseApi: _kind == ProviderKind.openai ? _useResp : null,
       vertexAI: _kind == ProviderKind.google ? _vertexAI : null,
+      location: _kind == ProviderKind.google ? _locationCtrl.text.trim() : null,
+      projectId: _kind == ProviderKind.google ? _projectCtrl.text.trim() : null,
     );
     await settings.setProviderConfig(widget.keyName, cfg);
     if (!mounted) return;

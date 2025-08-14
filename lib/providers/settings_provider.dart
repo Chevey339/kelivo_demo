@@ -87,6 +87,7 @@ class SettingsProvider extends ChangeNotifier {
 enum ProviderKind { openai, google, claude }
 
 class ProviderConfig {
+  final String id;
   final bool enabled;
   final String name;
   final String apiKey;
@@ -94,6 +95,9 @@ class ProviderConfig {
   final String? chatPath; // openai only
   final bool? useResponseApi; // openai only
   final bool? vertexAI; // google only
+  final String? location; // google vertex ai only
+  final String? projectId; // google vertex ai only
+  final List<String> models; // placeholder for future model management
   // Per-provider proxy
   final bool? proxyEnabled;
   final String? proxyHost;
@@ -102,6 +106,7 @@ class ProviderConfig {
   final String? proxyPassword;
 
   ProviderConfig({
+    required this.id,
     required this.enabled,
     required this.name,
     required this.apiKey,
@@ -109,6 +114,9 @@ class ProviderConfig {
     this.chatPath,
     this.useResponseApi,
     this.vertexAI,
+    this.location,
+    this.projectId,
+    this.models = const [],
     this.proxyEnabled,
     this.proxyHost,
     this.proxyPort,
@@ -117,6 +125,7 @@ class ProviderConfig {
   });
 
   ProviderConfig copyWith({
+    String? id,
     bool? enabled,
     String? name,
     String? apiKey,
@@ -124,12 +133,16 @@ class ProviderConfig {
     String? chatPath,
     bool? useResponseApi,
     bool? vertexAI,
+    String? location,
+    String? projectId,
+    List<String>? models,
     bool? proxyEnabled,
     String? proxyHost,
     String? proxyPort,
     String? proxyUsername,
     String? proxyPassword,
   }) => ProviderConfig(
+        id: id ?? this.id,
         enabled: enabled ?? this.enabled,
         name: name ?? this.name,
         apiKey: apiKey ?? this.apiKey,
@@ -137,6 +150,9 @@ class ProviderConfig {
         chatPath: chatPath ?? this.chatPath,
         useResponseApi: useResponseApi ?? this.useResponseApi,
         vertexAI: vertexAI ?? this.vertexAI,
+        location: location ?? this.location,
+        projectId: projectId ?? this.projectId,
+        models: models ?? this.models,
         proxyEnabled: proxyEnabled ?? this.proxyEnabled,
         proxyHost: proxyHost ?? this.proxyHost,
         proxyPort: proxyPort ?? this.proxyPort,
@@ -145,6 +161,7 @@ class ProviderConfig {
       );
 
   Map<String, dynamic> toJson() => {
+        'id': id,
         'enabled': enabled,
         'name': name,
         'apiKey': apiKey,
@@ -152,6 +169,9 @@ class ProviderConfig {
         'chatPath': chatPath,
         'useResponseApi': useResponseApi,
         'vertexAI': vertexAI,
+        'location': location,
+        'projectId': projectId,
+        'models': models,
         'proxyEnabled': proxyEnabled,
         'proxyHost': proxyHost,
         'proxyPort': proxyPort,
@@ -160,6 +180,7 @@ class ProviderConfig {
       };
 
   factory ProviderConfig.fromJson(Map<String, dynamic> json) => ProviderConfig(
+        id: json['id'] as String? ?? (json['name'] as String? ?? ''),
         enabled: json['enabled'] as bool? ?? true,
         name: json['name'] as String? ?? '',
         apiKey: json['apiKey'] as String? ?? '',
@@ -167,6 +188,9 @@ class ProviderConfig {
         chatPath: json['chatPath'] as String?,
         useResponseApi: json['useResponseApi'] as bool?,
         vertexAI: json['vertexAI'] as bool?,
+        location: json['location'] as String?,
+        projectId: json['projectId'] as String?,
+        models: (json['models'] as List?)?.map((e) => e.toString()).toList() ?? const [],
         proxyEnabled: json['proxyEnabled'] as bool?,
         proxyHost: json['proxyHost'] as String?,
         proxyPort: json['proxyPort'] as String?,
@@ -200,11 +224,15 @@ class ProviderConfig {
     switch (kind) {
       case ProviderKind.google:
         return ProviderConfig(
+          id: key,
           enabled: true,
           name: displayName ?? key,
           apiKey: '',
           baseUrl: _defaultBase(key),
           vertexAI: false,
+          location: '',
+          projectId: '',
+          models: const [],
           proxyEnabled: false,
           proxyHost: '',
           proxyPort: '8080',
@@ -213,10 +241,12 @@ class ProviderConfig {
         );
       case ProviderKind.claude:
         return ProviderConfig(
+          id: key,
           enabled: true,
           name: displayName ?? key,
           apiKey: '',
           baseUrl: _defaultBase(key),
+          models: const [],
           proxyEnabled: false,
           proxyHost: '',
           proxyPort: '8080',
@@ -226,12 +256,14 @@ class ProviderConfig {
       case ProviderKind.openai:
       default:
         return ProviderConfig(
+          id: key,
           enabled: true,
           name: displayName ?? key,
           apiKey: '',
           baseUrl: _defaultBase(key),
           chatPath: '/chat/completions',
           useResponseApi: false,
+          models: const [],
           proxyEnabled: false,
           proxyHost: '',
           proxyPort: '8080',

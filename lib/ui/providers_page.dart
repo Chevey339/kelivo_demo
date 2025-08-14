@@ -85,7 +85,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
               },
               dragWidgetBuilder: (index, child) => Opacity(
                 opacity: 0.95,
-                child: Transform.scale(scale: 1.05, child: child),
+                child: Transform.scale(scale: 0.94, child: child),
               ),
               children: [
                 for (int i = 0; i < items.length; i++)
