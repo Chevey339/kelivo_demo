@@ -117,40 +117,50 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
           _buildNetworkTab(context, cs, zh),
         ],
       ),
-      bottomNavigationBar: SizedBox(
-        height: 64,
-        child: BottomNavigationBar(
-          type: BottomNavigationBarType.fixed,
-          selectedFontSize: 12,
-          unselectedFontSize: 12,
-          showUnselectedLabels: true,
-          selectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          selectedIconTheme: const IconThemeData(size: 20),
-          unselectedIconTheme: const IconThemeData(size: 20),
-          backgroundColor: cs.surface,
-          selectedItemColor: cs.primary,
-          unselectedItemColor: cs.onSurface.withOpacity(0.7),
-          currentIndex: _index,
-          onTap: (i) {
-            setState(() => _index = i);
-            _pc.animateToPage(i, duration: const Duration(milliseconds: 220), curve: Curves.easeOutCubic);
-          },
-          items: [
-            BottomNavigationBarItem(
-              icon: Padding(padding: const EdgeInsets.only(bottom: 4), child: Icon(Lucide.Settings2)),
-              label: zh ? '配置' : 'Config',
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        selectedFontSize: 12,
+        unselectedFontSize: 12,
+        showUnselectedLabels: true,
+        selectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        selectedIconTheme: const IconThemeData(size: 20),
+        unselectedIconTheme: const IconThemeData(size: 20),
+        backgroundColor: cs.surface,
+        selectedItemColor: cs.primary,
+        unselectedItemColor: cs.onSurface.withOpacity(0.7),
+        currentIndex: _index,
+        onTap: (i) {
+          setState(() => _index = i);
+          _pc.animateToPage(
+            i,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+          );
+        },
+        items: [
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Icon(Lucide.Settings2),
             ),
-            BottomNavigationBarItem(
-              icon: Padding(padding: const EdgeInsets.only(bottom: 4), child: Icon(Lucide.Boxes)),
-              label: zh ? '模型' : 'Models',
+            label: zh ? '配置' : 'Config',
+          ),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Icon(Lucide.Boxes),
             ),
-            BottomNavigationBarItem(
-              icon: Padding(padding: const EdgeInsets.only(bottom: 4), child: Icon(Lucide.Network)),
-              label: zh ? '网络代理' : 'Network',
+            label: zh ? '模型' : 'Models',
+          ),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Icon(Lucide.Network),
             ),
-          ],
-        ),
+            label: zh ? '网络代理' : 'Network',
+          ),
+        ],
       ),
     );
   }
@@ -369,7 +379,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         Positioned(
           left: 0,
           right: 0,
-          bottom: 12 + MediaQuery.of(context).padding.bottom,
+          bottom: 12, // + MediaQuery.of(context).padding.bottom,
           child: Center(
             child: Container(
               decoration: BoxDecoration(
