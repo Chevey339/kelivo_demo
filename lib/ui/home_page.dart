@@ -29,6 +29,9 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin, RouteAware {
   bool _toolsOpen = false;
   static const double _sheetHeight = 160; // height of tools area
+  // Animation tuning
+  static const Duration _scrollAnimateDuration = Duration(milliseconds: 300);
+  static const Duration _postSwitchScrollDelay = Duration(milliseconds: 220);
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FocusNode _inputFocus = FocusNode();
   final TextEditingController _inputController = TextEditingController();
@@ -89,6 +92,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _currentConversation = conversation;
       _messages = [];
     });
+    _scrollToBottomSoon();
   }
 
   Future<void> _sendMessage(String content) async {
@@ -279,10 +283,19 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
+        duration: _scrollAnimateDuration,
         curve: Curves.easeOut,
       );
     }
+  }
+
+  // Ensure scroll reaches bottom even after widget tree transitions
+  void _scrollToBottomSoon() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    // Also scroll after list fade transition completes
+    Future.delayed(_postSwitchScrollDelay, () {
+      _scrollToBottom();
+    });
   }
 
   @override
@@ -387,6 +400,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               _currentConversation = convo;
               _messages = List.of(msgs);
             });
+            _scrollToBottomSoon();
           }
           // Close the drawer when a conversation is picked
           Navigator.of(context).maybePop();
