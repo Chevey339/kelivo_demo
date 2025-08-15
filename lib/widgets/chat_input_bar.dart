@@ -11,6 +11,7 @@ class ChatInputBar extends StatefulWidget {
     this.onMore,
     this.moreOpen = false,
     this.focusNode,
+    this.modelIcon,
   });
 
   final ValueChanged<String>? onSend;
@@ -19,6 +20,7 @@ class ChatInputBar extends StatefulWidget {
   final VoidCallback? onMore;
   final bool moreOpen;
   final FocusNode? focusNode;
+  final Widget? modelIcon;
 
   @override
   State<ChatInputBar> createState() => _ChatInputBarState();
@@ -66,9 +68,17 @@ class _ChatInputBarState extends State<ChatInputBar> {
             // Top: large rounded input capsule
             DecoratedBox(
               decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
+                color: isDark ? Colors.white12 : theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(AppRadii.capsule),
-                boxShadow: isDark ? [] : AppShadows.soft,
+                boxShadow: isDark
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.35),
+                          blurRadius: 18,
+                          offset: const Offset(0, 6),
+                        ),
+                      ]
+                    : AppShadows.soft,
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
@@ -82,8 +92,11 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   autofocus: false,
                   decoration: InputDecoration(
                     hintText: _hint(context),
+                    hintStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.55)),
                     border: InputBorder.none,
                   ),
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                  cursorColor: theme.colorScheme.primary,
                 ),
               ),
             ),
@@ -98,7 +111,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       tooltip: Localizations.localeOf(context).languageCode == 'zh'
                           ? '选择模型'
                           : 'Select Model',
-                      icon: Lucide.Box,
+                      icon: Lucide.Boxes,
+                      child: widget.modelIcon,
                       onTap: widget.onSelectModel,
                     ),
                     const SizedBox(width: AppSpacing.xs),

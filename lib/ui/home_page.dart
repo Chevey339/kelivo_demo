@@ -8,6 +8,9 @@ import '../icons/lucide_adapter.dart';
 import 'package:provider/provider.dart';
 import '../main.dart';
 import '../providers/user_provider.dart';
+import '../providers/settings_provider.dart';
+import 'model_select_sheet.dart';
+import 'package:flutter_svg/flutter_svg.dart';
  
 
 class HomePage extends StatefulWidget {
@@ -41,6 +44,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     final title = _titleForLocale(context);
+    final cs = Theme.of(context).colorScheme;
+    final settings = context.watch<SettingsProvider>();
+    final providerKey = settings.currentModelProvider;
+    final modelId = settings.currentModelId;
+    String? providerName;
+    String? modelDisplay;
+    if (providerKey != null && modelId != null) {
+      final cfg = settings.getProviderConfig(providerKey);
+      providerName = cfg.name.isNotEmpty ? cfg.name : providerKey;
+      final ov = cfg.modelOverrides[modelId] as Map?;
+      modelDisplay = (ov != null && (ov['name'] as String?)?.isNotEmpty == true) ? (ov['name'] as String) : modelId;
+    }
 
     // Chats are seeded via ChatProvider in main.dart
 
@@ -55,7 +70,23 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           icon: const Icon(Lucide.ListTree, size: 22),
         ),
         titleSpacing: 0,
-        title: Text(title),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.normal)),
+            if (providerName != null && modelDisplay != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  '$modelDisplay ($providerName)',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(0.6), fontWeight: FontWeight.w500),
+                ),
+              ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: Localizations.localeOf(context).languageCode == 'zh'
@@ -124,6 +155,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               child: ChatInputBar(
                 onMore: _toggleTools,
                 moreOpen: _toolsOpen,
+                onSelectModel: () => showModelSelectSheet(context),
+                modelIcon: _CurrentModelIcon(providerKey: settings.currentModelProvider, modelId: settings.currentModelId),
                 focusNode: _inputFocus,
               ),
             ),
@@ -159,5 +192,78 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   void didPopNext() {
     // Returning to this page: ensure keyboard stays closed unless user taps.
     WidgetsBinding.instance.addPostFrameCallback((_) => _dismissKeyboard());
+  }
+}
+
+class _CurrentModelIcon extends StatelessWidget {
+  const _CurrentModelIcon({required this.providerKey, required this.modelId});
+  final String? providerKey;
+  final String? modelId;
+
+  String? _assetForName(String n) {
+    final lower = n.toLowerCase();
+    final mapping = <RegExp, String>{
+      RegExp(r'openai|gpt|o\d'): 'openai.svg',
+      RegExp(r'gemini'): 'gemini-color.svg',
+      RegExp(r'google'): 'google-color.svg',
+      RegExp(r'claude'): 'claude-color.svg',
+      RegExp(r'anthropic'): 'anthropic.svg',
+      RegExp(r'deepseek'): 'deepseek-color.svg',
+      RegExp(r'grok'): 'grok.svg',
+      RegExp(r'qwen|qwq|qvq|aliyun|dashscope'): 'qwen-color.svg',
+      RegExp(r'doubao|ark|volc'): 'doubao-color.svg',
+      RegExp(r'openrouter'): 'openrouter.svg',
+      RegExp(r'zhipu|智谱|glm'): 'zhipu-color.svg',
+      RegExp(r'mistral'): 'mistral-color.svg',
+      RegExp(r'(?<!o)llama|meta'): 'meta-color.svg',
+      RegExp(r'hunyuan|tencent'): 'hunyuan-color.svg',
+      RegExp(r'gemma'): 'gemma-color.svg',
+      RegExp(r'perplexity'): 'perplexity-color.svg',
+      RegExp(r'aliyun|阿里云|百炼'): 'alibabacloud-color.svg',
+      RegExp(r'bytedance|火山'): 'bytedance-color.svg',
+      RegExp(r'silicon|硅基'): 'siliconflow.svg',
+      RegExp(r'aihubmix'): 'aihubmix-color.svg',
+      RegExp(r'ollama'): 'ollama.svg',
+      RegExp(r'github'): 'github.svg',
+      RegExp(r'cloudflare'): 'cloudflare-color.svg',
+      RegExp(r'minimax'): 'minimax-color.svg',
+      RegExp(r'xai|grok'): 'xai.svg',
+      RegExp(r'juhenext'): 'juhenext.png',
+      RegExp(r'kimi'): 'kimi-color.svg',
+      RegExp(r'302'): '302ai.svg',
+      RegExp(r'step|阶跃'): 'stepfun-color.svg',
+      RegExp(r'intern|书生'): 'internlm-color.svg',
+      RegExp(r'cohere|command-.+'): 'cohere-color.svg',
+    };
+    for (final e in mapping.entries) {
+      if (e.key.hasMatch(lower)) return 'assets/icons/${e.value}';
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (providerKey == null || modelId == null) return const SizedBox.shrink();
+    String? asset = _assetForName(modelId!);
+    asset ??= _assetForName(providerKey!);
+    Widget inner;
+    if (asset != null) {
+      if (asset.endsWith('.svg')) {
+        inner = SvgPicture.asset(asset, width: 14, height: 14);
+      } else {
+        inner = Image.asset(asset, width: 14, height: 14, fit: BoxFit.contain);
+      }
+    } else {
+      inner = Text(modelId!.isNotEmpty ? modelId!.characters.first.toUpperCase() : '?', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: 12));
+    }
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(color: isDark ? Colors.white10 : cs.primary.withOpacity(0.1), shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: SizedBox(width: 18, height: 18, child: Center(child: inner is SvgPicture || inner is Image ? inner : FittedBox(child: inner))),
+    );
   }
 }

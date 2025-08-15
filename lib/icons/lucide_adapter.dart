@@ -52,4 +52,5 @@ class Lucide {
   static const IconData Brain = lucide.LucideIcons.brain;
   static const IconData Check = lucide.LucideIcons.check;
   static const IconData Trash2 = lucide.LucideIcons.trash2;
+  static const IconData HeartOff = lucide.LucideIcons.heartOff;
 }

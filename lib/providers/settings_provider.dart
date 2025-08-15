@@ -7,6 +7,8 @@ class SettingsProvider extends ChangeNotifier {
   static const String _providersOrderKey = 'providers_order_v1';
   static const String _themeModeKey = 'theme_mode_v1';
   static const String _providerConfigsKey = 'provider_configs_v1';
+  static const String _pinnedModelsKey = 'pinned_models_v1';
+  static const String _selectedModelKey = 'selected_model_v1';
 
   List<String> _providersOrder = const [];
   List<String> get providersOrder => _providersOrder;
@@ -50,6 +52,20 @@ class SettingsProvider extends ChangeNotifier {
         _providerConfigs = raw.map((k, v) => MapEntry(k, ProviderConfig.fromJson(v as Map<String, dynamic>)));
       } catch (_) {}
     }
+    // load pinned models
+    final pinned = prefs.getStringList(_pinnedModelsKey) ?? const <String>[];
+    _pinnedModels
+      ..clear()
+      ..addAll(pinned);
+    // load selected model
+    final sel = prefs.getString(_selectedModelKey);
+    if (sel != null && sel.contains('::')) {
+      final parts = sel.split('::');
+      if (parts.length >= 2) {
+        _currentModelProvider = parts[0];
+        _currentModelId = parts.sublist(1).join('::');
+      }
+    }
     notifyListeners();
   }
 
@@ -83,6 +99,38 @@ class SettingsProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final map = _providerConfigs.map((k, v) => MapEntry(k, v.toJson()));
     await prefs.setString(_providerConfigsKey, jsonEncode(map));
+  }
+
+  // Favorites (pinned models)
+  final Set<String> _pinnedModels = <String>{};
+  Set<String> get pinnedModels => Set.unmodifiable(_pinnedModels);
+  bool isModelPinned(String providerKey, String modelId) => _pinnedModels.contains('$providerKey::$modelId');
+  Future<void> togglePinModel(String providerKey, String modelId) async {
+    final k = '$providerKey::$modelId';
+    if (_pinnedModels.contains(k)) {
+      _pinnedModels.remove(k);
+    } else {
+      _pinnedModels.add(k);
+    }
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_pinnedModelsKey, _pinnedModels.toList());
+  }
+
+  // Selected model for chat
+  String? _currentModelProvider;
+  String? _currentModelId;
+  String? get currentModelProvider => _currentModelProvider;
+  String? get currentModelId => _currentModelId;
+  String? get currentModelKey => (_currentModelProvider != null && _currentModelId != null)
+      ? '${_currentModelProvider!}::${_currentModelId!}'
+      : null;
+  Future<void> setCurrentModel(String providerKey, String modelId) async {
+    _currentModelProvider = providerKey;
+    _currentModelId = modelId;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_selectedModelKey, '$providerKey::$modelId');
   }
 }
 
