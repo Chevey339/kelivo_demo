@@ -1056,9 +1056,10 @@ Future<String?> showModelPickerForTest(BuildContext context, String providerKey,
   final settings = context.read<SettingsProvider>();
   final cfg = settings.getProviderConfig(providerKey, defaultName: providerDisplayName);
   final controller = TextEditingController();
-  List<dynamic> items = const [];
-  bool loading = true;
-  String error = '';
+  // Build items from already-added models only
+  final items = <ModelInfo>[
+    for (final id in cfg.models) ModelRegistry.infer(ModelInfo(id: id, displayName: id))
+  ];
 
   return showModalBottomSheet<String>(
     context: context,
@@ -1070,28 +1071,10 @@ Future<String?> showModelPickerForTest(BuildContext context, String providerKey,
     builder: (ctx) {
       return StatefulBuilder(builder: (ctx, setLocal) {
         final zhLocal = Localizations.localeOf(ctx).languageCode == 'zh';
-        Future<void> _load() async {
-          try {
-            final list = await ProviderManager.listModels(cfg);
-            setLocal(() {
-              items = list;
-              loading = false;
-            });
-          } catch (e) {
-            setLocal(() {
-              items = const [];
-              loading = false;
-              error = '$e';
-            });
-          }
-        }
-
-        if (loading) Future.microtask(_load);
-
         final query = controller.text.trim().toLowerCase();
         final filtered = [
           for (final m in items)
-            if (m is ModelInfo && (query.isEmpty || m.id.toLowerCase().contains(query))) m
+            if (query.isEmpty || m.id.toLowerCase().contains(query)) _effectiveFor(context, providerKey, providerDisplayName, m)
         ];
 
         return SafeArea(
@@ -1112,23 +1095,43 @@ Future<String?> showModelPickerForTest(BuildContext context, String providerKey,
                     Container(width: 40, height: 4, decoration: BoxDecoration(color: cs.onSurface.withOpacity(0.2), borderRadius: BorderRadius.circular(999))),
                     const SizedBox(height: 8),
                     Expanded(
-                      child: loading
-                          ? const Center(child: CircularProgressIndicator())
-                          : error.isNotEmpty
-                              ? Center(child: Text(error, style: TextStyle(color: cs.error)))
-                              : ListView.builder(
-                                  controller: scrollController,
-                                  itemCount: filtered.length,
-                                  itemBuilder: (c, i) {
-                                    final m = filtered[i] as ModelInfo;
-                                    return ListTile(
-                                      onTap: () => Navigator.of(ctx).pop(m.id),
-                                      leading: _BrandAvatar(name: m.id, size: 28),
-                                      title: Text(m.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                      subtitle: _modelTagWrap(context, m),
-                                    );
-                                  },
+                      child: ListView.builder(
+                        controller: scrollController,
+                        itemCount: filtered.length,
+                        itemBuilder: (c, i) {
+                          final m = filtered[i];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            child: Material(
+                              color: cs.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () => Navigator.of(ctx).pop(m.id),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  child: Row(
+                                    children: [
+                                      _BrandAvatar(name: m.id, size: 28),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(m.displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                                            const SizedBox(height: 4),
+                                            _modelTagWrap(context, m),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
                     Padding(
                       padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(ctx).padding.bottom + 12),
@@ -1153,6 +1156,39 @@ Future<String?> showModelPickerForTest(BuildContext context, String providerKey,
         );
       });
     },
+  );
+}
+
+ModelInfo _effectiveFor(BuildContext context, String providerKey, String providerDisplayName, ModelInfo base) {
+  final cfg = context.read<SettingsProvider>().getProviderConfig(providerKey, defaultName: providerDisplayName);
+  final ov = cfg.modelOverrides[base.id] as Map?;
+  if (ov == null) return base;
+  ModelType? type;
+  final t = (ov['type'] as String?) ?? '';
+  if (t == 'embedding') type = ModelType.embedding; else if (t == 'chat') type = ModelType.chat;
+  List<Modality>? input;
+  if (ov['input'] is List) {
+    input = [
+      for (final e in (ov['input'] as List)) (e.toString() == 'image' ? Modality.image : Modality.text)
+    ];
+  }
+  List<Modality>? output;
+  if (ov['output'] is List) {
+    output = [
+      for (final e in (ov['output'] as List)) (e.toString() == 'image' ? Modality.image : Modality.text)
+    ];
+  }
+  List<ModelAbility>? abilities;
+  if (ov['abilities'] is List) {
+    abilities = [
+      for (final e in (ov['abilities'] as List)) (e.toString() == 'reasoning' ? ModelAbility.reasoning : ModelAbility.tool)
+    ];
+  }
+  return base.copyWith(
+    type: type ?? base.type,
+    input: input ?? base.input,
+    output: output ?? base.output,
+    abilities: abilities ?? base.abilities,
   );
 }
 

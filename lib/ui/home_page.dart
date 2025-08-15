@@ -156,7 +156,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 onMore: _toggleTools,
                 moreOpen: _toolsOpen,
                 onSelectModel: () => showModelSelectSheet(context),
-                modelIcon: _CurrentModelIcon(providerKey: settings.currentModelProvider, modelId: settings.currentModelId),
+                modelIcon: (settings.currentModelProvider != null && settings.currentModelId != null)
+                    ? _CurrentModelIcon(providerKey: settings.currentModelProvider, modelId: settings.currentModelId)
+                    : null,
                 focusNode: _inputFocus,
               ),
             ),
