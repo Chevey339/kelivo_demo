@@ -385,7 +385,17 @@ class _BrandAvatar extends StatelessWidget {
     Widget inner;
     if (asset != null) {
       if (asset.endsWith('.svg')) {
-        inner = SvgPicture.asset(asset, width: size * 0.62, height: size * 0.62);
+        final isColorful = asset.contains('color');
+        final dark = Theme.of(context).brightness == Brightness.dark;
+        final ColorFilter? tint = (dark && !isColorful)
+            ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)
+            : null;
+        inner = SvgPicture.asset(
+          asset,
+          width: size * 0.62,
+          height: size * 0.62,
+          colorFilter: tint,
+        );
       } else {
         inner = Image.asset(asset, width: size * 0.62, height: size * 0.62, fit: BoxFit.contain);
       }

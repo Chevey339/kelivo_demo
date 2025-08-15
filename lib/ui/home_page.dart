@@ -571,7 +571,16 @@ class _CurrentModelIcon extends StatelessWidget {
     Widget inner;
     if (asset != null) {
       if (asset.endsWith('.svg')) {
-        inner = SvgPicture.asset(asset, width: size * 0.5, height: size * 0.5);
+        final isColorful = asset.contains('color');
+        final ColorFilter? tint = (Theme.of(context).brightness == Brightness.dark && !isColorful)
+            ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)
+            : null;
+        inner = SvgPicture.asset(
+          asset,
+          width: size * 0.5,
+          height: size * 0.5,
+          colorFilter: tint,
+        );
       } else {
         inner = Image.asset(asset, width: size * 0.5, height: size * 0.5, fit: BoxFit.contain);
       }
