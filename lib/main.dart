@@ -36,7 +36,7 @@ class MyApp extends StatelessWidget {
               final dark = buildDarkTheme(darkDynamic);
               return MaterialApp(
                 debugShowCheckedModeBanner: false,
-                title: 'Kelivo Demo',
+                title: 'Kelivo',
                 // Default to Chinese; English supported.
                 locale: const Locale('zh', 'CN'),
                 supportedLocales: const [

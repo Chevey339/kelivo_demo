@@ -470,6 +470,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   onSend: (text) {
                     _sendMessage(text);
                     _inputController.clear();
+                    // Dismiss keyboard after sending
+                    _dismissKeyboard();
                   },
                   loading: _isLoading,
                 ),

@@ -356,23 +356,21 @@ class _LoadingIndicator extends StatefulWidget {
 class _LoadingIndicatorState extends State<_LoadingIndicator>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _animation;
+  late Animation<double> _curve;
 
   @override
   void initState() {
     super.initState();
+    // Smoother, symmetric breathing with reverse to avoid jump cuts
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 1800),
       vsync: this,
-    )..repeat();
-    
-    _animation = Tween<double>(
-      begin: 0.5,
-      end: 1.0,
-    ).animate(CurvedAnimation(
+    )..repeat(reverse: true);
+
+    _curve = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeInOut,
-    ));
+      curve: Curves.easeInOutSine,
+    );
   }
 
   @override
@@ -384,18 +382,29 @@ class _LoadingIndicatorState extends State<_LoadingIndicator>
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    
+
     return AnimatedBuilder(
-      animation: _animation,
+      animation: _curve,
       builder: (context, child) {
+        // Scale and opacity gently breathe in sync
+        final scale = 0.9 + 0.2 * _curve.value; // 0.9 -> 1.1
+        final opacity = 0.6 + 0.4 * _curve.value; // 0.6 -> 1.0
+        final base = cs.primary;
         return Transform.scale(
-          scale: _animation.value,
+          scale: scale,
           child: Container(
-            width: 8,
-            height: 8,
+            width: 12,
+            height: 12,
             decoration: BoxDecoration(
-              color: cs.primary.withOpacity(0.8),
               shape: BoxShape.circle,
+              color: base.withOpacity(opacity),
+              boxShadow: [
+                BoxShadow(
+                  color: base.withOpacity(0.35 * opacity),
+                  blurRadius: 14,
+                  spreadRadius: 1,
+                ),
+              ],
             ),
           ),
         );
