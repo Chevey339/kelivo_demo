@@ -257,11 +257,9 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
             ],
           ),
           const SizedBox(height: 8),
-          // Message content with markdown support
+          // Message content with markdown support (fill available width)
           Container(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.85,
-            ),
+            width: double.infinity,
             child: widget.message.isStreaming && widget.message.content.isEmpty
                 ? Row(
                     children: [
