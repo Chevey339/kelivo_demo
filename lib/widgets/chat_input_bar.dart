@@ -12,6 +12,8 @@ class ChatInputBar extends StatefulWidget {
     this.moreOpen = false,
     this.focusNode,
     this.modelIcon,
+    this.controller,
+    this.loading = false,
   });
 
   final ValueChanged<String>? onSend;
@@ -21,18 +23,28 @@ class ChatInputBar extends StatefulWidget {
   final bool moreOpen;
   final FocusNode? focusNode;
   final Widget? modelIcon;
+  final TextEditingController? controller;
+  final bool loading;
 
   @override
   State<ChatInputBar> createState() => _ChatInputBarState();
 }
 
 class _ChatInputBarState extends State<ChatInputBar> {
-  final TextEditingController _controller = TextEditingController();
+  late TextEditingController _controller;
   bool _searchEnabled = false;
 
   @override
+  void initState() {
+    super.initState();
+    _controller = widget.controller ?? TextEditingController();
+  }
+
+  @override
   void dispose() {
-    _controller.dispose();
+    if (widget.controller == null) {
+      _controller.dispose();
+    }
     super.dispose();
   }
 
@@ -156,10 +168,12 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     _SendButton(
-                      enabled: hasText,
+                      enabled: hasText && !widget.loading,
+                      loading: widget.loading,
                       onSend: _handleSend,
+                      onStop: widget.loading ? () {} : null,
                       color: theme.colorScheme.primary,
-                      icon: Lucide.ArrowUp,
+                      icon: widget.loading ? Lucide.X : Lucide.ArrowUp,
                     ),
                   ],
                 ),
@@ -217,25 +231,29 @@ class _SendButton extends StatelessWidget {
     required this.onSend,
     required this.color,
     required this.icon,
+    this.loading = false,
+    this.onStop,
   });
 
   final bool enabled;
+  final bool loading;
   final VoidCallback onSend;
+  final VoidCallback? onStop;
   final Color color;
   final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = enabled ? color : (isDark ? Colors.white12 : Colors.grey.shade300);
-    final fg = enabled ? (isDark ? Colors.black : Colors.white) : (isDark ? Colors.white70 : Colors.grey.shade600);
+    final bg = (enabled || loading) ? color : (isDark ? Colors.white12 : Colors.grey.shade300);
+    final fg = (enabled || loading) ? (isDark ? Colors.black : Colors.white) : (isDark ? Colors.white70 : Colors.grey.shade600);
 
     return Material(
       color: bg,
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
-        onTap: enabled ? onSend : null,
+        onTap: loading ? onStop : (enabled ? onSend : null),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Icon(icon, size: 20, color: fg),

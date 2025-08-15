@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../icons/lucide_adapter.dart';
 import '../providers/settings_provider.dart';
+import 'default_model_page.dart';
 import 'providers_page.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -133,7 +134,15 @@ class SettingsPage extends StatelessWidget {
           ),
 
           header(Localizations.localeOf(context).languageCode == 'zh' ? '模型与服务' : 'Models & Services'),
-          SettingRow(icon: Lucide.Heart, title: Localizations.localeOf(context).languageCode == 'zh' ? '默认模型' : 'Default Model', onTap: () {}),
+          SettingRow(
+            icon: Lucide.Heart,
+            title: Localizations.localeOf(context).languageCode == 'zh' ? '默认模型' : 'Default Model',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const DefaultModelPage()),
+              );
+            },
+          ),
           SettingRow(
             icon: Lucide.Boxes,
             title: Localizations.localeOf(context).languageCode == 'zh' ? '提供商' : 'Providers',

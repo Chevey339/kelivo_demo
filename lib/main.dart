@@ -8,6 +8,7 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'providers/chat_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/settings_provider.dart';
+import 'services/chat_service.dart';
 
 final RouteObserver<ModalRoute<dynamic>> routeObserver = RouteObserver<ModalRoute<dynamic>>();
 void main() {
@@ -24,6 +25,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => UserProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => ChatService()),
       ],
       child: Builder(
         builder: (context) {

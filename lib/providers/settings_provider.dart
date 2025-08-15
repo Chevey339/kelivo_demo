@@ -9,6 +9,8 @@ class SettingsProvider extends ChangeNotifier {
   static const String _providerConfigsKey = 'provider_configs_v1';
   static const String _pinnedModelsKey = 'pinned_models_v1';
   static const String _selectedModelKey = 'selected_model_v1';
+  static const String _titleModelKey = 'title_model_v1';
+  static const String _titlePromptKey = 'title_prompt_v1';
 
   List<String> _providersOrder = const [];
   List<String> get providersOrder => _providersOrder;
@@ -66,6 +68,18 @@ class SettingsProvider extends ChangeNotifier {
         _currentModelId = parts.sublist(1).join('::');
       }
     }
+    // load title model
+    final titleSel = prefs.getString(_titleModelKey);
+    if (titleSel != null && titleSel.contains('::')) {
+      final parts = titleSel.split('::');
+      if (parts.length >= 2) {
+        _titleModelProvider = parts[0];
+        _titleModelId = parts.sublist(1).join('::');
+      }
+    }
+    // load title prompt
+    final tp = prefs.getString(_titlePromptKey);
+    _titlePrompt = (tp == null || tp.trim().isEmpty) ? defaultTitlePrompt : tp;
     notifyListeners();
   }
 
@@ -132,6 +146,47 @@ class SettingsProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_selectedModelKey, '$providerKey::$modelId');
   }
+
+  // Title model and prompt
+  String? _titleModelProvider;
+  String? _titleModelId;
+  String? get titleModelProvider => _titleModelProvider;
+  String? get titleModelId => _titleModelId;
+  String? get titleModelKey => (_titleModelProvider != null && _titleModelId != null)
+      ? '${_titleModelProvider!}::${_titleModelId!}'
+      : null;
+
+  static const String defaultTitlePrompt = '''I will give you some dialogue content in the `<content>` block.
+You need to summarize the conversation between user and assistant into a short title.
+1. The title language should be consistent with the user's primary language
+2. Do not use punctuation or other special symbols
+3. Reply directly with the title
+4. Summarize using {locale} language
+5. The title should not exceed 10 characters
+
+<content>
+{content}
+</content>''';
+
+  String _titlePrompt = defaultTitlePrompt;
+  String get titlePrompt => _titlePrompt;
+
+  Future<void> setTitleModel(String providerKey, String modelId) async {
+    _titleModelProvider = providerKey;
+    _titleModelId = modelId;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_titleModelKey, '$providerKey::$modelId');
+  }
+
+  Future<void> setTitlePrompt(String prompt) async {
+    _titlePrompt = prompt.trim().isEmpty ? defaultTitlePrompt : prompt;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_titlePromptKey, _titlePrompt);
+  }
+
+  Future<void> resetTitlePrompt() async => setTitlePrompt(defaultTitlePrompt);
 }
 
 enum ProviderKind { openai, google, claude }

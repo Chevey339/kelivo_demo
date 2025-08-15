@@ -1,0 +1,77 @@
+import 'package:hive/hive.dart';
+import 'package:uuid/uuid.dart';
+
+part 'conversation.g.dart';
+
+@HiveType(typeId: 1)
+class Conversation extends HiveObject {
+  @HiveField(0)
+  final String id;
+
+  @HiveField(1)
+  String title;
+
+  @HiveField(2)
+  final DateTime createdAt;
+
+  @HiveField(3)
+  DateTime updatedAt;
+
+  @HiveField(4)
+  final List<String> messageIds;
+
+  @HiveField(5)
+  bool isPinned;
+
+  Conversation({
+    String? id,
+    required this.title,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    List<String>? messageIds,
+    this.isPinned = false,
+  })  : id = id ?? const Uuid().v4(),
+        createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now(),
+        messageIds = messageIds ?? [];
+
+  Conversation copyWith({
+    String? id,
+    String? title,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    List<String>? messageIds,
+    bool? isPinned,
+  }) {
+    return Conversation(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      messageIds: messageIds ?? this.messageIds,
+      isPinned: isPinned ?? this.isPinned,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'messageIds': messageIds,
+      'isPinned': isPinned,
+    };
+  }
+
+  factory Conversation.fromJson(Map<String, dynamic> json) {
+    return Conversation(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      messageIds: (json['messageIds'] as List<dynamic>).cast<String>(),
+      isPinned: json['isPinned'] as bool? ?? false,
+    );
+  }
+}

@@ -48,9 +48,16 @@ class Lucide {
   static const IconData Minus = lucide.LucideIcons.minus;
   static const IconData Type = lucide.LucideIcons.type;
   static const IconData ChevronRight = lucide.LucideIcons.chevronRight;
+  static const IconData Copy = lucide.LucideIcons.copy;
+  static const IconData RefreshCw = lucide.LucideIcons.refreshCw;
+  static const IconData Ellipsis = lucide.LucideIcons.ellipsis;
+  static const IconData Languages = lucide.LucideIcons.languages;
+  static const IconData User = lucide.LucideIcons.user;
   static const IconData Hammer = lucide.LucideIcons.hammer;
   static const IconData Brain = lucide.LucideIcons.brain;
   static const IconData Check = lucide.LucideIcons.check;
   static const IconData Trash2 = lucide.LucideIcons.trash2;
   static const IconData HeartOff = lucide.LucideIcons.heartOff;
+  static const IconData MessageCircle = lucide.LucideIcons.messageCircle;
+  static const IconData NotebookTabs = lucide.LucideIcons.notebookTabs;
 }

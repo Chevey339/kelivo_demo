@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:characters/characters.dart';
 import '../icons/lucide_adapter.dart';
 import 'package:provider/provider.dart';
-import '../providers/chat_provider.dart';
+import '../services/chat_service.dart';
+import '../services/chat_api_service.dart';
+import '../providers/settings_provider.dart';
 import '../models/chat_item.dart';
 import '../providers/user_provider.dart';
 import '../ui/settings_page.dart';
@@ -16,10 +18,12 @@ class SideDrawer extends StatefulWidget {
     super.key,
     required this.userName,
     required this.assistantName,
+    this.onSelectConversation,
   });
 
   final String userName;
   final String assistantName;
+  final void Function(String id)? onSelectConversation;
 
   @override
   State<SideDrawer> createState() => _SideDrawerState();
@@ -41,8 +45,8 @@ class _SideDrawerState extends State<SideDrawer> {
 
   void _showChatMenu(BuildContext context, ChatItem chat) async {
     final zh = Localizations.localeOf(context).languageCode == 'zh';
-    final provider = context.read<ChatProvider>();
-    final isPinned = provider.pinnedIds.contains(chat.id);
+    final chatService = context.read<ChatService>();
+    final isPinned = chatService.getConversation(chat.id)?.isPinned ?? false;
     await showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -67,7 +71,15 @@ class _SideDrawerState extends State<SideDrawer> {
                 title: Text(isPinned ? (zh ? '取消置顶' : 'Unpin') : (zh ? '置顶' : 'Pin')),
                 onTap: () async {
                   Navigator.of(ctx).pop();
-                  await provider.togglePin(chat.id);
+                  await chatService.togglePinConversation(chat.id);
+                },
+              ),
+              ListTile(
+                leading: Icon(Lucide.RefreshCw, size: 20),
+                title: Text(zh ? '重新生成标题' : 'Regenerate Title'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await _regenerateTitle(context, chat.id);
                 },
               ),
               ListTile(
@@ -75,7 +87,7 @@ class _SideDrawerState extends State<SideDrawer> {
                 title: Text(zh ? '删除' : 'Delete', style: const TextStyle(color: Colors.redAccent)),
                 onTap: () async {
                   Navigator.of(ctx).pop();
-                  await provider.deleteById(chat.id);
+                  await chatService.deleteConversation(chat.id);
                 },
               ),
             ],
@@ -115,8 +127,32 @@ class _SideDrawerState extends State<SideDrawer> {
       },
     );
     if (ok == true) {
-      await context.read<ChatProvider>().rename(chat.id, controller.text.trim());
+      await context.read<ChatService>().renameConversation(chat.id, controller.text.trim());
     }
+  }
+
+  Future<void> _regenerateTitle(BuildContext context, String conversationId) async {
+    final settings = context.read<SettingsProvider>();
+    final chatService = context.read<ChatService>();
+    final convo = chatService.getConversation(conversationId);
+    if (convo == null) return;
+    // Decide model
+    final provKey = settings.titleModelProvider ?? settings.currentModelProvider;
+    final mdlId = settings.titleModelId ?? settings.currentModelId;
+    if (provKey == null || mdlId == null) return;
+    final cfg = settings.getProviderConfig(provKey);
+    // Content
+    final msgs = chatService.getMessages(conversationId);
+    final joined = msgs.where((m) => m.content.isNotEmpty).map((m) => '${m.role == 'assistant' ? 'Assistant' : 'User'}: ${m.content}').join('\n\n');
+    final content = joined.length > 3000 ? joined.substring(0, 3000) : joined;
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final prompt = settings.titlePrompt.replaceAll('{locale}', locale).replaceAll('{content}', content);
+    try {
+      final title = (await ChatApiService.generateText(config: cfg, modelId: mdlId, prompt: prompt)).trim();
+      if (title.isNotEmpty) {
+        await chatService.renameConversation(conversationId, title);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -185,16 +221,22 @@ class _SideDrawerState extends State<SideDrawer> {
     final cs = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final textBase = isDark ? Colors.white : Colors.black; // 纯黑（白天），夜间自动适配
-    final chatProvider = context.watch<ChatProvider>();
-    final all = chatProvider.chats;
-    final pinnedIds = chatProvider.pinnedIds;
+    final chatService = context.watch<ChatService>();
+    final conversations = chatService.getAllConversations();
+    final all = conversations
+        .map((c) => ChatItem(id: c.id, title: c.title, created: c.createdAt))
+        .toList();
 
     final base = _query.trim().isEmpty
         ? all
         : all.where((c) => c.title.toLowerCase().contains(_query.toLowerCase())).toList();
-    final pinnedList = base.where((c) => pinnedIds.contains(c.id)).toList()
+    final pinnedList = base
+        .where((c) => (chatService.getConversation(c.id)?.isPinned ?? false))
+        .toList()
       ..sort((a, b) => a.created.compareTo(b.created));
-    final rest = base.where((c) => !pinnedIds.contains(c.id)).toList();
+    final rest = base
+        .where((c) => !(chatService.getConversation(c.id)?.isPinned ?? false))
+        .toList();
     final groups = _groupByDate(context, rest);
 
     // Avatar renderer: emoji / url / file / default initial
@@ -395,6 +437,7 @@ class _SideDrawerState extends State<SideDrawer> {
                                 _ChatTile(
                                   chat: chat,
                                   textColor: textBase,
+                                  onTap: () => widget.onSelectConversation?.call(chat.id),
                                   onLongPress: () => _showChatMenu(context, chat),
                                 ),
                             ],
@@ -416,6 +459,7 @@ class _SideDrawerState extends State<SideDrawer> {
                                 _ChatTile(
                                   chat: chat,
                                   textColor: textBase,
+                                  onTap: () => widget.onSelectConversation?.call(chat.id),
                                   onLongPress: () => _showChatMenu(context, chat),
                                 ),
                             ],
