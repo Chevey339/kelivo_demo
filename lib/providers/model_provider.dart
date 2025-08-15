@@ -214,4 +214,101 @@ class ProviderManager {
   static Future<List<ModelInfo>> listModels(ProviderConfig cfg) {
     return forConfig(cfg).listModels(cfg);
   }
+
+  static Future<void> testConnection(ProviderConfig cfg, String modelId) async {
+    final kind = ProviderConfig.classify(cfg.id);
+    final client = _Http.clientFor(cfg);
+    try {
+      if (kind == ProviderKind.openai) {
+        final base = cfg.baseUrl.endsWith('/') ? cfg.baseUrl.substring(0, cfg.baseUrl.length - 1) : cfg.baseUrl;
+        final path = (cfg.useResponseApi == true) ? '/responses' : (cfg.chatPath ?? '/chat/completions');
+        final url = Uri.parse('$base$path');
+        final body = cfg.useResponseApi == true
+            ? {
+                'model': modelId,
+                'input': [
+                  {'role': 'user', 'content': 'hello'}
+                ],
+                'max_output_tokens': 8,
+              }
+            : {
+                'model': modelId,
+                'messages': [
+                  {'role': 'user', 'content': 'hello'}
+                ],
+                'max_tokens': 8,
+                'stream': false,
+              };
+        final res = await client.post(url,
+            headers: {
+              'Authorization': 'Bearer ${cfg.apiKey}',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(body));
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          throw HttpException('HTTP ${res.statusCode}: ${res.body}');
+        }
+        return;
+      } else if (kind == ProviderKind.claude) {
+        final base = cfg.baseUrl.endsWith('/') ? cfg.baseUrl.substring(0, cfg.baseUrl.length - 1) : cfg.baseUrl;
+        final url = Uri.parse('$base/messages');
+        final body = {
+          'model': modelId,
+          'max_tokens': 8,
+          'messages': [
+            {
+              'role': 'user',
+              'content': 'hello',
+            }
+          ]
+        };
+        final res = await client.post(url,
+            headers: {
+              'x-api-key': cfg.apiKey,
+              'anthropic-version': ClaudeProvider.anthropicVersion,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(body));
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          throw HttpException('HTTP ${res.statusCode}: ${res.body}');
+        }
+        return;
+      } else if (kind == ProviderKind.google) {
+        // Generative Language API (default) or Vertex AI when vertexAI == true
+        String url;
+        if (cfg.vertexAI == true && (cfg.location?.isNotEmpty == true) && (cfg.projectId?.isNotEmpty == true)) {
+          final loc = cfg.location!;
+          final proj = cfg.projectId!;
+          url = 'https://$loc-aiplatform.googleapis.com/v1/projects/$proj/locations/$loc/publishers/google/models/$modelId:generateContent';
+        } else {
+          final base = cfg.baseUrl.endsWith('/') ? cfg.baseUrl.substring(0, cfg.baseUrl.length - 1) : cfg.baseUrl;
+          url = '$base/models/$modelId:generateContent';
+          if (cfg.apiKey.isNotEmpty) {
+            url = '$url?key=${Uri.encodeQueryComponent(cfg.apiKey)}';
+          }
+        }
+        final body = {
+          'contents': [
+            {
+              'role': 'user',
+              'parts': [
+                {'text': 'hello'}
+              ]
+            }
+          ]
+        };
+        final headers = <String, String>{'Content-Type': 'application/json'};
+        if (cfg.vertexAI == true && cfg.apiKey.isNotEmpty) {
+          headers['Authorization'] = 'Bearer ${cfg.apiKey}';
+        }
+        final res = await client.post(Uri.parse(url), headers: headers, body: jsonEncode(body));
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          throw HttpException('HTTP ${res.statusCode}: ${res.body}');
+        }
+        return;
+      }
+    } finally {
+      client.close();
+    }
+  }
 }

@@ -4,15 +4,15 @@ import 'package:flutter/services.dart';
 
 ThemeData buildLightTheme(ColorScheme? dynamicScheme) {
   final scheme = (dynamicScheme?.harmonized()) ?? const ColorScheme.light(
-    surface: Color.fromARGB(255, 242, 247, 251),
-    surfaceBright: Color(0x00FFFFFF),
-    primary: Color(0xFF0A84FF),
-    secondary: Color(0xFFE3EDF2),
-    tertiary: Colors.black,
-    onSecondary: Colors.black,
-    secondaryContainer: Color(0xFFE3EDF2),
-    onSecondaryContainer: Color.fromARGB(255, 242, 247, 251),
-    inversePrimary: Colors.black54,
+    primary: Color(0xFF4D5C92),
+    onPrimary: Color(0xFFFFFFFF),
+    secondary: Color(0xFF595D72),
+    onSecondary: Color(0xFFFFFFFF),
+    tertiary: Color(0xFF75546F),
+    surface: Color(0xFFFEFBFF),
+    onSurface: Color(0xFF1A1B21),
+    primaryContainer: Color(0xFFDCE1FF),
+    error: Color(0xFFBA1A1A),
   );
 
   return ThemeData(
@@ -53,15 +53,15 @@ ThemeData buildLightTheme(ColorScheme? dynamicScheme) {
 
 ThemeData buildDarkTheme(ColorScheme? dynamicScheme) {
   final scheme = (dynamicScheme?.harmonized()) ?? const ColorScheme.dark(
-    surface: Color(0xFF121012),
-    surfaceBright: Color(0x00000000),
-    primary: Color(0xFF0A84FF),
-    secondary: Color(0xFF382C3E),
-    tertiary: Colors.white,
-    onSecondary: Colors.white30,
-    secondaryContainer: Color.fromARGB(255, 12, 11, 12),
-    onSecondaryContainer: Colors.black26,
-    inversePrimary: Colors.white54,
+    primary: Color(0xFFB6C4FF),
+    onPrimary: Color(0xFF1D2D61),
+    secondary: Color(0xFFC2C5DD),
+    onSecondary: Color(0xFF2B3042),
+    tertiary: Color(0xFFE3BADA),
+    surface: Color(0xFF1A1B21),
+    onSurface: Color(0xFFE3E1E9),
+    primaryContainer: Color(0xFF354479),
+    error: Color(0xFFFFB4AB),
   );
 
   return ThemeData(

@@ -198,17 +198,17 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
           ],
         ],
         const SizedBox(height: 16),
-        Row(
-          children: [
-            OutlinedButton.icon(
-              onPressed: _testConnection,
+          Row(
+            children: [
+              OutlinedButton.icon(
+              onPressed: _openTestDialog,
               icon: Icon(Lucide.Cable, size: 18, color: cs.primary),
               label: Text(zh ? '测试' : 'Test', style: TextStyle(color: cs.primary)),
               style: OutlinedButton.styleFrom(
                 side: BorderSide(color: cs.primary.withOpacity(0.5)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
-            ),
+              ),
             const Spacer(),
             ElevatedButton(
               onPressed: _save,
@@ -379,7 +379,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         Positioned(
           left: 0,
           right: 0,
-          bottom: 12, // + MediaQuery.of(context).padding.bottom,
+          bottom: 12 + MediaQuery.of(context).padding.bottom,
           child: Center(
             child: Container(
               decoration: BoxDecoration(
@@ -554,9 +554,12 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     setState(() {});
   }
 
-  Future<void> _testConnection() async {
-    final zh = Localizations.localeOf(context).languageCode == 'zh';
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(zh ? '测试未实现，稍后接入' : 'Test not implemented yet')));
+  Future<void> _openTestDialog() async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _ConnectionTestDialog(providerKey: widget.keyName, providerDisplayName: widget.displayName),
+    );
   }
 
   Future<void> _saveNetwork() async {
@@ -843,6 +846,316 @@ class _ModelCard extends StatelessWidget {
     );
   }
 }
+
+class _ConnectionTestDialog extends StatefulWidget {
+  const _ConnectionTestDialog({required this.providerKey, required this.providerDisplayName});
+  final String providerKey;
+  final String providerDisplayName;
+
+  @override
+  State<_ConnectionTestDialog> createState() => _ConnectionTestDialogState();
+}
+
+enum _TestState { idle, loading, success, error }
+
+class _ConnectionTestDialogState extends State<_ConnectionTestDialog> {
+  String? _selectedModelId;
+  _TestState _state = _TestState.idle;
+  String _errorMessage = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final title = zh ? '测试连接' : 'Test Connection';
+    final canTest = _selectedModelId != null && _state != _TestState.loading;
+    return Dialog(
+      backgroundColor: cs.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Center(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+              const SizedBox(height: 16),
+              _buildBody(context, cs, zh),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(zh ? '取消' : 'Cancel')),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: canTest ? _doTest : null,
+                    style: TextButton.styleFrom(foregroundColor: canTest ? cs.primary : cs.onSurface.withOpacity(0.4)),
+                    child: Text(zh ? '测试' : 'Test'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  
+
+  Widget _buildBody(BuildContext context, ColorScheme cs, bool zh) {
+    switch (_state) {
+      case _TestState.idle:
+        return _buildIdle(context, cs, zh);
+      case _TestState.loading:
+        return _buildLoading(context, cs, zh);
+      case _TestState.success:
+        return _buildResult(context, cs, zh, success: true, message: zh ? '测试成功' : 'Success');
+      case _TestState.error:
+        return _buildResult(context, cs, zh, success: false, message: _errorMessage);
+    }
+  }
+
+  Widget _buildIdle(BuildContext context, ColorScheme cs, bool zh) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (_selectedModelId == null)
+          TextButton(
+            onPressed: _pickModel,
+            child: Text(zh ? '选择模型' : 'Select Model'),
+          )
+        else
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _BrandAvatar(name: _selectedModelId!, size: 24),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  _selectedModelId!,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 10),
+              TextButton(onPressed: _pickModel, child: Text(zh ? '更换' : 'Change')),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLoading(BuildContext context, ColorScheme cs, bool zh) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (_selectedModelId != null)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _BrandAvatar(name: _selectedModelId!, size: 24),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  _selectedModelId!,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        const SizedBox(height: 16),
+        const LinearProgressIndicator(minHeight: 4),
+        const SizedBox(height: 12),
+        Text(zh ? '正在测试…' : 'Testing…', style: TextStyle(color: cs.onSurface.withOpacity(0.7))),
+      ],
+    );
+  }
+
+  Widget _buildResult(BuildContext context, ColorScheme cs, bool zh, {required bool success, required String message}) {
+    final color = success ? Colors.green : cs.error;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (_selectedModelId != null)
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: _pickModel,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  _BrandAvatar(name: _selectedModelId!, size: 24),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _selectedModelId!,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(Lucide.ChevronDown, size: 16, color: cs.onSurface.withOpacity(0.7)),
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 14),
+        Text(message, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
+  Future<void> _pickModel() async {
+    final selected = await showModelPickerForTest(context, widget.providerKey, widget.providerDisplayName);
+    if (selected != null) {
+      setState(() {
+        _selectedModelId = selected;
+        _state = _TestState.idle;
+        _errorMessage = '';
+      });
+    }
+  }
+
+  Future<void> _doTest() async {
+    if (_selectedModelId == null) return;
+    setState(() {
+      _state = _TestState.loading;
+      _errorMessage = '';
+    });
+    try {
+      final cfg = context.read<SettingsProvider>().getProviderConfig(widget.providerKey, defaultName: widget.providerDisplayName);
+      await ProviderManager.testConnection(cfg, _selectedModelId!);
+      if (!mounted) return;
+      setState(() => _state = _TestState.success);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _state = _TestState.error;
+        _errorMessage = e.toString();
+      });
+    }
+  }
+}
+
+Future<String?> showModelPickerForTest(BuildContext context, String providerKey, String providerDisplayName) async {
+  final cs = Theme.of(context).colorScheme;
+  final settings = context.read<SettingsProvider>();
+  final cfg = settings.getProviderConfig(providerKey, defaultName: providerDisplayName);
+  final controller = TextEditingController();
+  List<dynamic> items = const [];
+  bool loading = true;
+  String error = '';
+
+  return showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: cs.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (ctx) {
+      return StatefulBuilder(builder: (ctx, setLocal) {
+        final zhLocal = Localizations.localeOf(ctx).languageCode == 'zh';
+        Future<void> _load() async {
+          try {
+            final list = await ProviderManager.listModels(cfg);
+            setLocal(() {
+              items = list;
+              loading = false;
+            });
+          } catch (e) {
+            setLocal(() {
+              items = const [];
+              loading = false;
+              error = '$e';
+            });
+          }
+        }
+
+        if (loading) Future.microtask(_load);
+
+        final query = controller.text.trim().toLowerCase();
+        final filtered = [
+          for (final m in items)
+            if (m is ModelInfo && (query.isEmpty || m.id.toLowerCase().contains(query))) m
+        ];
+
+        return SafeArea(
+          top: false,
+          child: AnimatedPadding(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.7,
+              maxChildSize: 0.95,
+              minChildSize: 0.4,
+              builder: (c, scrollController) {
+                return Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    Container(width: 40, height: 4, decoration: BoxDecoration(color: cs.onSurface.withOpacity(0.2), borderRadius: BorderRadius.circular(999))),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: loading
+                          ? const Center(child: CircularProgressIndicator())
+                          : error.isNotEmpty
+                              ? Center(child: Text(error, style: TextStyle(color: cs.error)))
+                              : ListView.builder(
+                                  controller: scrollController,
+                                  itemCount: filtered.length,
+                                  itemBuilder: (c, i) {
+                                    final m = filtered[i] as ModelInfo;
+                                    return ListTile(
+                                      onTap: () => Navigator.of(ctx).pop(m.id),
+                                      leading: _BrandAvatar(name: m.id, size: 28),
+                                      title: Text(m.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                      subtitle: _modelTagWrap(context, m),
+                                    );
+                                  },
+                                ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(ctx).padding.bottom + 12),
+                      child: TextField(
+                        controller: controller,
+                        onChanged: (_) => setLocal(() {}),
+                        decoration: InputDecoration(
+                          hintText: zhLocal ? '输入模型名称筛选' : 'Type model name to filter',
+                          filled: true,
+                          fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.4))),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      });
+    },
+  );
+}
+
 
 // Using flutter_slidable for reliable swipe actions with confirm + undo.
 
