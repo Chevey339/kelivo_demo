@@ -417,7 +417,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   moreOpen: _toolsOpen,
                   onSelectModel: () => showModelSelectSheet(context),
                   modelIcon: (settings.currentModelProvider != null && settings.currentModelId != null)
-                      ? _CurrentModelIcon(providerKey: settings.currentModelProvider, modelId: settings.currentModelId)
+                      ? _CurrentModelIcon(
+                          providerKey: settings.currentModelProvider,
+                          modelId: settings.currentModelId,
+                          size: 34,
+                        )
                       : null,
                   focusNode: _inputFocus,
                   controller: _inputController,
@@ -511,9 +515,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 }
 
 class _CurrentModelIcon extends StatelessWidget {
-  const _CurrentModelIcon({required this.providerKey, required this.modelId});
+  const _CurrentModelIcon({required this.providerKey, required this.modelId, this.size = 28});
   final String? providerKey;
   final String? modelId;
+  final double size; // outer diameter
 
   String? _assetForName(String n) {
     final lower = n.toLowerCase();
@@ -566,19 +571,26 @@ class _CurrentModelIcon extends StatelessWidget {
     Widget inner;
     if (asset != null) {
       if (asset.endsWith('.svg')) {
-        inner = SvgPicture.asset(asset, width: 14, height: 14);
+        inner = SvgPicture.asset(asset, width: size * 0.5, height: size * 0.5);
       } else {
-        inner = Image.asset(asset, width: 14, height: 14, fit: BoxFit.contain);
+        inner = Image.asset(asset, width: size * 0.5, height: size * 0.5, fit: BoxFit.contain);
       }
     } else {
-      inner = Text(modelId!.isNotEmpty ? modelId!.characters.first.toUpperCase() : '?', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: 12));
+      inner = Text(
+        modelId!.isNotEmpty ? modelId!.characters.first.toUpperCase() : '?',
+        style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: size * 0.43),
+      );
     }
     return Container(
-      width: 28,
-      height: 28,
+      width: size,
+      height: size,
       decoration: BoxDecoration(color: isDark ? Colors.white10 : cs.primary.withOpacity(0.1), shape: BoxShape.circle),
       alignment: Alignment.center,
-      child: SizedBox(width: 18, height: 18, child: Center(child: inner is SvgPicture || inner is Image ? inner : FittedBox(child: inner))),
+      child: SizedBox(
+        width: size * 0.64,
+        height: size * 0.64,
+        child: Center(child: inner is SvgPicture || inner is Image ? inner : FittedBox(child: inner)),
+      ),
     );
   }
 }
