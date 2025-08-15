@@ -6,6 +6,7 @@ import '../providers/settings_provider.dart';
 import 'model_detail_sheet.dart';
 import '../providers/model_provider.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'model_select_sheet.dart';
 
 class ProviderDetailPage extends StatefulWidget {
   const ProviderDetailPage({super.key, required this.keyName, required this.displayName});
@@ -1055,108 +1056,8 @@ Future<String?> showModelPickerForTest(BuildContext context, String providerKey,
   final cs = Theme.of(context).colorScheme;
   final settings = context.read<SettingsProvider>();
   final cfg = settings.getProviderConfig(providerKey, defaultName: providerDisplayName);
-  final controller = TextEditingController();
-  // Build items from already-added models only
-  final items = <ModelInfo>[
-    for (final id in cfg.models) ModelRegistry.infer(ModelInfo(id: id, displayName: id))
-  ];
-
-  return showModalBottomSheet<String>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: cs.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
-    builder: (ctx) {
-      return StatefulBuilder(builder: (ctx, setLocal) {
-        final zhLocal = Localizations.localeOf(ctx).languageCode == 'zh';
-        final query = controller.text.trim().toLowerCase();
-        final filtered = [
-          for (final m in items)
-            if (query.isEmpty || m.id.toLowerCase().contains(query)) _effectiveFor(context, providerKey, providerDisplayName, m)
-        ];
-
-        return SafeArea(
-          top: false,
-          child: AnimatedPadding(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-            child: DraggableScrollableSheet(
-              expand: false,
-              initialChildSize: 0.7,
-              maxChildSize: 0.95,
-              minChildSize: 0.4,
-              builder: (c, scrollController) {
-                return Column(
-                  children: [
-                    const SizedBox(height: 8),
-                    Container(width: 40, height: 4, decoration: BoxDecoration(color: cs.onSurface.withOpacity(0.2), borderRadius: BorderRadius.circular(999))),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: ListView.builder(
-                        controller: scrollController,
-                        itemCount: filtered.length,
-                        itemBuilder: (c, i) {
-                          final m = filtered[i];
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            child: Material(
-                              color: cs.surface,
-                              borderRadius: BorderRadius.circular(12),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(12),
-                                onTap: () => Navigator.of(ctx).pop(m.id),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                  child: Row(
-                                    children: [
-                                      _BrandAvatar(name: m.id, size: 28),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(m.displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                                            const SizedBox(height: 4),
-                                            _modelTagWrap(context, m),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(ctx).padding.bottom + 12),
-                      child: TextField(
-                        controller: controller,
-                        onChanged: (_) => setLocal(() {}),
-                        decoration: InputDecoration(
-                          hintText: zhLocal ? '输入模型名称筛选' : 'Type model name to filter',
-                          filled: true,
-                          fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.4))),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        );
-      });
-    },
-  );
+  final sel = await showModelSelector(context, limitProviderKey: providerKey);
+  return sel?.modelId;
 }
 
 ModelInfo _effectiveFor(BuildContext context, String providerKey, String providerDisplayName, ModelInfo base) {

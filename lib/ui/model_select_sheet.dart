@@ -5,21 +5,37 @@ import '../providers/model_provider.dart';
 import '../icons/lucide_adapter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-Future<void> showModelSelectSheet(BuildContext context) async {
+class ModelSelection {
+  final String providerKey;
+  final String modelId;
+  ModelSelection(this.providerKey, this.modelId);
+}
+
+Future<ModelSelection?> showModelSelector(BuildContext context, {String? limitProviderKey}) async {
   final cs = Theme.of(context).colorScheme;
-  await showModalBottomSheet(
+  return showModalBottomSheet<ModelSelection>(
     context: context,
     isScrollControlled: true,
     backgroundColor: cs.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (ctx) => const _ModelSelectSheet(),
+    builder: (ctx) => _ModelSelectSheet(limitProviderKey: limitProviderKey),
   );
 }
 
+Future<void> showModelSelectSheet(BuildContext context) async {
+  final sel = await showModelSelector(context);
+  if (sel != null) {
+    // persist as current model
+    final settings = context.read<SettingsProvider>();
+    await settings.setCurrentModel(sel.providerKey, sel.modelId);
+  }
+}
+
 class _ModelSelectSheet extends StatefulWidget {
-  const _ModelSelectSheet();
+  const _ModelSelectSheet({this.limitProviderKey});
+  final String? limitProviderKey;
   @override
   State<_ModelSelectSheet> createState() => _ModelSelectSheetState();
 }
@@ -41,7 +57,12 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
     final cs = Theme.of(context).colorScheme;
     final settings = context.watch<SettingsProvider>();
     final pinned = settings.pinnedModels;
-    final providers = settings.providerConfigs;
+    final providers = widget.limitProviderKey == null
+        ? settings.providerConfigs
+        : {
+            if (settings.providerConfigs.containsKey(widget.limitProviderKey))
+              widget.limitProviderKey!: settings.providerConfigs[widget.limitProviderKey]!,
+          };
     final currentKey = settings.currentModelKey;
     final zh = Localizations.localeOf(context).languageCode == 'zh';
 
@@ -104,8 +125,8 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
       ),
     ));
 
-    // Favorites section
-    if (favItems.isNotEmpty) {
+    // Favorites section (only when not limited)
+    if (favItems.isNotEmpty && widget.limitProviderKey == null) {
       final items = favItems.where((e) => query.isEmpty || e.id.toLowerCase().contains(query)).toList();
       if (items.isNotEmpty) {
         final key = GlobalKey();
@@ -126,7 +147,9 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
     });
 
     // Bottom provider tabs
-    final providerTabs = groups.entries.map((e) => _providerTab(context, e.key, e.value.name)).toList();
+    final providerTabs = widget.limitProviderKey == null
+        ? groups.entries.map((e) => _providerTab(context, e.key, e.value.name)).toList()
+        : <Widget>[];
 
     return SafeArea(
       top: false,
@@ -143,20 +166,21 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
             return Column(
               children: [
                 Expanded(
-                  child: ListView(
-                    controller: controller,
-                    padding: const EdgeInsets.only(bottom: 12),
-                    children: slivers,
-                  ),
-                ),
-                if (providerTabs.isNotEmpty)
-                  Padding(
-                    padding: EdgeInsets.only(left: 12, right: 12, bottom: MediaQuery.of(context).padding.bottom + 10),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(children: providerTabs),
+                      child: ListView(
+                        controller: controller,
+                        padding: const EdgeInsets.only(bottom: 12),
+                        children: slivers,
+                      ),
                     ),
-                  ),
+                if (providerTabs.isNotEmpty)
+                  if (providerTabs.isNotEmpty)
+                    Padding(
+                      padding: EdgeInsets.only(left: 12, right: 12, bottom: MediaQuery.of(context).padding.bottom + 10),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(children: providerTabs),
+                      ),
+                    ),
               ],
             );
           },
@@ -188,11 +212,7 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () async {
-            await settings.setCurrentModel(m.providerKey, m.id);
-            if (!mounted) return;
-            Navigator.of(context).pop();
-          },
+          onTap: () => Navigator.of(context).pop(ModelSelection(m.providerKey, m.id)),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
