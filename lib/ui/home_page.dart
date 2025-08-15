@@ -17,7 +17,7 @@ import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import 'model_select_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
- 
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -33,7 +33,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   final FocusNode _inputFocus = FocusNode();
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  
+
   late ChatService _chatService;
   Conversation? _currentConversation;
   List<ChatMessage> _messages = [];
@@ -65,7 +65,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     // Use the provided ChatService instance
     _chatService = context.read<ChatService>();
     _initChat();
-    
+
     // 监听键盘弹出
     _inputFocus.addListener(() {
       if (_inputFocus.hasFocus) {
@@ -94,35 +94,35 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   Future<void> _sendMessage(String content) async {
     if (content.trim().isEmpty) return;
     if (_currentConversation == null) await _createNewConversation();
-    
+
     final settings = context.read<SettingsProvider>();
     final providerKey = settings.currentModelProvider;
     final modelId = settings.currentModelId;
-    
+
     if (providerKey == null || modelId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('请先选择模型')),
       );
       return;
     }
-    
+
     // Add user message
     final userMessage = await _chatService.addMessage(
       conversationId: _currentConversation!.id,
       role: 'user',
       content: content,
     );
-    
+
     setState(() {
       _messages.add(userMessage);
       _isLoading = true;
     });
-    
+
     // 延迟滚动确保UI更新完成
     Future.delayed(const Duration(milliseconds: 100), () {
       _scrollToBottom();
     });
-    
+
     // Create assistant message placeholder
     final assistantMessage = await _chatService.addMessage(
       conversationId: _currentConversation!.id,
@@ -132,39 +132,39 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       providerId: providerKey,
       isStreaming: true,
     );
-    
+
     setState(() {
       _messages.add(assistantMessage);
     });
-    
+
     // 添加助手消息后也滚动到底部
     Future.delayed(const Duration(milliseconds: 100), () {
       _scrollToBottom();
     });
-    
+
     // Prepare messages for API
     final apiMessages = _messages
         .where((m) => m.content.isNotEmpty)
         .map((m) => {
-              'role': m.role == 'assistant' ? 'assistant' : 'user',
-              'content': m.content,
-            })
+      'role': m.role == 'assistant' ? 'assistant' : 'user',
+      'content': m.content,
+    })
         .toList();
-    
+
     // Get provider config
     final config = settings.getProviderConfig(providerKey);
-    
+
     // Stream response
     String fullContent = '';
     int totalTokens = 0;
-    
+
     try {
       final stream = ChatApiService.sendMessageStream(
         config: config,
         modelId: modelId,
         messages: apiMessages,
       );
-      
+
       await for (final chunk in stream) {
         if (chunk.isDone) {
           // Update message as complete
@@ -174,7 +174,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             totalTokens: totalTokens,
             isStreaming: false,
           );
-          
+
           setState(() {
             final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
             if (index != -1) {
@@ -194,7 +194,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           if (chunk.totalTokens > 0) {
             totalTokens = chunk.totalTokens;
           }
-          
+
           // Update UI with streaming content
           setState(() {
             final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
@@ -205,7 +205,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               );
             }
           });
-          
+
           // 滚动到底部显示新内容
           Future.delayed(const Duration(milliseconds: 50), () {
             _scrollToBottom();
@@ -219,7 +219,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         content: '发生错误: $e',
         isStreaming: false,
       );
-      
+
       setState(() {
         final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
         if (index != -1) {
@@ -230,7 +230,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         }
         _isLoading = false;
       });
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('发送失败: $e')),
       );
@@ -390,12 +390,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     return ChatMessageWidget(
                       message: message,
                       modelIcon: message.role == 'assistant' &&
-                              message.providerId != null &&
-                              message.modelId != null
+                          message.providerId != null &&
+                          message.modelId != null
                           ? _CurrentModelIcon(
-                              providerKey: message.providerId,
-                              modelId: message.modelId,
-                            )
+                        providerKey: message.providerId,
+                        modelId: message.modelId,
+                      )
                           : null,
                       onRegenerate: message.role == 'assistant' ? () {
                         // TODO: Implement regenerate
@@ -418,10 +418,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   onSelectModel: () => showModelSelectSheet(context),
                   modelIcon: (settings.currentModelProvider != null && settings.currentModelId != null)
                       ? _CurrentModelIcon(
-                          providerKey: settings.currentModelProvider,
-                          modelId: settings.currentModelId,
-                          size: 34,
-                        )
+                    providerKey: settings.currentModelProvider,
+                    modelId: settings.currentModelId,
+                    size: 34,
+                  )
                       : null,
                   focusNode: _inputFocus,
                   controller: _inputController,
@@ -541,7 +541,7 @@ class _CurrentModelIcon extends StatelessWidget {
       RegExp(r'perplexity'): 'perplexity-color.svg',
       RegExp(r'aliyun|阿里云|百炼'): 'alibabacloud-color.svg',
       RegExp(r'bytedance|火山'): 'bytedance-color.svg',
-      RegExp(r'silicon|硅基'): 'siliconflow.svg',
+      RegExp(r'silicon|硅基'): 'siliconflow-color.svg',
       RegExp(r'aihubmix'): 'aihubmix-color.svg',
       RegExp(r'ollama'): 'ollama.svg',
       RegExp(r'github'): 'github.svg',
@@ -550,7 +550,7 @@ class _CurrentModelIcon extends StatelessWidget {
       RegExp(r'xai|grok'): 'xai.svg',
       RegExp(r'juhenext'): 'juhenext.png',
       RegExp(r'kimi'): 'kimi-color.svg',
-      RegExp(r'302'): '302ai.svg',
+      RegExp(r'302'): '302ai-color.svg',
       RegExp(r'step|阶跃'): 'stepfun-color.svg',
       RegExp(r'intern|书生'): 'internlm-color.svg',
       RegExp(r'cohere|command-.+'): 'cohere-color.svg',

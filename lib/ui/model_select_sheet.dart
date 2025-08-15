@@ -60,9 +60,9 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
     final providers = widget.limitProviderKey == null
         ? settings.providerConfigs
         : {
-            if (settings.providerConfigs.containsKey(widget.limitProviderKey))
-              widget.limitProviderKey!: settings.providerConfigs[widget.limitProviderKey]!,
-          };
+      if (settings.providerConfigs.containsKey(widget.limitProviderKey))
+        widget.limitProviderKey!: settings.providerConfigs[widget.limitProviderKey]!,
+    };
     final currentKey = settings.currentModelKey;
     final zh = Localizations.localeOf(context).languageCode == 'zh';
 
@@ -166,12 +166,12 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
             return Column(
               children: [
                 Expanded(
-                      child: ListView(
-                        controller: controller,
-                        padding: const EdgeInsets.only(bottom: 12),
-                        children: slivers,
-                      ),
-                    ),
+                  child: ListView(
+                    controller: controller,
+                    padding: const EdgeInsets.only(bottom: 12),
+                    children: slivers,
+                  ),
+                ),
                 if (providerTabs.isNotEmpty)
                   if (providerTabs.isNotEmpty)
                     Padding(
@@ -357,7 +357,7 @@ class _BrandAvatar extends StatelessWidget {
       RegExp(r'perplexity'): 'perplexity-color.svg',
       RegExp(r'aliyun|阿里云|百炼'): 'alibabacloud-color.svg',
       RegExp(r'bytedance|火山'): 'bytedance-color.svg',
-      RegExp(r'silicon|硅基'): 'siliconflow.svg',
+      RegExp(r'silicon|硅基'): 'siliconflow-color.svg',
       RegExp(r'aihubmix'): 'aihubmix-color.svg',
       RegExp(r'ollama'): 'ollama.svg',
       RegExp(r'github'): 'github.svg',
@@ -366,7 +366,7 @@ class _BrandAvatar extends StatelessWidget {
       RegExp(r'xai|grok'): 'xai.svg',
       RegExp(r'juhenext'): 'juhenext.png',
       RegExp(r'kimi'): 'kimi-color.svg',
-      RegExp(r'302'): '302ai.svg',
+      RegExp(r'302'): '302ai-color.svg',
       RegExp(r'step|阶跃'): 'stepfun-color.svg',
       RegExp(r'intern|书生'): 'internlm-color.svg',
       RegExp(r'cohere|command-.+'): 'cohere-color.svg',
