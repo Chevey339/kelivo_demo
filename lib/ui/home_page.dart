@@ -321,15 +321,34 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.normal)),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeOutCubic,
+              transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+              child: Text(
+                title,
+                key: ValueKey<String>(title),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             if (providerName != null && modelDisplay != null)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  '$modelDisplay ($providerName)',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(0.6), fontWeight: FontWeight.w500),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 160),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeOutCubic,
+                  transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+                  child: Text(
+                    '$modelDisplay ($providerName)',
+                    key: ValueKey<String>('${settings.currentModelKey ?? ''}'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(0.6), fontWeight: FontWeight.w500),
+                  ),
                 ),
               ),
           ],
@@ -378,33 +397,42 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           // Main column content
           Column(
             children: [
-              // Chat messages list
+              // Chat messages list (animate when switching topic)
               Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.only(bottom: 16, top: 8),
-                  itemCount: _messages.length,
-                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                  itemBuilder: (context, index) {
-                    final message = _messages[index];
-                    return ChatMessageWidget(
-                      message: message,
-                      modelIcon: message.role == 'assistant' &&
-                          message.providerId != null &&
-                          message.modelId != null
-                          ? _CurrentModelIcon(
-                        providerKey: message.providerId,
-                        modelId: message.modelId,
-                      )
-                          : null,
-                      onRegenerate: message.role == 'assistant' ? () {
-                        // TODO: Implement regenerate
-                      } : null,
-                      onResend: message.role == 'user' ? () {
-                        _sendMessage(message.content);
-                      } : null,
-                    );
-                  },
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeOutCubic,
+                  transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+                  child: KeyedSubtree(
+                    key: ValueKey<String>(_currentConversation?.id ?? 'none'),
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.only(bottom: 16, top: 8),
+                      itemCount: _messages.length,
+                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                      itemBuilder: (context, index) {
+                        final message = _messages[index];
+                        return ChatMessageWidget(
+                          message: message,
+                          modelIcon: message.role == 'assistant' &&
+                                  message.providerId != null &&
+                                  message.modelId != null
+                              ? _CurrentModelIcon(
+                                  providerKey: message.providerId,
+                                  modelId: message.modelId,
+                                )
+                              : null,
+                          onRegenerate: message.role == 'assistant' ? () {
+                            // TODO: Implement regenerate
+                          } : null,
+                          onResend: message.role == 'user' ? () {
+                            _sendMessage(message.content);
+                          } : null,
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ),
               // Input bar; lifts when tools open
