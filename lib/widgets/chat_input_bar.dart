@@ -7,6 +7,7 @@ class ChatInputBar extends StatefulWidget {
   const ChatInputBar({
     super.key,
     this.onSend,
+    this.onStop,
     this.onSelectModel,
     this.onToggleSearch,
     this.onMore,
@@ -20,6 +21,7 @@ class ChatInputBar extends StatefulWidget {
   });
 
   final ValueChanged<String>? onSend;
+  final VoidCallback? onStop;
   final VoidCallback? onSelectModel;
   final ValueChanged<bool>? onToggleSearch;
   final VoidCallback? onMore;
@@ -196,7 +198,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       enabled: hasText && !widget.loading,
                       loading: widget.loading,
                       onSend: _handleSend,
-                      onStop: widget.loading ? () {} : null,
+                      onStop: widget.loading ? widget.onStop : null,
                       color: theme.colorScheme.primary,
                       icon: widget.loading ? Lucide.X : Lucide.ArrowUp,
                     ),

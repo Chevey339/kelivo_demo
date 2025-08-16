@@ -59,6 +59,44 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     return inferred.abilities.contains(ModelAbility.reasoning);
   }
 
+  void _cancelStreaming() async {
+    // Cancel active stream subscription, if any
+    final sub = _messageStreamSubscription;
+    _messageStreamSubscription = null;
+    await sub?.cancel();
+
+    // Find the latest assistant streaming message and mark it finished
+    ChatMessage? streaming;
+    for (var i = _messages.length - 1; i >= 0; i--) {
+      final m = _messages[i];
+      if (m.role == 'assistant' && m.isStreaming) {
+        streaming = m;
+        break;
+      }
+    }
+    if (streaming != null) {
+      await _chatService.updateMessage(streaming.id, isStreaming: false);
+      if (mounted) {
+        setState(() {
+          final idx = _messages.indexWhere((m) => m.id == streaming!.id);
+          if (idx != -1) {
+            _messages[idx] = _messages[idx].copyWith(isStreaming: false);
+          }
+          _isLoading = false;
+        });
+      }
+      final r = _reasoning[streaming.id];
+      if (r != null) {
+        r.finishedAt = DateTime.now();
+        r.expanded = false;
+        _reasoning[streaming.id] = r;
+        if (mounted) setState(() {});
+      }
+    } else {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   bool _isReasoningEnabled(int? budget) {
     if (budget == null) return true; // treat null as default/auto -> enabled
     if (budget == -1) return true; // auto
@@ -200,85 +238,133 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         thinkingBudget: settings.thinkingBudget,
       );
 
-      await for (final chunk in stream) {
-        // Capture reasoning deltas only when reasoning is enabled
-        if ((chunk.reasoning ?? '').isNotEmpty && _isReasoningEnabled(settings.thinkingBudget)) {
-          final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
-          r.text += chunk.reasoning!;
-          r.startAt ??= DateTime.now();
-          r.finishedAt = null;
-          r.expanded = true; // auto expand while generating
+      Future<void> finish({bool generateTitle = true}) async {
+        await _chatService.updateMessage(
+          assistantMessage.id,
+          content: fullContent,
+          totalTokens: totalTokens,
+          isStreaming: false,
+        );
+        if (!mounted) return;
+        setState(() {
+          final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
+          if (index != -1) {
+            _messages[index] = _messages[index].copyWith(
+              content: fullContent,
+              totalTokens: totalTokens,
+              isStreaming: false,
+            );
+          }
+          _isLoading = false;
+        });
+        final r = _reasoning[assistantMessage.id];
+        if (r != null) {
+          r.finishedAt = DateTime.now();
+          r.expanded = false; // auto close after finish
           _reasoning[assistantMessage.id] = r;
           if (mounted) setState(() {});
         }
+        if (generateTitle) {
+          _maybeGenerateTitle();
+        }
+      }
 
-        if (chunk.isDone) {
-          // Capture final usage/tokens if only provided at end
-          if (chunk.totalTokens > 0) {
-            totalTokens = chunk.totalTokens;
+      _messageStreamSubscription?.cancel();
+      _messageStreamSubscription = stream.listen(
+        (chunk) async {
+          // Capture reasoning deltas only when reasoning is enabled
+          if ((chunk.reasoning ?? '').isNotEmpty && _isReasoningEnabled(settings.thinkingBudget)) {
+            final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
+            r.text += chunk.reasoning!;
+            r.startAt ??= DateTime.now();
+            r.finishedAt = null;
+            r.expanded = true; // auto expand while generating
+            _reasoning[assistantMessage.id] = r;
+            if (mounted) setState(() {});
           }
-          if (chunk.usage != null) {
-            usage = (usage ?? const TokenUsage()).merge(chunk.usage!);
-            totalTokens = usage!.totalTokens;
+
+          if (chunk.isDone) {
+            // Capture final usage/tokens if only provided at end
+            if (chunk.totalTokens > 0) {
+              totalTokens = chunk.totalTokens;
+            }
+            if (chunk.usage != null) {
+              usage = (usage ?? const TokenUsage()).merge(chunk.usage!);
+              totalTokens = usage!.totalTokens;
+            }
+            await finish();
+            await _messageStreamSubscription?.cancel();
+            _messageStreamSubscription = null;
+          } else {
+            fullContent += chunk.content;
+            if (chunk.totalTokens > 0) {
+              totalTokens = chunk.totalTokens;
+            }
+            if (chunk.usage != null) {
+              usage = (usage ?? const TokenUsage()).merge(chunk.usage!);
+              totalTokens = usage!.totalTokens;
+            }
+
+            // Update UI with streaming content
+            if (mounted) {
+              setState(() {
+                final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
+                if (index != -1) {
+                  _messages[index] = _messages[index].copyWith(
+                    content: fullContent,
+                    totalTokens: totalTokens,
+                  );
+                }
+              });
+            }
+
+            // 滚动到底部显示新内容
+            Future.delayed(const Duration(milliseconds: 50), () {
+              _scrollToBottom();
+            });
           }
-          // Update message as complete
+        },
+        onError: (e) async {
           await _chatService.updateMessage(
             assistantMessage.id,
-            content: fullContent,
-            totalTokens: totalTokens,
+            content: '发生错误: $e',
             isStreaming: false,
           );
 
+          if (!mounted) return;
           setState(() {
             final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
             if (index != -1) {
               _messages[index] = _messages[index].copyWith(
-                content: fullContent,
-                totalTokens: totalTokens,
+                content: '发生错误: $e',
                 isStreaming: false,
               );
             }
             _isLoading = false;
           });
 
-          // Mark reasoning finished and auto collapse
+          // End reasoning on error
           final r = _reasoning[assistantMessage.id];
           if (r != null) {
             r.finishedAt = DateTime.now();
-            r.expanded = false; // auto close after finish
+            r.expanded = false;
             _reasoning[assistantMessage.id] = r;
-            if (mounted) setState(() {});
           }
 
-          // Auto-generate title after completion
-          _maybeGenerateTitle();
-        } else {
-          fullContent += chunk.content;
-          if (chunk.totalTokens > 0) {
-            totalTokens = chunk.totalTokens;
+          _messageStreamSubscription = null;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('发送失败: $e')),
+          );
+        },
+        onDone: () async {
+          // If stream closed without explicit isDone chunk, finalize
+          if (_isLoading) {
+            await finish(generateTitle: true);
           }
-          if (chunk.usage != null) {
-            usage = (usage ?? const TokenUsage()).merge(chunk.usage!);
-            totalTokens = usage!.totalTokens;
-          }
-
-          // Update UI with streaming content
-          setState(() {
-            final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
-            if (index != -1) {
-              _messages[index] = _messages[index].copyWith(
-                content: fullContent,
-                totalTokens: totalTokens,
-              );
-            }
-          });
-
-          // 滚动到底部显示新内容
-          Future.delayed(const Duration(milliseconds: 50), () {
-            _scrollToBottom();
-          });
-        }
-      }
+          _messageStreamSubscription = null;
+        },
+        cancelOnError: true,
+      );
     } catch (e) {
       // Handle error
       await _chatService.updateMessage(
@@ -306,6 +392,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         _reasoning[assistantMessage.id] = r;
       }
 
+      _messageStreamSubscription = null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('发送失败: $e')),
       );
@@ -542,6 +629,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   onMore: _toggleTools,
                   moreOpen: _toolsOpen,
                   onSelectModel: () => showModelSelectSheet(context),
+                  onStop: _cancelStreaming,
                   modelIcon: (settings.currentModelProvider != null && settings.currentModelId != null)
                       ? _CurrentModelIcon(
                     providerKey: settings.currentModelProvider,
