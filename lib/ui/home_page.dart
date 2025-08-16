@@ -90,6 +90,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         r.finishedAt = DateTime.now();
         r.expanded = false;
         _reasoning[streaming.id] = r;
+        await _chatService.updateMessage(
+          streaming.id,
+          reasoningText: r.text,
+          reasoningFinishedAt: r.finishedAt,
+        );
         if (mounted) setState(() {});
       }
     } else {
@@ -151,6 +156,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     setState(() {
       _currentConversation = conversation;
       _messages = [];
+      _reasoning.clear();
     });
     _scrollToBottomSoon();
   }
@@ -205,7 +211,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     final supportsReasoning = _isReasoningModel(providerKey, modelId);
     final enableReasoning = supportsReasoning && _isReasoningEnabled(settings.thinkingBudget);
     if (enableReasoning) {
-      _reasoning[assistantMessage.id] = _ReasoningData();
+      final rd = _ReasoningData();
+      _reasoning[assistantMessage.id] = rd;
+      await _chatService.updateMessage(
+        assistantMessage.id,
+        reasoningStartAt: DateTime.now(),
+      );
     }
 
     // 添加助手消息后也滚动到底部
@@ -273,15 +284,20 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _messageStreamSubscription = stream.listen(
         (chunk) async {
           // Capture reasoning deltas only when reasoning is enabled
-          if ((chunk.reasoning ?? '').isNotEmpty && _isReasoningEnabled(settings.thinkingBudget)) {
-            final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
-            r.text += chunk.reasoning!;
-            r.startAt ??= DateTime.now();
-            r.finishedAt = null;
-            r.expanded = true; // auto expand while generating
-            _reasoning[assistantMessage.id] = r;
-            if (mounted) setState(() {});
-          }
+        if ((chunk.reasoning ?? '').isNotEmpty && _isReasoningEnabled(settings.thinkingBudget)) {
+          final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
+          r.text += chunk.reasoning!;
+          r.startAt ??= DateTime.now();
+          r.finishedAt = null;
+          r.expanded = true; // auto expand while generating
+          _reasoning[assistantMessage.id] = r;
+          if (mounted) setState(() {});
+          await _chatService.updateMessage(
+            assistantMessage.id,
+            reasoningText: r.text,
+            reasoningStartAt: r.startAt,
+          );
+        }
 
           if (chunk.isDone) {
             // Capture final usage/tokens if only provided at end
@@ -295,6 +311,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             await finish();
             await _messageStreamSubscription?.cancel();
             _messageStreamSubscription = null;
+            final r = _reasoning[assistantMessage.id];
+            if (r != null && r.finishedAt == null) {
+              r.finishedAt = DateTime.now();
+              await _chatService.updateMessage(
+                assistantMessage.id,
+                reasoningText: r.text,
+                reasoningFinishedAt: r.finishedAt,
+              );
+            }
           } else {
             fullContent += chunk.content;
             if (chunk.totalTokens > 0) {
@@ -303,6 +328,22 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             if (chunk.usage != null) {
               usage = (usage ?? const TokenUsage()).merge(chunk.usage!);
               totalTokens = usage!.totalTokens;
+            }
+
+            // If content has started, consider reasoning finished and collapse
+            if ((chunk.content).isNotEmpty) {
+              final r = _reasoning[assistantMessage.id];
+              if (r != null && r.startAt != null && r.finishedAt == null) {
+                r.finishedAt = DateTime.now();
+                r.expanded = false; // auto collapse once main content starts
+                _reasoning[assistantMessage.id] = r;
+                await _chatService.updateMessage(
+                  assistantMessage.id,
+                  reasoningText: r.text,
+                  reasoningFinishedAt: r.finishedAt,
+                );
+                if (mounted) setState(() {});
+              }
             }
 
             // Update UI with streaming content
@@ -349,6 +390,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             r.finishedAt = DateTime.now();
             r.expanded = false;
             _reasoning[assistantMessage.id] = r;
+            await _chatService.updateMessage(
+              assistantMessage.id,
+              reasoningText: r.text,
+              reasoningFinishedAt: r.finishedAt,
+            );
           }
 
           _messageStreamSubscription = null;
@@ -390,6 +436,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         r.finishedAt = DateTime.now();
         r.expanded = false;
         _reasoning[assistantMessage.id] = r;
+        await _chatService.updateMessage(
+          assistantMessage.id,
+          reasoningText: r.text,
+          reasoningFinishedAt: r.finishedAt,
+        );
       }
 
       _messageStreamSubscription = null;
@@ -557,6 +608,20 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             setState(() {
               _currentConversation = convo;
               _messages = List.of(msgs);
+              _reasoning.clear();
+              for (final m in _messages) {
+                if (m.role == 'assistant') {
+                  final txt = m.reasoningText ?? '';
+                  if (txt.isNotEmpty || m.reasoningStartAt != null || m.reasoningFinishedAt != null) {
+                    final rd = _ReasoningData();
+                    rd.text = txt;
+                    rd.startAt = m.reasoningStartAt;
+                    rd.finishedAt = m.reasoningFinishedAt;
+                    rd.expanded = false;
+                    _reasoning[m.id] = rd;
+                  }
+                }
+              }
             });
             _scrollToBottomSoon();
           }

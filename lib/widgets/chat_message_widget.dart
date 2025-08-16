@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
@@ -497,6 +498,10 @@ class _ReasoningSectionState extends State<_ReasoningSection> with SingleTickerP
   late final Ticker _ticker = Ticker((_) => setState(() {}));
   final ScrollController _scroll = ScrollController();
 
+  String _sanitize(String s) {
+    return s.replaceAll('\r', '').trim();
+  }
+
   String _elapsed() {
     final start = widget.startAt;
     if (start == null) return '';
@@ -532,140 +537,317 @@ class _ReasoningSectionState extends State<_ReasoningSection> with SingleTickerP
     super.dispose();
   }
 
+  String _sanitizedeepthink(String s) {
+    // 统一换行
+    s = s.replaceAll('\r\n', '\n');
+
+    // 去掉首尾零宽字符（模型有时会插入）
+    s = s
+        .replaceAll(RegExp(r'^[\u200B\u200C\u200D\uFEFF]+'), '')
+        .replaceAll(RegExp(r'[\u200B\u200C\u200D\uFEFF]+$'), '');
+
+    // 去掉**开头**的纯空白行
+    s = s.replaceFirst(RegExp(r'^\s*\n+'), '');
+
+    // 去掉**结尾**的纯空白行
+    s = s.replaceFirst(RegExp(r'\n+\s*$'), '');
+
+    return s;
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final loading = widget.loading;
 
-    final header = Row(
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: isDark ? Colors.white10 : Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SvgPicture.asset(
-                'assets/icons/deepthink.svg',
-                width: 14,
-                height: 14,
-                colorFilter: ColorFilter.mode(cs.secondary, BlendMode.srcIn),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '深度思考',
-                style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.8), fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(width: 6),
-              if (widget.startAt != null)
-                Text(
-                  _elapsed(),
-                  style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.6)),
-                ),
-            ],
-          ),
-        ),
-        const Spacer(),
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          icon: AnimatedRotation(
-            turns: widget.expanded ? 0.5 : 0,
-            duration: const Duration(milliseconds: 180),
-            child: Icon(Lucide.ChevronDown, size: 18, color: cs.onSurface.withOpacity(0.7)),
-          ),
-          onPressed: widget.onToggle,
-        )
-      ],
-    );
+    // Android-like surface style
+    final bg = cs.primaryContainer.withOpacity(isDark ? 0.25 : 0.30);
+    final fg = cs.onPrimaryContainer;
 
-    final content = AnimatedCrossFade(
-      duration: const Duration(milliseconds: 200),
-      firstChild: const SizedBox.shrink(),
-      secondChild: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(top: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.white10 : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Stack(
+    final curve = const Cubic(0.2, 0.8, 0.2, 1);
+
+    // Build a compact header with optional scrolling preview when loading
+    Widget header = InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: widget.onToggle,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: Row(
           children: [
-            ConstrainedBox(
-              constraints: widget.loading
-                  ? const BoxConstraints(maxHeight: 126) // about 7 lines
-                  : const BoxConstraints(),
-              child: SingleChildScrollView(
-                controller: _scroll,
-                physics: const BouncingScrollPhysics(),
-                child: Text(
-                  widget.text.isNotEmpty ? widget.text : '…',
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.38,
-                    color: cs.onSurface.withOpacity(0.75),
-                  ),
-                ),
-              ),
+            SvgPicture.asset(
+              'assets/icons/deepthink.svg',
+              width: 18,
+              height: 18,
+              colorFilter: ColorFilter.mode(cs.secondary, BlendMode.srcIn),
             ),
-            // Gradient fades top/bottom
-            if (widget.loading)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: 16,
-                child: IgnorePointer(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          (isDark ? Colors.black : Colors.white).withOpacity(0.08),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+            const SizedBox(width: 8),
+            _Shimmer(
+              enabled: loading,
+              child: Text('深度思考', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: cs.secondary)),
+            ),
+            const SizedBox(width: 8),
+            if (widget.startAt != null)
+              _Shimmer(
+                enabled: loading,
+                child: Text(_elapsed(), style: TextStyle(fontSize: 13, color: cs.secondary.withOpacity(0.9))),
               ),
-            if (widget.loading)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: 16,
-                child: IgnorePointer(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [
-                          (isDark ? Colors.black : Colors.white).withOpacity(0.08),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+            // No header marquee; content area handles scrolling when loading
+            const Spacer(),
+            Icon(
+              widget.expanded
+                  ? Lucide.ChevronDown
+                  : (loading && !widget.expanded ? Lucide.ChevronRight : Lucide.ChevronRight),
+              size: 18,
+              color: cs.secondary,
+            ),
           ],
         ),
       ),
-      crossFadeState: widget.expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        header,
-        content,
-      ],
+    final bool isLoading = loading;
+    final display = _sanitizedeepthink(widget.text);
+    Widget body = Padding(
+      // 这里也收紧一点 padding，避免看起来“垫高”
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+
+      child: Text(
+        display.isNotEmpty ? display : '…',
+        // 不要在 style 里再设 height
+        style: TextStyle(fontSize: 13, color: fg),
+        // 用 strut 控制行高与 leading（内建行距）
+        strutStyle: const StrutStyle(
+          forceStrutHeight: true,
+          fontSize: 13,
+          height: 1.34,   // 你原本想要的行距
+          leading: 0,     // 关键：不额外加前后导距
+        ),
+        // 关键：不把行高施加到首行上升/末行下降
+        textHeightBehavior: const TextHeightBehavior(
+          applyHeightToFirstAscent: false,
+          applyHeightToLastDescent: false,
+          leadingDistribution: TextLeadingDistribution.proportional,
+        ),
+      ),
+    );
+    if (isLoading) {
+      // While loading, cap height to 80 and fade top/bottom via a shader mask
+      body = Padding(
+        padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+        child: SizedBox(
+          height: 80,
+          child: ShaderMask(
+            shaderCallback: (rect) {
+              final h = rect.height;
+              const double topFade = 12.0;
+              const double bottomFade = 28.0;
+              final double sTop = (topFade / h).clamp(0.0, 1.0);
+              final double sBot = (1.0 - bottomFade / h).clamp(0.0, 1.0);
+              return LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: const [
+                  Color(0x00FFFFFF), // transparent
+                  Color(0xFFFFFFFF), // opaque
+                  Color(0xFFFFFFFF), // opaque
+                  Color(0x00FFFFFF), // transparent
+                ],
+                stops: [0.0, sTop, sBot, 1.0],
+              ).createShader(rect);
+            },
+            blendMode: BlendMode.dstIn,
+            child: SingleChildScrollView(
+              controller: _scroll,
+              physics: const BouncingScrollPhysics(),
+              child: Text(
+                widget.text.isNotEmpty ? widget.text : '…',
+                style: TextStyle(fontSize: 13, height: 1.34, color: fg),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      curve: curve,
+      alignment: Alignment.topCenter,
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              header,
+              if (widget.expanded || isLoading) body,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Lightweight shimmer effect without external dependency
+class _Shimmer extends StatefulWidget {
+  final Widget child;
+  final bool enabled;
+  const _Shimmer({required this.child, this.enabled = false});
+
+  @override
+  State<_Shimmer> createState() => _ShimmerState();
+}
+
+class _ShimmerState extends State<_Shimmer> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.enabled) _c.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _Shimmer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.enabled && !_c.isAnimating) _c.repeat();
+    if (!widget.enabled && _c.isAnimating) _c.stop();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) {
+        final t = _c.value; // 0..1
+        return ShaderMask(
+          shaderCallback: (rect) {
+            final width = rect.width;
+            final gradientWidth = width * 0.4;
+            final dx = (width + gradientWidth) * t - gradientWidth;
+            final shaderRect = Rect.fromLTWH(-dx, 0, width + gradientWidth * 2, rect.height);
+            return LinearGradient(
+              colors: [
+                Colors.white.withOpacity(0.0),
+                Colors.white.withOpacity(0.35),
+                Colors.white.withOpacity(0.0),
+              ],
+              stops: const [0.0, 0.5, 1.0],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ).createShader(shaderRect);
+          },
+          blendMode: BlendMode.srcATop,
+          child: child,
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
+// Simple marquee that bounces horizontally if text exceeds maxWidth
+class _Marquee extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  final double maxWidth;
+  final Duration duration;
+  const _Marquee({
+    required this.text,
+    required this.style,
+    this.maxWidth = 160,
+    this.duration = const Duration(milliseconds: 3000),
+  });
+
+  @override
+  State<_Marquee> createState() => _MarqueeState();
+}
+
+class _MarqueeState extends State<_Marquee> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: widget.duration)..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  double _measure(String text, TextStyle style) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: style),
+      maxLines: 1,
+      textDirection: ui.TextDirection.ltr,
+      textScaleFactor: MediaQuery.of(context).textScaleFactor,
+    )..layout();
+    return tp.width;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final w = widget.maxWidth;
+    final textWidth = _measure(widget.text, widget.style);
+    final needScroll = textWidth > w;
+    final gap = 32.0;
+    final loopWidth = textWidth + gap;
+    return SizedBox(
+      width: w,
+      height: (widget.style.fontSize ?? 13) * 1.35,
+      child: ClipRect(
+        child: needScroll
+            ? AnimatedBuilder(
+                animation: _c,
+                builder: (context, _) {
+                  final t = Curves.linear.transform(_c.value);
+                  final dx = -loopWidth * t;
+                  return ShaderMask(
+                    shaderCallback: (rect) {
+                      return const LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          Color(0x00FFFFFF),
+                          Color(0xFFFFFFFF),
+                          Color(0xFFFFFFFF),
+                          Color(0x00FFFFFF),
+                        ],
+                        stops: [0.0, 0.07, 0.93, 1.0],
+                      ).createShader(rect);
+                    },
+                    blendMode: BlendMode.dstIn,
+                    child: Transform.translate(
+                      offset: Offset(dx, 0),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
+                          SizedBox(width: gap),
+                          Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              )
+            : Align(alignment: Alignment.centerLeft, child: Text(widget.text, style: widget.style, maxLines: 1, softWrap: false)),
+      ),
     );
   }
 }

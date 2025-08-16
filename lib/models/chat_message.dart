@@ -32,6 +32,16 @@ class ChatMessage extends HiveObject {
   @HiveField(8)
   final bool isStreaming;
 
+  // Optional reasoning fields for assistant messages
+  @HiveField(9)
+  final String? reasoningText;
+
+  @HiveField(10)
+  final DateTime? reasoningStartAt;
+
+  @HiveField(11)
+  final DateTime? reasoningFinishedAt;
+
   ChatMessage({
     String? id,
     required this.role,
@@ -42,6 +52,9 @@ class ChatMessage extends HiveObject {
     this.totalTokens,
     required this.conversationId,
     this.isStreaming = false,
+    this.reasoningText,
+    this.reasoningStartAt,
+    this.reasoningFinishedAt,
   })  : id = id ?? const Uuid().v4(),
         timestamp = timestamp ?? DateTime.now();
 
@@ -55,6 +68,9 @@ class ChatMessage extends HiveObject {
     int? totalTokens,
     String? conversationId,
     bool? isStreaming,
+    String? reasoningText,
+    DateTime? reasoningStartAt,
+    DateTime? reasoningFinishedAt,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -66,6 +82,9 @@ class ChatMessage extends HiveObject {
       totalTokens: totalTokens ?? this.totalTokens,
       conversationId: conversationId ?? this.conversationId,
       isStreaming: isStreaming ?? this.isStreaming,
+      reasoningText: reasoningText ?? this.reasoningText,
+      reasoningStartAt: reasoningStartAt ?? this.reasoningStartAt,
+      reasoningFinishedAt: reasoningFinishedAt ?? this.reasoningFinishedAt,
     );
   }
 
@@ -80,6 +99,9 @@ class ChatMessage extends HiveObject {
       'totalTokens': totalTokens,
       'conversationId': conversationId,
       'isStreaming': isStreaming,
+      'reasoningText': reasoningText,
+      'reasoningStartAt': reasoningStartAt?.toIso8601String(),
+      'reasoningFinishedAt': reasoningFinishedAt?.toIso8601String(),
     };
   }
 
@@ -94,6 +116,13 @@ class ChatMessage extends HiveObject {
       totalTokens: json['totalTokens'] as int?,
       conversationId: json['conversationId'] as String,
       isStreaming: json['isStreaming'] as bool? ?? false,
+      reasoningText: json['reasoningText'] as String?,
+      reasoningStartAt: json['reasoningStartAt'] != null
+          ? DateTime.parse(json['reasoningStartAt'] as String)
+          : null,
+      reasoningFinishedAt: json['reasoningFinishedAt'] != null
+          ? DateTime.parse(json['reasoningFinishedAt'] as String)
+          : null,
     );
   }
 }

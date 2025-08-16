@@ -181,6 +181,9 @@ class ChatService extends ChangeNotifier {
     String? providerId,
     int? totalTokens,
     bool isStreaming = false,
+    String? reasoningText,
+    DateTime? reasoningStartAt,
+    DateTime? reasoningFinishedAt,
   }) async {
     if (!_initialized) await init();
 
@@ -206,6 +209,9 @@ class ChatService extends ChangeNotifier {
       providerId: providerId,
       totalTokens: totalTokens,
       isStreaming: isStreaming,
+      reasoningText: reasoningText,
+      reasoningStartAt: reasoningStartAt,
+      reasoningFinishedAt: reasoningFinishedAt,
     );
 
     await _messagesBox.put(message.id, message);
@@ -227,6 +233,9 @@ class ChatService extends ChangeNotifier {
     String? content,
     int? totalTokens,
     bool? isStreaming,
+    String? reasoningText,
+    DateTime? reasoningStartAt,
+    DateTime? reasoningFinishedAt,
   }) async {
     if (!_initialized) return;
 
@@ -237,6 +246,9 @@ class ChatService extends ChangeNotifier {
       content: content ?? message.content,
       totalTokens: totalTokens ?? message.totalTokens,
       isStreaming: isStreaming ?? message.isStreaming,
+      reasoningText: reasoningText ?? message.reasoningText,
+      reasoningStartAt: reasoningStartAt ?? message.reasoningStartAt,
+      reasoningFinishedAt: reasoningFinishedAt ?? message.reasoningFinishedAt,
     );
 
     await _messagesBox.put(messageId, updatedMessage);
