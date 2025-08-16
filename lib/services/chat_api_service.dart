@@ -230,13 +230,13 @@ class ChatApiService {
           };
 
     // Vendor-specific reasoning knobs for chat-completions compatible hosts
-    if (config.useResponseApi != true && isReasoning) {
+    if (config.useResponseApi != true) {
       final off = _isOff(thinkingBudget);
       if (host.contains('openrouter.ai')) {
         // OpenRouter uses `reasoning.enabled/max_tokens`
         if (off) {
           (body as Map<String, dynamic>)['reasoning'] = {'enabled': false};
-        } else {
+        } else if (isReasoning) {
           final obj = <String, dynamic>{'enabled': true};
           if (thinkingBudget != null && thinkingBudget > 0) obj['max_tokens'] = thinkingBudget;
           (body as Map<String, dynamic>)['reasoning'] = obj;
@@ -245,16 +245,20 @@ class ChatApiService {
         }
       } else if (host.contains('dashscope') || host.contains('aliyun')) {
         // Aliyun DashScope: enable_thinking + thinking_budget
-        (body as Map<String, dynamic>)['enable_thinking'] = off ? false : true;
-        if (!off && thinkingBudget != null && thinkingBudget > 0) {
+        (body as Map<String, dynamic>)['enable_thinking'] = off ? false : (isReasoning ? true : null);
+        if (!off && isReasoning && thinkingBudget != null && thinkingBudget > 0) {
           (body as Map<String, dynamic>)['thinking_budget'] = thinkingBudget;
         }
         (body as Map<String, dynamic>).remove('reasoning_effort');
       } else if (host.contains('ark.cn-beijing.volces.com') || host.contains('volc') || host.contains('ark')) {
         // Volc Ark: thinking: { type: enabled|disabled }
         (body as Map<String, dynamic>)['thinking'] = {
-          'type': off ? 'disabled' : 'enabled',
+          'type': off ? 'disabled' : (isReasoning ? 'enabled' : 'disabled'),
         };
+        (body as Map<String, dynamic>).remove('reasoning_effort');
+      } else if (host.contains('intern-ai') || host.contains('intern') || host.contains('chat.intern-ai.org.cn')) {
+        // InternLM (InternAI): thinking_mode boolean switch
+        (body as Map<String, dynamic>)['thinking_mode'] = off ? false : (isReasoning ? true : null);
         (body as Map<String, dynamic>).remove('reasoning_effort');
       } else if (host.contains('siliconflow')) {
         // SiliconFlow: OFF -> enable_thinking: false; otherwise omit (provider decides)
