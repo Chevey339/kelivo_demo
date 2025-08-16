@@ -87,7 +87,15 @@ class _SideDrawerState extends State<SideDrawer> {
                 title: Text(zh ? '删除' : 'Delete', style: const TextStyle(color: Colors.redAccent)),
                 onTap: () async {
                   Navigator.of(ctx).pop();
+                  final deletingCurrent = chatService.currentConversationId == chat.id;
                   await chatService.deleteConversation(chat.id);
+                  // If the deleted one was the current selection, create a new one and switch to it
+                  if (deletingCurrent || chatService.currentConversationId == null) {
+                    final created = await chatService.createConversation(title: zh ? '新对话' : 'New Chat');
+                    if (mounted && widget.onSelectConversation != null) {
+                      widget.onSelectConversation!(created.id);
+                    }
+                  }
                 },
               ),
             ],
