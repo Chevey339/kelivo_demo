@@ -636,6 +636,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           // Close the drawer when a conversation is picked
           Navigator.of(context).maybePop();
         },
+        onNewConversation: () async {
+          await _createNewConversation();
+          if (mounted) {
+            _scrollToBottom();
+            Navigator.of(context).maybePop();
+          }
+        },
       ),
       body: Stack(
         children: [
