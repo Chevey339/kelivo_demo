@@ -91,12 +91,12 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 borderRadius: BorderRadius.circular(AppRadii.capsule),
                 boxShadow: isDark
                     ? [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.35),
-                          blurRadius: 18,
-                          offset: const Offset(0, 6),
-                        ),
-                      ]
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.35),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ]
                     : AppShadows.soft,
               ),
               child: Padding(
