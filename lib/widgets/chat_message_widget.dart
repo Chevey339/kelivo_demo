@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
@@ -19,6 +20,13 @@ class ChatMessageWidget extends StatefulWidget {
   final VoidCallback? onTranslate;
   final VoidCallback? onSpeak;
   final VoidCallback? onMore;
+  // Optional reasoning UI props (for reasoning-capable models)
+  final String? reasoningText;
+  final bool reasoningExpanded;
+  final bool reasoningLoading;
+  final DateTime? reasoningStartAt;
+  final DateTime? reasoningFinishedAt;
+  final VoidCallback? onToggleReasoning;
 
   const ChatMessageWidget({
     super.key,
@@ -30,6 +38,12 @@ class ChatMessageWidget extends StatefulWidget {
     this.onTranslate,
     this.onSpeak,
     this.onMore,
+    this.reasoningText,
+    this.reasoningExpanded = false,
+    this.reasoningLoading = false,
+    this.reasoningStartAt,
+    this.reasoningFinishedAt,
+    this.onToggleReasoning,
   });
 
   @override
@@ -38,6 +52,40 @@ class ChatMessageWidget extends StatefulWidget {
 
 class _ChatMessageWidgetState extends State<ChatMessageWidget> {
   final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss');
+  final ScrollController _reasoningScroll = ScrollController();
+  bool _tickActive = false;
+  late final Ticker _ticker = Ticker((_) {
+    if (mounted && _tickActive) setState(() {});
+  });
+
+  @override
+  void initState() {
+    super.initState();
+    _syncTicker();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatMessageWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncTicker();
+  }
+
+  void _syncTicker() {
+    final loading = widget.reasoningStartAt != null && widget.reasoningFinishedAt == null;
+    _tickActive = loading;
+    if (loading) {
+      if (!_ticker.isActive) _ticker.start();
+    } else {
+      if (_ticker.isActive) _ticker.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    _reasoningScroll.dispose();
+    super.dispose();
+  }
 
   Widget _buildUserAvatar(UserProvider userProvider, ColorScheme cs) {
     Widget avatarContent;
@@ -257,6 +305,17 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
             ],
           ),
           const SizedBox(height: 8),
+          // Reasoning preview (if provided)
+          if ((widget.reasoningText != null && widget.reasoningText!.isNotEmpty) || widget.reasoningLoading)
+            _ReasoningSection(
+              text: widget.reasoningText ?? '',
+              expanded: widget.reasoningExpanded,
+              loading: widget.reasoningFinishedAt == null,
+              startAt: widget.reasoningStartAt,
+              finishedAt: widget.reasoningFinishedAt,
+              onToggle: widget.onToggleReasoning,
+            ),
+          const SizedBox(height: 8),
           // Message content with markdown support (fill available width)
           Container(
             width: double.infinity,
@@ -409,6 +468,204 @@ class _LoadingIndicatorState extends State<_LoadingIndicator>
           ),
         );
       },
+    );
+  }
+}
+
+class _ReasoningSection extends StatefulWidget {
+  const _ReasoningSection({
+    required this.text,
+    required this.expanded,
+    required this.loading,
+    required this.startAt,
+    required this.finishedAt,
+    this.onToggle,
+  });
+
+  final String text;
+  final bool expanded;
+  final bool loading;
+  final DateTime? startAt;
+  final DateTime? finishedAt;
+  final VoidCallback? onToggle;
+
+  @override
+  State<_ReasoningSection> createState() => _ReasoningSectionState();
+}
+
+class _ReasoningSectionState extends State<_ReasoningSection> with SingleTickerProviderStateMixin {
+  late final Ticker _ticker = Ticker((_) => setState(() {}));
+  final ScrollController _scroll = ScrollController();
+
+  String _elapsed() {
+    final start = widget.startAt;
+    if (start == null) return '';
+    final end = widget.finishedAt ?? DateTime.now();
+    final ms = end.difference(start).inMilliseconds;
+    return '(${(ms / 1000).toStringAsFixed(1)}s)';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.loading) _ticker.start();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ReasoningSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.loading && !_ticker.isActive) _ticker.start();
+    if (!widget.loading && _ticker.isActive) _ticker.stop();
+    if (widget.loading && widget.expanded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scroll.hasClients) {
+          _scroll.jumpTo(_scroll.position.maxScrollExtent);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final header = Row(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white10 : Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SvgPicture.asset(
+                'assets/icons/deepthink.svg',
+                width: 14,
+                height: 14,
+                colorFilter: ColorFilter.mode(cs.secondary, BlendMode.srcIn),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '深度思考',
+                style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.8), fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(width: 6),
+              if (widget.startAt != null)
+                Text(
+                  _elapsed(),
+                  style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.6)),
+                ),
+            ],
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          icon: AnimatedRotation(
+            turns: widget.expanded ? 0.5 : 0,
+            duration: const Duration(milliseconds: 180),
+            child: Icon(Lucide.ChevronDown, size: 18, color: cs.onSurface.withOpacity(0.7)),
+          ),
+          onPressed: widget.onToggle,
+        )
+      ],
+    );
+
+    final content = AnimatedCrossFade(
+      duration: const Duration(milliseconds: 200),
+      firstChild: const SizedBox.shrink(),
+      secondChild: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white10 : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Stack(
+          children: [
+            ConstrainedBox(
+              constraints: widget.loading
+                  ? const BoxConstraints(maxHeight: 126) // about 7 lines
+                  : const BoxConstraints(),
+              child: SingleChildScrollView(
+                controller: _scroll,
+                physics: const BouncingScrollPhysics(),
+                child: Text(
+                  widget.text.isNotEmpty ? widget.text : '…',
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.38,
+                    color: cs.onSurface.withOpacity(0.75),
+                  ),
+                ),
+              ),
+            ),
+            // Gradient fades top/bottom
+            if (widget.loading)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 16,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          (isDark ? Colors.black : Colors.white).withOpacity(0.08),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (widget.loading)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 16,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          (isDark ? Colors.black : Colors.white).withOpacity(0.08),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+      crossFadeState: widget.expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        header,
+        content,
+      ],
     );
   }
 }

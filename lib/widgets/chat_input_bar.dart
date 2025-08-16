@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/design_tokens.dart';
 import '../icons/lucide_adapter.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class ChatInputBar extends StatefulWidget {
   const ChatInputBar({
@@ -9,22 +10,26 @@ class ChatInputBar extends StatefulWidget {
     this.onSelectModel,
     this.onToggleSearch,
     this.onMore,
+    this.onConfigureReasoning,
     this.moreOpen = false,
     this.focusNode,
     this.modelIcon,
     this.controller,
     this.loading = false,
+    this.reasoningActive = false,
   });
 
   final ValueChanged<String>? onSend;
   final VoidCallback? onSelectModel;
   final ValueChanged<bool>? onToggleSearch;
   final VoidCallback? onMore;
+  final VoidCallback? onConfigureReasoning;
   final bool moreOpen;
   final FocusNode? focusNode;
   final Widget? modelIcon;
   final TextEditingController? controller;
   final bool loading;
+  final bool reasoningActive;
 
   @override
   State<ChatInputBar> createState() => _ChatInputBarState();
@@ -138,6 +143,26 @@ class _ChatInputBarState extends State<ChatInputBar> {
                         setState(() => _searchEnabled = !_searchEnabled);
                         widget.onToggleSearch?.call(_searchEnabled);
                       },
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    _CircleIconButton(
+                      tooltip: Localizations.localeOf(context).languageCode == 'zh'
+                          ? '思维链强度'
+                          : 'Reasoning Strength',
+                      icon: Lucide.Brain,
+                      active: widget.reasoningActive,
+                      onTap: widget.onConfigureReasoning,
+                      child: SvgPicture.asset(
+                        'assets/icons/deepthink.svg',
+                        width: 22,
+                        height: 22,
+                        colorFilter: ColorFilter.mode(
+                          widget.reasoningActive
+                              ? theme.colorScheme.primary
+                              : (isDark ? Colors.white : Colors.black87),
+                          BlendMode.srcIn,
+                        ),
+                      ),
                     ),
                   ],
                 ),

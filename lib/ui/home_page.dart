@@ -13,10 +13,13 @@ import '../providers/user_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/chat_service.dart';
 import '../services/chat_api_service.dart';
+import '../models/token_usage.dart';
+import '../providers/model_provider.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import 'model_select_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'reasoning_budget_sheet.dart';
 
 
 class HomePage extends StatefulWidget {
@@ -42,6 +45,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   List<ChatMessage> _messages = [];
   bool _isLoading = false;
   StreamSubscription? _messageStreamSubscription;
+  final Map<String, _ReasoningData> _reasoning = <String, _ReasoningData>{};
+
+  bool _isReasoningModel(String providerKey, String modelId) {
+    final settings = context.read<SettingsProvider>();
+    final cfg = settings.getProviderConfig(providerKey);
+    final ov = cfg.modelOverrides[modelId] as Map?;
+    if (ov != null) {
+      final abilities = (ov['abilities'] as List?)?.map((e) => e.toString()).toList() ?? const [];
+      if (abilities.map((e) => e.toLowerCase()).contains('reasoning')) return true;
+    }
+    final inferred = ModelRegistry.infer(ModelInfo(id: modelId, displayName: modelId));
+    return inferred.abilities.contains(ModelAbility.reasoning);
+  }
+
+  bool _isReasoningEnabled(int? budget) {
+    if (budget == null) return true; // treat null as default/auto -> enabled
+    if (budget == -1) return true; // auto
+    return budget >= 1024;
+  }
 
   String _titleForLocale(BuildContext context) {
     final lang = Localizations.localeOf(context).languageCode;
@@ -141,6 +163,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _messages.add(assistantMessage);
     });
 
+    // Initialize reasoning state only when enabled and model supports it
+    final supportsReasoning = _isReasoningModel(providerKey, modelId);
+    final enableReasoning = supportsReasoning && _isReasoningEnabled(settings.thinkingBudget);
+    if (enableReasoning) {
+      _reasoning[assistantMessage.id] = _ReasoningData();
+    }
+
     // 添加助手消息后也滚动到底部
     Future.delayed(const Duration(milliseconds: 100), () {
       _scrollToBottom();
@@ -161,16 +190,37 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     // Stream response
     String fullContent = '';
     int totalTokens = 0;
+    TokenUsage? usage;
 
     try {
       final stream = ChatApiService.sendMessageStream(
         config: config,
         modelId: modelId,
         messages: apiMessages,
+        thinkingBudget: settings.thinkingBudget,
       );
 
       await for (final chunk in stream) {
+        // Capture reasoning deltas only when reasoning is enabled
+        if ((chunk.reasoning ?? '').isNotEmpty && _isReasoningEnabled(settings.thinkingBudget)) {
+          final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
+          r.text += chunk.reasoning!;
+          r.startAt ??= DateTime.now();
+          r.finishedAt = null;
+          r.expanded = true; // auto expand while generating
+          _reasoning[assistantMessage.id] = r;
+          if (mounted) setState(() {});
+        }
+
         if (chunk.isDone) {
+          // Capture final usage/tokens if only provided at end
+          if (chunk.totalTokens > 0) {
+            totalTokens = chunk.totalTokens;
+          }
+          if (chunk.usage != null) {
+            usage = (usage ?? const TokenUsage()).merge(chunk.usage!);
+            totalTokens = usage!.totalTokens;
+          }
           // Update message as complete
           await _chatService.updateMessage(
             assistantMessage.id,
@@ -191,12 +241,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             _isLoading = false;
           });
 
+          // Mark reasoning finished and auto collapse
+          final r = _reasoning[assistantMessage.id];
+          if (r != null) {
+            r.finishedAt = DateTime.now();
+            r.expanded = false; // auto close after finish
+            _reasoning[assistantMessage.id] = r;
+            if (mounted) setState(() {});
+          }
+
           // Auto-generate title after completion
           _maybeGenerateTitle();
         } else {
           fullContent += chunk.content;
           if (chunk.totalTokens > 0) {
             totalTokens = chunk.totalTokens;
+          }
+          if (chunk.usage != null) {
+            usage = (usage ?? const TokenUsage()).merge(chunk.usage!);
+            totalTokens = usage!.totalTokens;
           }
 
           // Update UI with streaming content
@@ -234,6 +297,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         }
         _isLoading = false;
       });
+
+      // End reasoning on error
+      final r = _reasoning[assistantMessage.id];
+      if (r != null) {
+        r.finishedAt = DateTime.now();
+        r.expanded = false;
+        _reasoning[assistantMessage.id] = r;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('发送失败: $e')),
@@ -427,6 +498,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                       itemBuilder: (context, index) {
                         final message = _messages[index];
+                        final r = _reasoning[message.id];
                         return ChatMessageWidget(
                           message: message,
                           modelIcon: message.role == 'assistant' &&
@@ -436,6 +508,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                   providerKey: message.providerId,
                                   modelId: message.modelId,
                                 )
+                              : null,
+                          reasoningText: (message.role == 'assistant') ? (r?.text ?? '') : null,
+                          reasoningExpanded: (message.role == 'assistant') ? (r?.expanded ?? false) : false,
+                          reasoningLoading: (message.role == 'assistant') ? (r?.finishedAt == null && (r?.text.isNotEmpty == true)) : false,
+                          reasoningStartAt: (message.role == 'assistant') ? r?.startAt : null,
+                          reasoningFinishedAt: (message.role == 'assistant') ? r?.finishedAt : null,
+                          onToggleReasoning: (message.role == 'assistant' && r != null)
+                              ? () {
+                                  setState(() {
+                                    r.expanded = !r.expanded;
+                                  });
+                                }
                               : null,
                           onRegenerate: message.role == 'assistant' ? () {
                             // TODO: Implement regenerate
@@ -467,6 +551,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       : null,
                   focusNode: _inputFocus,
                   controller: _inputController,
+                  onConfigureReasoning: () => showReasoningBudgetSheet(context),
+                  reasoningActive: _isReasoningEnabled(settings.thinkingBudget),
                   onSend: (text) {
                     _sendMessage(text);
                     _inputController.clear();
@@ -556,6 +642,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     // Returning to this page: ensure keyboard stays closed unless user taps.
     WidgetsBinding.instance.addPostFrameCallback((_) => _dismissKeyboard());
   }
+}
+
+class _ReasoningData {
+  String text = '';
+  DateTime? startAt;
+  DateTime? finishedAt;
+  bool expanded = false;
 }
 
 class _CurrentModelIcon extends StatelessWidget {

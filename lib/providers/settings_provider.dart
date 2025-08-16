@@ -11,6 +11,7 @@ class SettingsProvider extends ChangeNotifier {
   static const String _selectedModelKey = 'selected_model_v1';
   static const String _titleModelKey = 'title_model_v1';
   static const String _titlePromptKey = 'title_prompt_v1';
+  static const String _thinkingBudgetKey = 'thinking_budget_v1';
 
   List<String> _providersOrder = const [];
   List<String> get providersOrder => _providersOrder;
@@ -80,6 +81,8 @@ class SettingsProvider extends ChangeNotifier {
     // load title prompt
     final tp = prefs.getString(_titlePromptKey);
     _titlePrompt = (tp == null || tp.trim().isEmpty) ? defaultTitlePrompt : tp;
+    // load thinking budget (reasoning strength)
+    _thinkingBudget = prefs.getInt(_thinkingBudgetKey);
     notifyListeners();
   }
 
@@ -187,6 +190,20 @@ You need to summarize the conversation between user and assistant into a short t
   }
 
   Future<void> resetTitlePrompt() async => setTitlePrompt(defaultTitlePrompt);
+
+  // Reasoning strength / thinking budget
+  int? _thinkingBudget; // null = not set, use provider defaults; -1 = auto; 0 = off; >0 = budget tokens
+  int? get thinkingBudget => _thinkingBudget;
+  Future<void> setThinkingBudget(int? budget) async {
+    _thinkingBudget = budget;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (budget == null) {
+      await prefs.remove(_thinkingBudgetKey);
+    } else {
+      await prefs.setInt(_thinkingBudgetKey, budget);
+    }
+  }
 }
 
 enum ProviderKind { openai, google, claude }
