@@ -721,6 +721,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   controller: _inputController,
                   onConfigureReasoning: () => showReasoningBudgetSheet(context),
                   reasoningActive: _isReasoningEnabled(settings.thinkingBudget),
+                  supportsReasoning: (settings.currentModelProvider != null && settings.currentModelId != null)
+                      ? _isReasoningModel(settings.currentModelProvider!, settings.currentModelId!)
+                      : false,
                   onSend: (text) {
                     _sendMessage(text);
                     _inputController.clear();

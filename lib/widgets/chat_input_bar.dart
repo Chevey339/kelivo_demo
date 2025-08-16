@@ -18,6 +18,7 @@ class ChatInputBar extends StatefulWidget {
     this.controller,
     this.loading = false,
     this.reasoningActive = false,
+    this.supportsReasoning = true,
   });
 
   final ValueChanged<String>? onSend;
@@ -32,6 +33,7 @@ class ChatInputBar extends StatefulWidget {
   final TextEditingController? controller;
   final bool loading;
   final bool reasoningActive;
+  final bool supportsReasoning;
 
   @override
   State<ChatInputBar> createState() => _ChatInputBarState();
@@ -146,26 +148,28 @@ class _ChatInputBarState extends State<ChatInputBar> {
                         widget.onToggleSearch?.call(_searchEnabled);
                       },
                     ),
-                    const SizedBox(width: AppSpacing.xs),
-                    _CircleIconButton(
-                      tooltip: Localizations.localeOf(context).languageCode == 'zh'
-                          ? '思维链强度'
-                          : 'Reasoning Strength',
-                      icon: Lucide.Brain,
-                      active: widget.reasoningActive,
-                      onTap: widget.onConfigureReasoning,
-                      child: SvgPicture.asset(
-                        'assets/icons/deepthink.svg',
-                        width: 22,
-                        height: 22,
-                        colorFilter: ColorFilter.mode(
-                          widget.reasoningActive
-                              ? theme.colorScheme.primary
-                              : (isDark ? Colors.white : Colors.black87),
-                          BlendMode.srcIn,
+                    if (widget.supportsReasoning) ...[
+                      const SizedBox(width: AppSpacing.xs),
+                      _CircleIconButton(
+                        tooltip: Localizations.localeOf(context).languageCode == 'zh'
+                            ? '思维链强度'
+                            : 'Reasoning Strength',
+                        icon: Lucide.Brain,
+                        active: widget.reasoningActive,
+                        onTap: widget.onConfigureReasoning,
+                        child: SvgPicture.asset(
+                          'assets/icons/deepthink.svg',
+                          width: 22,
+                          height: 22,
+                          colorFilter: ColorFilter.mode(
+                            widget.reasoningActive
+                                ? theme.colorScheme.primary
+                                : (isDark ? Colors.white : Colors.black87),
+                            BlendMode.srcIn,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
                 Row(
