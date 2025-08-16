@@ -137,6 +137,30 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> restoreConversation(Conversation conversation, List<ChatMessage> messages) async {
+    if (!_initialized) await init();
+    // Restore messages first
+    for (final m in messages) {
+      await _messagesBox.put(m.id, m);
+    }
+    // Ensure messageIds are in the same order
+    final ids = messages.map((m) => m.id).toList();
+    final restored = Conversation(
+      id: conversation.id,
+      title: conversation.title,
+      createdAt: conversation.createdAt,
+      updatedAt: DateTime.now(),
+      messageIds: ids,
+      isPinned: conversation.isPinned,
+    );
+    await _conversationsBox.put(restored.id, restored);
+
+    // Update caches
+    _messagesCache[restored.id] = List.of(messages);
+
+    notifyListeners();
+  }
+
   Future<void> renameConversation(String id, String newTitle) async {
     if (!_initialized) return;
 

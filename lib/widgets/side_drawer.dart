@@ -91,10 +91,20 @@ class _SideDrawerState extends State<SideDrawer> {
                   Navigator.of(ctx).pop();
                   final deletingCurrent = chatService.currentConversationId == chat.id;
                   await chatService.deleteConversation(chat.id);
+                  // Show simple snackbar (no undo)
+                  final zh2 = Localizations.localeOf(context).languageCode == 'zh';
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(zh2 ? '已删除“${chat.title}”' : 'Deleted "${chat.title}"'),
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
                   // If the deleted one was the current selection, trigger host's new-topic (draft) flow
                   if (deletingCurrent || chatService.currentConversationId == null) {
                     widget.onNewConversation?.call();
                   }
+                  // Close the drawer, return to main page
+                  Navigator.of(context).maybePop();
                 },
               ),
             ],
