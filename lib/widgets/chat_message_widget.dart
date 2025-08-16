@@ -625,11 +625,11 @@ class _ReasoningSectionState extends State<_ReasoningSection> with SingleTickerP
       child: Text(
         display.isNotEmpty ? display : '…',
         // 不要在 style 里再设 height
-        style: TextStyle(fontSize: 12, color: fg),
+        style: TextStyle(fontSize: 12.5, color: fg),
         // 用 strut 控制行高与 leading（内建行距）
         strutStyle: const StrutStyle(
           forceStrutHeight: true,
-          fontSize: 12,
+          fontSize: 12.5,
           height: 1.32,   // 更紧凑的行距
           leading: 0,     // 关键：不额外加前后导距
         ),
@@ -678,8 +678,8 @@ class _ReasoningSectionState extends State<_ReasoningSection> with SingleTickerP
                       physics: const BouncingScrollPhysics(),
                       child: Text(
                         display.isNotEmpty ? display : '…',
-                        style: const TextStyle(fontSize: 12),
-                        strutStyle: const StrutStyle(forceStrutHeight: true, fontSize: 12, height: 1.32, leading: 0),
+                        style: const TextStyle(fontSize: 12.5),
+                        strutStyle: const StrutStyle(forceStrutHeight: true, fontSize: 12.5, height: 1.32, leading: 0),
                         textHeightBehavior: const TextHeightBehavior(applyHeightToFirstAscent: false, applyHeightToLastDescent: false, leadingDistribution: TextLeadingDistribution.proportional),
                       ),
                     ),

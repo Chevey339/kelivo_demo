@@ -87,14 +87,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       }
       final r = _reasoning[streaming.id];
       if (r != null) {
-        r.finishedAt = DateTime.now();
+        if (r.finishedAt == null) {
+          r.finishedAt = DateTime.now();
+          await _chatService.updateMessage(
+            streaming.id,
+            reasoningText: r.text,
+            reasoningFinishedAt: r.finishedAt,
+          );
+        }
         r.expanded = false;
         _reasoning[streaming.id] = r;
-        await _chatService.updateMessage(
-          streaming.id,
-          reasoningText: r.text,
-          reasoningFinishedAt: r.finishedAt,
-        );
         if (mounted) setState(() {});
       }
     } else {
@@ -270,7 +272,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         });
         final r = _reasoning[assistantMessage.id];
         if (r != null) {
-          r.finishedAt = DateTime.now();
+          if (r.finishedAt == null) {
+            r.finishedAt = DateTime.now();
+          }
           r.expanded = false; // auto close after finish
           _reasoning[assistantMessage.id] = r;
           if (mounted) setState(() {});
@@ -387,14 +391,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           // End reasoning on error
           final r = _reasoning[assistantMessage.id];
           if (r != null) {
-            r.finishedAt = DateTime.now();
+            if (r.finishedAt == null) {
+              r.finishedAt = DateTime.now();
+              await _chatService.updateMessage(
+                assistantMessage.id,
+                reasoningText: r.text,
+                reasoningFinishedAt: r.finishedAt,
+              );
+            }
             r.expanded = false;
             _reasoning[assistantMessage.id] = r;
-            await _chatService.updateMessage(
-              assistantMessage.id,
-              reasoningText: r.text,
-              reasoningFinishedAt: r.finishedAt,
-            );
           }
 
           _messageStreamSubscription = null;
