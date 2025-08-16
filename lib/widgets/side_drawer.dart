@@ -210,7 +210,7 @@ class _SideDrawerState extends State<SideDrawer> {
       for (final k in keys)
         _ChatGroup(
           label: _dateLabel(context, k),
-          items: (map[k]!..sort((a, b) => a.created.compareTo(b.created)))!,
+          items: (map[k]!..sort((a, b) => b.created.compareTo(a.created)))!,
         )
     ];
   }
@@ -233,7 +233,7 @@ class _SideDrawerState extends State<SideDrawer> {
     final pinnedList = base
         .where((c) => (chatService.getConversation(c.id)?.isPinned ?? false))
         .toList()
-      ..sort((a, b) => a.created.compareTo(b.created));
+      ..sort((a, b) => b.created.compareTo(a.created));
     final rest = base
         .where((c) => !(chatService.getConversation(c.id)?.isPinned ?? false))
         .toList();
@@ -437,6 +437,7 @@ class _SideDrawerState extends State<SideDrawer> {
                                 _ChatTile(
                                   chat: chat,
                                   textColor: textBase,
+                                  selected: chat.id == chatService.currentConversationId,
                                   onTap: () => widget.onSelectConversation?.call(chat.id),
                                   onLongPress: () => _showChatMenu(context, chat),
                                 ),
@@ -459,6 +460,7 @@ class _SideDrawerState extends State<SideDrawer> {
                                 _ChatTile(
                                   chat: chat,
                                   textColor: textBase,
+                                  selected: chat.id == chatService.currentConversationId,
                                   onTap: () => widget.onSelectConversation?.call(chat.id),
                                   onLongPress: () => _showChatMenu(context, chat),
                                 ),
@@ -1054,12 +1056,13 @@ class _ChatGroup {
 }
 
 class _ChatTile extends StatelessWidget {
-  const _ChatTile({required this.chat, required this.textColor, this.onTap, this.onLongPress});
+  const _ChatTile({required this.chat, required this.textColor, this.onTap, this.onLongPress, this.selected = false});
 
   final ChatItem chat;
   final Color textColor;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -1067,7 +1070,7 @@ class _ChatTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: cs.surface,
+        color: selected ? cs.primary.withOpacity(0.12) : cs.surface,
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
@@ -1078,7 +1081,13 @@ class _ChatTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             child: Text(
               chat.title,
-              style: TextStyle(fontSize: 15, color: textColor),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                color: textColor,
+                fontWeight: FontWeight.w400,
+              ),
             ),
           ),
         ),

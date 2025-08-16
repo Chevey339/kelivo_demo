@@ -608,6 +608,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         userName: context.watch<UserProvider>().name,
         assistantName: Localizations.localeOf(context).languageCode == 'zh' ? '默认助手' : 'Default Assistant',
         onSelectConversation: (id) {
+          // Update current selection for highlight in drawer
+          _chatService.setCurrentConversation(id);
           final convo = _chatService.getConversation(id);
           if (convo != null) {
             final msgs = _chatService.getMessages(id);
