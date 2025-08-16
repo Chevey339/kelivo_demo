@@ -932,7 +932,7 @@ extension on _SideDrawerState {
     if (ok == true) {
       final qq = controller.text.trim();
       if (qq.isNotEmpty) {
-        final url = 'http://q2.qlogo.cn/headimg_dl?dst_uin=' + qq + '&spec=100';
+        final url = 'https://q2.qlogo.cn/headimg_dl?dst_uin=' + qq + '&spec=100';
         await context.read<UserProvider>().setAvatarUrl(url);
       }
     }

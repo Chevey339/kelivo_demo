@@ -616,88 +616,94 @@ class _ReasoningSectionState extends State<_ReasoningSection> with SingleTickerP
       ),
     );
 
+// 抽公共样式，继承当前 DefaultTextStyle（从而继承正确的颜色）
+    final TextStyle baseStyle =
+    DefaultTextStyle.of(context).style.copyWith(fontSize: 12.5, height: 1.32);
+
+    const StrutStyle baseStrut = StrutStyle(
+      forceStrutHeight: true,
+      fontSize: 12.5,
+      height: 1.32,
+      leading: 0,
+    );
+
+    const TextHeightBehavior baseTHB = TextHeightBehavior(
+      applyHeightToFirstAscent: false,
+      applyHeightToLastDescent: false,
+      leadingDistribution: TextLeadingDistribution.proportional,
+    );
+
     final bool isLoading = loading;
     final display = _sanitize(widget.text);
-    Widget body = Padding(
-      // 这里也收紧一点 padding，避免看起来“垫高”
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
 
+// 未加载：不要再指定 color: fg，让它继承和“加载中”相同的颜色
+    Widget body = Padding(
+      padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
       child: Text(
         display.isNotEmpty ? display : '…',
-        // 不要在 style 里再设 height
-        style: TextStyle(fontSize: 12.5, color: fg),
-        // 用 strut 控制行高与 leading（内建行距）
-        strutStyle: const StrutStyle(
-          forceStrutHeight: true,
-          fontSize: 12.5,
-          height: 1.32,   // 更紧凑的行距
-          leading: 0,     // 关键：不额外加前后导距
-        ),
-        // 关键：不把行高施加到首行上升/末行下降
-        textHeightBehavior: const TextHeightBehavior(
-          applyHeightToFirstAscent: false,
-          applyHeightToLastDescent: false,
-          leadingDistribution: TextLeadingDistribution.proportional,
-        ),
+        style: baseStyle,                  // ✅ 统一
+        strutStyle: baseStrut,             // ✅ 统一
+        textHeightBehavior: baseTHB,       // ✅ 统一
       ),
     );
+
     if (isLoading) {
-      // Cap max height to 80, grow naturally until overflow, then scroll with smooth fades
       body = Padding(
         padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 80),
           child: _hasOverflow
               ? ShaderMask(
-                  shaderCallback: (rect) {
-                    final h = rect.height;
-                    const double topFade = 12.0;
-                    const double bottomFade = 28.0;
-                    final double sTop = (topFade / h).clamp(0.0, 1.0);
-                    final double sBot = (1.0 - bottomFade / h).clamp(0.0, 1.0);
-                    return LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: const [
-                        Color(0x00FFFFFF),
-                        Color(0xFFFFFFFF),
-                        Color(0xFFFFFFFF),
-                        Color(0x00FFFFFF),
-                      ],
-                      stops: [0.0, sTop, sBot, 1.0],
-                    ).createShader(rect);
-                  },
-                  blendMode: BlendMode.dstIn,
-                  child: NotificationListener<ScrollUpdateNotification>(
-                    onNotification: (_) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) => _checkOverflow());
-                      return false;
-                    },
-                    child: SingleChildScrollView(
-                      controller: _scroll,
-                      physics: const BouncingScrollPhysics(),
-                      child: Text(
-                        display.isNotEmpty ? display : '…',
-                        style: const TextStyle(fontSize: 12.5),
-                        strutStyle: const StrutStyle(forceStrutHeight: true, fontSize: 12.5, height: 1.32, leading: 0),
-                        textHeightBehavior: const TextHeightBehavior(applyHeightToFirstAscent: false, applyHeightToLastDescent: false, leadingDistribution: TextLeadingDistribution.proportional),
-                      ),
-                    ),
-                  ),
-                )
-              : SingleChildScrollView(
-                  controller: _scroll,
-                  physics: const NeverScrollableScrollPhysics(),
-                  child: Text(
-                    display.isNotEmpty ? display : '…',
-                    style: const TextStyle(fontSize: 12),
-                    strutStyle: const StrutStyle(forceStrutHeight: true, fontSize: 12, height: 1.32, leading: 0),
-                    textHeightBehavior: const TextHeightBehavior(applyHeightToFirstAscent: false, applyHeightToLastDescent: false, leadingDistribution: TextLeadingDistribution.proportional),
-                  ),
+            shaderCallback: (rect) {
+              final h = rect.height;
+              const double topFade = 12.0;
+              const double bottomFade = 28.0;
+              final double sTop = (topFade / h).clamp(0.0, 1.0);
+              final double sBot = (1.0 - bottomFade / h).clamp(0.0, 1.0);
+              return LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: const [
+                  Color(0x00FFFFFF),
+                  Color(0xFFFFFFFF),
+                  Color(0xFFFFFFFF),
+                  Color(0x00FFFFFF),
+                ],
+                stops: [0.0, sTop, sBot, 1.0],
+              ).createShader(rect);
+            },
+            blendMode: BlendMode.dstIn,
+            child: NotificationListener<ScrollUpdateNotification>(
+              onNotification: (_) {
+                WidgetsBinding.instance.addPostFrameCallback((_) => _checkOverflow());
+                return false;
+              },
+              child: SingleChildScrollView(
+                controller: _scroll,
+                physics: const BouncingScrollPhysics(),
+                child: Text(
+                  display.isNotEmpty ? display : '…',
+                  style: baseStyle,            // ✅ 统一
+                  strutStyle: baseStrut,       // ✅ 统一
+                  textHeightBehavior: baseTHB, // ✅ 统一
                 ),
+              ),
+            ),
+          )
+              : SingleChildScrollView(
+            controller: _scroll,
+            physics: const NeverScrollableScrollPhysics(),
+            child: Text(
+              display.isNotEmpty ? display : '…',
+              style: baseStyle,            // ✅ 统一（原来是 12）
+              strutStyle: baseStrut,
+              textHeightBehavior: baseTHB,
+            ),
+          ),
         ),
       );
     }
+
 
     return AnimatedSize(
       duration: const Duration(milliseconds: 300),
