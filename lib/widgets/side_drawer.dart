@@ -19,11 +19,13 @@ class SideDrawer extends StatefulWidget {
     required this.userName,
     required this.assistantName,
     this.onSelectConversation,
+    this.onNewConversation,
   });
 
   final String userName;
   final String assistantName;
   final void Function(String id)? onSelectConversation;
+  final VoidCallback? onNewConversation;
 
   @override
   State<SideDrawer> createState() => _SideDrawerState();
@@ -89,12 +91,9 @@ class _SideDrawerState extends State<SideDrawer> {
                   Navigator.of(ctx).pop();
                   final deletingCurrent = chatService.currentConversationId == chat.id;
                   await chatService.deleteConversation(chat.id);
-                  // If the deleted one was the current selection, create a new one and switch to it
+                  // If the deleted one was the current selection, trigger host's new-topic (draft) flow
                   if (deletingCurrent || chatService.currentConversationId == null) {
-                    final created = await chatService.createConversation(title: zh ? '新对话' : 'New Chat');
-                    if (mounted && widget.onSelectConversation != null) {
-                      widget.onSelectConversation!(created.id);
-                    }
+                    widget.onNewConversation?.call();
                   }
                 },
               ),
