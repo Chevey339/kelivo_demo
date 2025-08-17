@@ -15,6 +15,9 @@ import 'package:intl/intl.dart';
 class ChatMessageWidget extends StatefulWidget {
   final ChatMessage message;
   final Widget? modelIcon;
+  final bool showModelIcon;
+  final bool showUserAvatar;
+  final bool showTokenStats;
   final VoidCallback? onRegenerate;
   final VoidCallback? onResend;
   final VoidCallback? onCopy;
@@ -33,6 +36,9 @@ class ChatMessageWidget extends StatefulWidget {
     super.key,
     required this.message,
     this.modelIcon,
+    this.showModelIcon = true,
+    this.showUserAvatar = true,
+    this.showTokenStats = true,
     this.onRegenerate,
     this.onResend,
     this.onCopy,
@@ -180,9 +186,11 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                   ),
                 ],
               ),
-              const SizedBox(width: 8),
-              // User avatar
-              _buildUserAvatar(userProvider, cs),
+              if (widget.showUserAvatar) ...[
+                const SizedBox(width: 8),
+                // User avatar
+                _buildUserAvatar(userProvider, cs),
+              ],
             ],
           ),
           const SizedBox(height: 8),
@@ -254,21 +262,23 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
           // Header: Model info and time
           Row(
             children: [
-              // Model icon
-              widget.modelIcon ?? Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: cs.secondary.withOpacity(0.1),
-                  shape: BoxShape.circle,
+              if (widget.showModelIcon) ...[
+                // Model icon
+                widget.modelIcon ?? Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: cs.secondary.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Lucide.Bot,
+                    size: 18,
+                    color: cs.secondary,
+                  ),
                 ),
-                child: Icon(
-                  Lucide.Bot,
-                  size: 18,
-                  color: cs.secondary,
-                ),
-              ),
-              const SizedBox(width: 8),
+                const SizedBox(width: 8),
+              ],
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -289,7 +299,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                           color: cs.onSurface.withOpacity(0.5),
                         ),
                       ),
-                      if (widget.message.totalTokens != null) ...[
+                      if (widget.showTokenStats && widget.message.totalTokens != null) ...[
                         const SizedBox(width: 8),
                         Text(
                           '${widget.message.totalTokens} tokens',

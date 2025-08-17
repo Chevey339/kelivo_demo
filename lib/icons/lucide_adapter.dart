@@ -60,4 +60,5 @@ class Lucide {
   static const IconData HeartOff = lucide.LucideIcons.heartOff;
   static const IconData MessageCircle = lucide.LucideIcons.messageCircle;
   static const IconData NotebookTabs = lucide.LucideIcons.notebookTabs;
+  static const IconData Vibrate = lucide.LucideIcons.vibrate;
 }

@@ -12,6 +12,11 @@ class SettingsProvider extends ChangeNotifier {
   static const String _titleModelKey = 'title_model_v1';
   static const String _titlePromptKey = 'title_prompt_v1';
   static const String _thinkingBudgetKey = 'thinking_budget_v1';
+  static const String _displayShowUserAvatarKey = 'display_show_user_avatar_v1';
+  static const String _displayShowModelIconKey = 'display_show_model_icon_v1';
+  static const String _displayShowTokenStatsKey = 'display_show_token_stats_v1';
+  static const String _displayAutoCollapseThinkingKey = 'display_auto_collapse_thinking_v1';
+  static const String _displayNewChatOnLaunchKey = 'display_new_chat_on_launch_v1';
 
   List<String> _providersOrder = const [];
   List<String> get providersOrder => _providersOrder;
@@ -83,6 +88,13 @@ class SettingsProvider extends ChangeNotifier {
     _titlePrompt = (tp == null || tp.trim().isEmpty) ? defaultTitlePrompt : tp;
     // load thinking budget (reasoning strength)
     _thinkingBudget = prefs.getInt(_thinkingBudgetKey);
+
+    // display settings
+    _showUserAvatar = prefs.getBool(_displayShowUserAvatarKey) ?? true;
+    _showModelIcon = prefs.getBool(_displayShowModelIconKey) ?? true;
+    _showTokenStats = prefs.getBool(_displayShowTokenStatsKey) ?? true;
+    _autoCollapseThinking = prefs.getBool(_displayAutoCollapseThinkingKey) ?? true;
+    _newChatOnLaunch = prefs.getBool(_displayNewChatOnLaunchKey) ?? true;
     notifyListeners();
   }
 
@@ -203,6 +215,60 @@ You need to summarize the conversation between user and assistant into a short t
     } else {
       await prefs.setInt(_thinkingBudgetKey, budget);
     }
+  }
+
+  // Display settings: user avatar and model icon visibility
+  bool _showUserAvatar = true;
+  bool get showUserAvatar => _showUserAvatar;
+  Future<void> setShowUserAvatar(bool v) async {
+    if (_showUserAvatar == v) return;
+    _showUserAvatar = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_displayShowUserAvatarKey, v);
+  }
+
+  bool _showModelIcon = true;
+  bool get showModelIcon => _showModelIcon;
+  Future<void> setShowModelIcon(bool v) async {
+    if (_showModelIcon == v) return;
+    _showModelIcon = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_displayShowModelIconKey, v);
+  }
+
+  // Display: token/context stats
+  bool _showTokenStats = true;
+  bool get showTokenStats => _showTokenStats;
+  Future<void> setShowTokenStats(bool v) async {
+    if (_showTokenStats == v) return;
+    _showTokenStats = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_displayShowTokenStatsKey, v);
+  }
+
+  // Display: auto-collapse reasoning/thinking section
+  bool _autoCollapseThinking = true;
+  bool get autoCollapseThinking => _autoCollapseThinking;
+  Future<void> setAutoCollapseThinking(bool v) async {
+    if (_autoCollapseThinking == v) return;
+    _autoCollapseThinking = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_displayAutoCollapseThinkingKey, v);
+  }
+
+  // Display: create a new chat on app launch
+  bool _newChatOnLaunch = true;
+  bool get newChatOnLaunch => _newChatOnLaunch;
+  Future<void> setNewChatOnLaunch(bool v) async {
+    if (_newChatOnLaunch == v) return;
+    _newChatOnLaunch = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_displayNewChatOnLaunchKey, v);
   }
 }
 

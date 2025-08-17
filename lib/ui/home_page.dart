@@ -96,7 +96,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             reasoningFinishedAt: r.finishedAt,
           );
         }
-        r.expanded = false;
+        final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+        if (autoCollapse) {
+          r.expanded = false;
+        }
         _reasoning[streaming.id] = r;
         if (mounted) setState(() {});
       }
@@ -150,8 +153,38 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   Future<void> _initChat() async {
     await _chatService.init();
-    // Always start with a fresh conversation on app open
-    await _createNewConversation();
+    // Respect user preference: create new chat on launch
+    final prefs = context.read<SettingsProvider>();
+    if (prefs.newChatOnLaunch) {
+      await _createNewConversation();
+    } else {
+      // When disabled, jump to the most recent conversation if exists
+      final conversations = _chatService.getAllConversations();
+      if (conversations.isNotEmpty) {
+        final recent = conversations.first; // already sorted by updatedAt desc
+        _chatService.setCurrentConversation(recent.id);
+        final msgs = _chatService.getMessages(recent.id);
+        setState(() {
+          _currentConversation = recent;
+          _messages = List.of(msgs);
+          _reasoning.clear();
+          for (final m in _messages) {
+            if (m.role == 'assistant') {
+              final txt = m.reasoningText ?? '';
+              if (txt.isNotEmpty || m.reasoningStartAt != null || m.reasoningFinishedAt != null) {
+                final rd = _ReasoningData();
+                rd.text = txt;
+                rd.startAt = m.reasoningStartAt;
+                rd.finishedAt = m.reasoningFinishedAt;
+                rd.expanded = false;
+                _reasoning[m.id] = rd;
+              }
+            }
+          }
+        });
+        _scrollToBottomSoon();
+      }
+    }
   }
 
   Future<void> _createNewConversation() async {
@@ -276,7 +309,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           if (r.finishedAt == null) {
             r.finishedAt = DateTime.now();
           }
-          r.expanded = false; // auto close after finish
+          final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+          if (autoCollapse) {
+            r.expanded = false; // auto close after finish
+          }
           _reasoning[assistantMessage.id] = r;
           if (mounted) setState(() {});
         }
@@ -340,7 +376,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               final r = _reasoning[assistantMessage.id];
               if (r != null && r.startAt != null && r.finishedAt == null) {
                 r.finishedAt = DateTime.now();
-                r.expanded = false; // auto collapse once main content starts
+                final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+                if (autoCollapse) {
+                  r.expanded = false; // auto collapse once main content starts
+                }
                 _reasoning[assistantMessage.id] = r;
                 await _chatService.updateMessage(
                   assistantMessage.id,
@@ -400,7 +439,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 reasoningFinishedAt: r.finishedAt,
               );
             }
-            r.expanded = false;
+            final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+            if (autoCollapse) {
+              r.expanded = false;
+            }
             _reasoning[assistantMessage.id] = r;
           }
 
@@ -441,7 +483,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       final r = _reasoning[assistantMessage.id];
       if (r != null) {
         r.finishedAt = DateTime.now();
-        r.expanded = false;
+        final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+        if (autoCollapse) {
+          r.expanded = false;
+        }
         _reasoning[assistantMessage.id] = r;
         await _chatService.updateMessage(
           assistantMessage.id,
@@ -688,6 +733,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                   modelId: message.modelId,
                                 )
                               : null,
+                          showModelIcon: context.watch<SettingsProvider>().showModelIcon,
+                          showUserAvatar: context.watch<SettingsProvider>().showUserAvatar,
+                          showTokenStats: context.watch<SettingsProvider>().showTokenStats,
                           reasoningText: (message.role == 'assistant') ? (r?.text ?? '') : null,
                           reasoningExpanded: (message.role == 'assistant') ? (r?.expanded ?? false) : false,
                           reasoningLoading: (message.role == 'assistant') ? (r?.finishedAt == null && (r?.text.isNotEmpty == true)) : false,
@@ -722,7 +770,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   moreOpen: _toolsOpen,
                   onSelectModel: () => showModelSelectSheet(context),
                   onStop: _cancelStreaming,
-                  modelIcon: (settings.currentModelProvider != null && settings.currentModelId != null)
+                  modelIcon: (settings.showModelIcon &&
+                          settings.currentModelProvider != null &&
+                          settings.currentModelId != null)
                       ? _CurrentModelIcon(
                     providerKey: settings.currentModelProvider,
                     modelId: settings.currentModelId,

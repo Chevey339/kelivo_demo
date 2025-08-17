@@ -4,6 +4,7 @@ import '../icons/lucide_adapter.dart';
 import '../providers/settings_provider.dart';
 import 'default_model_page.dart';
 import 'providers_page.dart';
+import 'display_settings_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -124,7 +125,11 @@ class SettingsPage extends StatelessWidget {
             icon: Lucide.Monitor,
             title: Localizations.localeOf(context).languageCode == 'zh' ? '显示设置' : 'Display',
             subtitle: Localizations.localeOf(context).languageCode == 'zh' ? '界面与字号等外观设置' : 'Appearance and text size',
-            onTap: () {},
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const DisplaySettingsPage()),
+              );
+            },
           ),
           SettingRow(
             icon: Lucide.Bot,
