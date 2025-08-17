@@ -903,9 +903,7 @@ extension on _SideDrawerState {
               break;
             }
           }
-          // Build the number digit-by-digit to avoid nextInt upper bound limits
           final sb = StringBuffer();
-          // First digit weighted: 1-2 (highest), 3-4 (next), 5-8 (next), 9 (lowest)
           final firstGroups = <List<int>>[
             [1, 2],
             [3, 4],
