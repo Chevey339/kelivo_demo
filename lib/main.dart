@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'ui/home_page.dart';
+import 'package:flutter/services.dart';
 // Theme is now managed in SettingsProvider
 import 'theme/theme_factory.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,9 @@ import 'services/chat_service.dart';
 
 final RouteObserver<ModalRoute<dynamic>> routeObserver = RouteObserver<ModalRoute<dynamic>>();
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Enable edge-to-edge to allow content under system bars (Android)
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const MyApp());
 }
 
@@ -53,6 +57,30 @@ class MyApp extends StatelessWidget {
                 themeMode: settings.themeMode,
                 navigatorObservers: <NavigatorObserver>[routeObserver],
                 home: const HomePage(),
+                builder: (ctx, child) {
+                  final bright = Theme.of(ctx).brightness;
+                  final overlay = bright == Brightness.dark
+                      ? const SystemUiOverlayStyle(
+                          statusBarColor: Colors.transparent,
+                          statusBarIconBrightness: Brightness.light,
+                          statusBarBrightness: Brightness.dark,
+                          systemNavigationBarColor: Colors.transparent,
+                          systemNavigationBarIconBrightness: Brightness.light,
+                          systemNavigationBarDividerColor: Colors.transparent,
+                        )
+                      : const SystemUiOverlayStyle(
+                          statusBarColor: Colors.transparent,
+                          statusBarIconBrightness: Brightness.dark,
+                          statusBarBrightness: Brightness.light,
+                          systemNavigationBarColor: Colors.transparent,
+                          systemNavigationBarIconBrightness: Brightness.dark,
+                          systemNavigationBarDividerColor: Colors.transparent,
+                        );
+                  return AnnotatedRegion<SystemUiOverlayStyle>(
+                    value: overlay,
+                    child: child ?? const SizedBox.shrink(),
+                  );
+                },
               );
             },
           );

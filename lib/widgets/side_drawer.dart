@@ -10,8 +10,10 @@ import '../providers/user_provider.dart';
 import '../ui/settings_page.dart';
 import 'package:flutter/services.dart';
 import 'dart:io' show File;
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 
 class SideDrawer extends StatefulWidget {
   const SideDrawer({
@@ -204,12 +206,19 @@ class _SideDrawerState extends State<SideDrawer> {
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     if (diff == 0) return zh ? '今天' : 'Today';
     if (diff == 1) return zh ? '昨天' : 'Yesterday';
-    if (zh) return '${date.year}年${date.month}月${date.day}日';
+    final sameYear = now.year == date.year;
+    if (zh) {
+      return sameYear
+          ? '${date.month}月${date.day}日'
+          : '${date.year}年${date.month}月${date.day}日';
+    }
     // Simple English format like Aug 10, 2025
     const months = [
       'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'
     ];
-    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    return sameYear
+        ? '${months[date.month - 1]} ${date.day}'
+        : '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   List<_ChatGroup> _groupByDate(BuildContext context, List<ChatItem> source) {
@@ -878,6 +887,47 @@ extension on _SideDrawerState {
         final cs = Theme.of(ctx).colorScheme;
         String value = '';
         bool valid(String s) => RegExp(r'^[0-9]{5,12}$').hasMatch(s.trim());
+        String randomQQ() {
+          // Weighted lengths: {5:1,6:20,7:80,8:100,9:240,10:500,11:80}
+          final lengths = <int>[5, 6, 7, 8, 9, 10, 11];
+          final weights = <int>[1, 20, 80, 100, 240, 500, 80];
+          final total = weights.fold<int>(0, (a, b) => a + b);
+          final rnd = math.Random();
+          int roll = rnd.nextInt(total) + 1;
+          int chosenLen = lengths.last;
+          int acc = 0;
+          for (int i = 0; i < lengths.length; i++) {
+            acc += weights[i];
+            if (roll <= acc) {
+              chosenLen = lengths[i];
+              break;
+            }
+          }
+          // Build the number digit-by-digit to avoid nextInt upper bound limits
+          final sb = StringBuffer();
+          // First digit weighted: 1-2 (highest), 3-4 (next), 5-8 (next), 9 (lowest)
+          final firstGroups = <List<int>>[
+            [1, 2],
+            [3, 4],
+            [5, 6, 7, 8],
+            [9],
+          ];
+          final firstWeights = <int>[8, 4, 2, 1]; // ratio only; ensures 1-2 > 3-4 > 5-8 > 9
+          final firstTotal = firstWeights.fold<int>(0, (a, b) => a + b);
+          int r2 = rnd.nextInt(firstTotal) + 1;
+          int idx = 0;
+          int a2 = 0;
+          for (int i = 0; i < firstGroups.length; i++) {
+            a2 += firstWeights[i];
+            if (r2 <= a2) { idx = i; break; }
+          }
+          final group = firstGroups[idx];
+          sb.write(group[rnd.nextInt(group.length)]);
+          for (int i = 1; i < chosenLen; i++) {
+            sb.write(rnd.nextInt(10));
+          }
+          return sb.toString();
+        }
         return StatefulBuilder(builder: (ctx, setLocal) {
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -909,20 +959,54 @@ extension on _SideDrawerState {
                 if (valid(value)) Navigator.of(ctx).pop(true);
               },
             ),
+            actionsAlignment: MainAxisAlignment.spaceBetween,
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: Text(zh ? '取消' : 'Cancel'),
+                onPressed: () async {
+                  // Try multiple times until a valid avatar is fetched
+                  const int maxTries = 20;
+                  bool applied = false;
+                  for (int i = 0; i < maxTries; i++) {
+                    final qq = randomQQ();
+                    debugPrint(qq);
+                    final url = 'http://q2.qlogo.cn/headimg_dl?dst_uin=' + qq + '&spec=100';
+                    try {
+                      final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+                      if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
+                        await context.read<UserProvider>().setAvatarUrl(url);
+                        applied = true;
+                        break;
+                      }
+                    } catch (_) {}
+                  }
+                  if (applied) {
+                    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop(false);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(zh ? '获取随机QQ头像失败，请重试' : 'Failed to fetch random QQ avatar. Please try again.')),
+                    );
+                  }
+                },
+                child: Text(zh ? '随机QQ' : 'Random QQ'),
               ),
-              TextButton(
-                onPressed: valid(value) ? () => Navigator.of(ctx).pop(true) : null,
-                child: Text(
-                  zh ? '保存' : 'Save',
-                  style: TextStyle(
-                    color: valid(value) ? cs.primary : cs.onSurface.withOpacity(0.38),
-                    fontWeight: FontWeight.w600,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: Text(zh ? '取消' : 'Cancel'),
                   ),
-                ),
+                  TextButton(
+                    onPressed: valid(value) ? () => Navigator.of(ctx).pop(true) : null,
+                    child: Text(
+                      zh ? '保存' : 'Save',
+                      style: TextStyle(
+                        color: valid(value) ? cs.primary : cs.onSurface.withOpacity(0.38),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           );
