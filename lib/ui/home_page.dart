@@ -19,6 +19,7 @@ import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import 'model_select_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/services.dart';
 import 'reasoning_budget_sheet.dart';
 
 
@@ -537,6 +538,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       key: _scaffoldKey,
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
+        systemOverlayStyle: (Theme.of(context).brightness == Brightness.dark)
+            ? const SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                statusBarIconBrightness: Brightness.light, // Android icons
+                statusBarBrightness: Brightness.dark, // iOS text
+              )
+            : const SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                statusBarIconBrightness: Brightness.dark,
+                statusBarBrightness: Brightness.light,
+              ),
         leading: IconButton(
           tooltip: Localizations.localeOf(context).languageCode == 'zh'
               ? '菜单'

@@ -641,9 +641,9 @@ class _ReasoningSectionState extends State<_ReasoningSection> with SingleTickerP
       padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
       child: Text(
         display.isNotEmpty ? display : '…',
-        style: baseStyle,                  // ✅ 统一
-        strutStyle: baseStrut,             // ✅ 统一
-        textHeightBehavior: baseTHB,       // ✅ 统一
+        style: baseStyle,                  // 统一
+        strutStyle: baseStrut,             // 统一
+        textHeightBehavior: baseTHB,       // 统一
       ),
     );
 
@@ -683,9 +683,9 @@ class _ReasoningSectionState extends State<_ReasoningSection> with SingleTickerP
                 physics: const BouncingScrollPhysics(),
                 child: Text(
                   display.isNotEmpty ? display : '…',
-                  style: baseStyle,            // ✅ 统一
-                  strutStyle: baseStrut,       // ✅ 统一
-                  textHeightBehavior: baseTHB, // ✅ 统一
+                  style: baseStyle,            // 统一
+                  strutStyle: baseStrut,       // 统一
+                  textHeightBehavior: baseTHB, // 统一
                 ),
               ),
             ),
@@ -695,7 +695,7 @@ class _ReasoningSectionState extends State<_ReasoningSection> with SingleTickerP
             physics: const NeverScrollableScrollPhysics(),
             child: Text(
               display.isNotEmpty ? display : '…',
-              style: baseStyle,            // ✅ 统一（原来是 12）
+              style: baseStyle,            // 统一（原来是 12）
               strutStyle: baseStrut,
               textHeightBehavior: baseTHB,
             ),
