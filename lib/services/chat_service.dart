@@ -408,4 +408,33 @@ class ChatService extends ChangeNotifier {
     } catch (_) {}
     notifyListeners();
   }
+
+  // Uploads stats: count and total size of files under app documents/upload
+  Future<UploadStats> getUploadStats() async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final uploadDir = Directory(p.join(docs.path, 'upload'));
+      if (!await uploadDir.exists()) {
+        return const UploadStats(fileCount: 0, totalBytes: 0);
+      }
+      int count = 0;
+      int bytes = 0;
+      final entries = uploadDir.listSync(recursive: true, followLinks: false);
+      for (final ent in entries) {
+        if (ent is File) {
+          count += 1;
+          try { bytes += await ent.length(); } catch (_) {}
+        }
+      }
+      return UploadStats(fileCount: count, totalBytes: bytes);
+    } catch (_) {
+      return const UploadStats(fileCount: 0, totalBytes: 0);
+    }
+  }
+}
+
+class UploadStats {
+  final int fileCount;
+  final int totalBytes;
+  const UploadStats({required this.fileCount, required this.totalBytes});
 }

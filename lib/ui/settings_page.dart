@@ -5,6 +5,7 @@ import '../providers/settings_provider.dart';
 import 'default_model_page.dart';
 import 'providers_page.dart';
 import 'display_settings_page.dart';
+import '../services/chat_service.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -164,7 +165,33 @@ class SettingsPage extends StatelessWidget {
           SettingRow(
             icon: Lucide.HardDrive,
             title: Localizations.localeOf(context).languageCode == 'zh' ? '聊天记录存储' : 'Chat Storage',
-            subtitle: Localizations.localeOf(context).languageCode == 'zh' ? '共 0 个文件 · 0 MB' : '0 files · 0 MB',
+            subtitleWidget: Builder(
+              builder: (ctx) {
+                String fmtBytes(int bytes) {
+                  const kb = 1024;
+                  const mb = kb * 1024;
+                  const gb = mb * 1024;
+                  if (bytes >= gb) return (bytes / gb).toStringAsFixed(2) + ' GB';
+                  if (bytes >= mb) return (bytes / mb).toStringAsFixed(2) + ' MB';
+                  if (bytes >= kb) return (bytes / kb).toStringAsFixed(1) + ' KB';
+                  return '$bytes B';
+                }
+                final zh = Localizations.localeOf(ctx).languageCode == 'zh';
+                final svc = ctx.read<ChatService>();
+                return FutureBuilder<UploadStats>(
+                  future: svc.getUploadStats(),
+                  builder: (context, snapshot) {
+                    final data = snapshot.data;
+                    if (snapshot.connectionState != ConnectionState.done) {
+                      return Text(zh ? '统计中…' : 'Calculating…');
+                    }
+                    final count = data?.fileCount ?? 0;
+                    final size = fmtBytes(data?.totalBytes ?? 0);
+                    return Text(zh ? '共 $count 个文件 · $size' : '$count files · $size');
+                  },
+                );
+              },
+            ),
             onTap: () {},
           ),
 
@@ -187,6 +214,7 @@ class SettingRow extends StatelessWidget {
     required this.icon,
     required this.title,
     this.subtitle,
+    this.subtitleWidget,
     this.trailing,
     this.onTap,
   });
@@ -194,6 +222,7 @@ class SettingRow extends StatelessWidget {
   final IconData icon;
   final String title;
   final String? subtitle;
+  final Widget? subtitleWidget;
   final Widget? trailing;
   final VoidCallback? onTap;
 
@@ -230,7 +259,13 @@ class SettingRow extends StatelessWidget {
                       title,
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
                     ),
-                    if (subtitle != null) ...[
+                    if (subtitleWidget != null) ...[
+                      const SizedBox(height: 2),
+                      DefaultTextStyle(
+                        style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.6)),
+                        child: subtitleWidget!,
+                      ),
+                    ] else if (subtitle != null) ...[
                       const SizedBox(height: 2),
                       Text(
                         subtitle!,
