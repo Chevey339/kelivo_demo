@@ -175,7 +175,8 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
                 if (providerTabs.isNotEmpty)
                   if (providerTabs.isNotEmpty)
                     Padding(
-                      padding: EdgeInsets.only(left: 12, right: 12, bottom: MediaQuery.of(context).padding.bottom + 10),
+                      // SafeArea already applies bottom inset; avoid doubling it here.
+                      padding: const EdgeInsets.only(left: 12, right: 12, bottom: 10), // bottom: MediaQuery.of(context).padding.bottom
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(children: providerTabs),
