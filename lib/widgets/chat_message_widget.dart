@@ -7,8 +7,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:open_filex/open_filex.dart';
-import 'package:easy_image_viewer/easy_image_viewer.dart';
+// import 'package:easy_image_viewer/easy_image_viewer.dart';
 import 'dart:convert';
+import '../ui/image_viewer_page.dart';
 import '../models/chat_message.dart';
 import '../icons/lucide_adapter.dart';
 import '../theme/design_tokens.dart';
@@ -235,29 +236,45 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: () {
-                              final providers = imgs.map((s) => _imageProviderFor(s)).toList();
-                              final multi = MultiImageProvider(providers, initialIndex: idx);
-                              showImageViewerPager(
-                                context,
-                                multi,
-                                backgroundColor: Colors.black,
-                                swipeDismissible: true,
-                                doubleTapZoomable: true,
-                              );
+                              Navigator.of(context).push(PageRouteBuilder(
+                                pageBuilder: (_, __, ___) => ImageViewerPage(images: imgs, initialIndex: idx),
+                                transitionDuration: const Duration(milliseconds: 360),
+                                reverseTransitionDuration: const Duration(milliseconds: 280),
+                                transitionsBuilder: (context, anim, sec, child) {
+                                  final curved = CurvedAnimation(
+                                    parent: anim,
+                                    curve: Curves.easeOutCubic,
+                                    reverseCurve: Curves.easeInCubic,
+                                  );
+                                  return FadeTransition(
+                                    opacity: curved,
+                                    child: SlideTransition(
+                                      position: Tween<Offset>(
+                                        begin: const Offset(0, 0.02), // subtle upward drift
+                                        end: Offset.zero,
+                                      ).animate(curved),
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                              ));
                             },
                             borderRadius: BorderRadius.circular(8),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: Image.file(
-                                File(p),
-                                width: 96,
-                                height: 96,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
+                              child: Hero(
+                                tag: 'img:$p',
+                                child: Image.file(
+                                  File(p),
                                   width: 96,
                                   height: 96,
-                                  color: Colors.black12,
-                                  child: const Icon(Icons.broken_image),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: 96,
+                                    height: 96,
+                                    color: Colors.black12,
+                                    child: const Icon(Icons.broken_image),
+                                  ),
                                 ),
                               ),
                             ),
