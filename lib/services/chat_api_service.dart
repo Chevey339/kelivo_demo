@@ -530,34 +530,38 @@ class ChatApiService {
     List<Map<String, dynamic>> messages,
     {int? thinkingBudget}
   ) async* {
-    // Google API doesn't support streaming in the same way
-    // We'll use non-streaming and yield the entire response
-    String url;
-    if (config.vertexAI == true && 
-        (config.location?.isNotEmpty == true) && 
-        (config.projectId?.isNotEmpty == true)) {
-      final loc = config.location!;
-      final proj = config.projectId!;
-      url = 'https://$loc-aiplatform.googleapis.com/v1/projects/$proj/locations/$loc/publishers/google/models/$modelId:generateContent';
+    // Implement SSE streaming via :streamGenerateContent with alt=sse
+    // Build endpoint per Vertex vs Gemini
+    String baseUrl;
+    if (config.vertexAI == true && (config.location?.isNotEmpty == true) && (config.projectId?.isNotEmpty == true)) {
+      final loc = config.location!.trim();
+      final proj = config.projectId!.trim();
+      baseUrl = 'https://$loc-aiplatform.googleapis.com/v1/projects/$proj/locations/$loc/publishers/google/models/$modelId:streamGenerateContent';
     } else {
-      final base = config.baseUrl.endsWith('/') 
-          ? config.baseUrl.substring(0, config.baseUrl.length - 1) 
+      final base = config.baseUrl.endsWith('/')
+          ? config.baseUrl.substring(0, config.baseUrl.length - 1)
           : config.baseUrl;
-      url = '$base/models/$modelId:generateContent';
-      if (config.apiKey.isNotEmpty) {
-        url = '$url?key=${Uri.encodeQueryComponent(config.apiKey)}';
-      }
+      baseUrl = '$base/models/$modelId:streamGenerateContent';
     }
 
-    // Convert messages to Google format
+    // Build query with key (for non-Vertex) and alt=sse
+    final uriBase = Uri.parse(baseUrl);
+    final qp = Map<String, String>.from(uriBase.queryParameters);
+    if (!(config.vertexAI == true)) {
+      if (config.apiKey.isNotEmpty) qp['key'] = config.apiKey;
+    }
+    qp['alt'] = 'sse';
+    final uri = uriBase.replace(queryParameters: qp);
+
+    // Convert messages to Google contents format
     final contents = <Map<String, dynamic>>[];
     for (final msg in messages) {
       final role = msg['role'] == 'assistant' ? 'model' : 'user';
       contents.add({
         'role': role,
         'parts': [
-          {'text': msg['content']}
-        ]
+          {'text': (msg['content'] ?? '').toString()},
+        ],
       });
     }
 
@@ -566,76 +570,118 @@ class ChatApiService {
         .abilities
         .contains(ModelAbility.reasoning);
     final off = _isOff(thinkingBudget);
-    final body = {
+    final body = <String, dynamic>{
       'contents': contents,
       if (isReasoning)
         'generationConfig': {
           'thinkingConfig': {
             'includeThoughts': off ? false : true,
-            if (!off && thinkingBudget != null && thinkingBudget >= 0) 'thinkingBudget': thinkingBudget,
+            if (!off && thinkingBudget != null && thinkingBudget >= 0)
+              'thinkingBudget': thinkingBudget,
           }
         },
     };
-    final headers = <String, String>{'Content-Type': 'application/json'};
-    if (config.vertexAI == true && config.apiKey.isNotEmpty) {
-      headers['Authorization'] = 'Bearer ${config.apiKey}';
-    }
 
-    final response = await client.post(
-      Uri.parse(url),
-      headers: headers,
-      body: jsonEncode(body),
-    );
+    final request = http.Request('POST', uri);
+    request.headers.addAll(<String, String>{
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+      if (config.vertexAI == true && config.apiKey.isNotEmpty)
+        'Authorization': 'Bearer ${config.apiKey}',
+    });
+    request.body = jsonEncode(body);
 
+    final response = await client.send(request);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw HttpException('HTTP ${response.statusCode}: ${response.body}');
+      final errorBody = await response.stream.bytesToString();
+      throw HttpException('HTTP ${response.statusCode}: $errorBody');
     }
 
-    final json = jsonDecode(response.body);
-    final candidates = json['candidates'];
-    if (candidates != null && candidates.isNotEmpty) {
-      final content = candidates[0]['content'];
-      if (content != null) {
-        final parts = content['parts'];
-        if (parts != null && parts.isNotEmpty) {
-          String text = '';
-          String reasoning = '';
-          for (final p in parts) {
-            if (p is Map<String, dynamic>) {
-              final t = (p['text'] ?? '') as String;
-              final thought = p['thought'] as bool?; // Gemini thoughts
-              if (thought == true) {
-                reasoning += t;
-              } else {
-                text += t;
-              }
-            }
-          }
-          TokenUsage? usage;
-          if (json['usageMetadata'] != null) {
-            final um = json['usageMetadata'] as Map<String, dynamic>;
-            usage = TokenUsage(
+    final stream = response.stream.transform(utf8.decoder);
+    String buffer = '';
+    TokenUsage? usage;
+    int totalTokens = 0;
+
+    await for (final chunk in stream) {
+      buffer += chunk;
+      final lines = buffer.split('\n');
+      buffer = lines.last; // keep incomplete line
+
+      for (int i = 0; i < lines.length - 1; i++) {
+        final line = lines[i].trim();
+        if (line.isEmpty) continue;
+        if (!line.startsWith('data:')) continue;
+        final data = line.substring(5).trim(); // after 'data:'
+        if (data.isEmpty) continue;
+        // No [DONE] sentinel for Google SSE; rely on stream close
+        try {
+          final obj = jsonDecode(data) as Map<String, dynamic>;
+          // usageMetadata may appear on any chunk
+          final um = obj['usageMetadata'];
+          if (um is Map<String, dynamic>) {
+            usage = (usage ?? const TokenUsage()).merge(TokenUsage(
               promptTokens: (um['promptTokenCount'] ?? 0) as int,
               completionTokens: (um['candidatesTokenCount'] ?? 0) as int,
               totalTokens: (um['totalTokenCount'] ?? 0) as int,
-            );
+            ));
+            totalTokens = usage!.totalTokens;
           }
-          final totalTokens = usage?.totalTokens ?? (text.length / 4).round();
-          if (reasoning.isNotEmpty) {
-            yield ChatStreamChunk(content: '', reasoning: reasoning, isDone: false, totalTokens: totalTokens, usage: usage);
+
+          final candidates = obj['candidates'];
+          if (candidates is List && candidates.isNotEmpty) {
+            // Aggregate deltas in this event
+            String textDelta = '';
+            String reasoningDelta = '';
+            for (final cand in candidates) {
+              if (cand is! Map) continue;
+              final content = cand['content'];
+              if (content is! Map) continue;
+              final parts = content['parts'];
+              if (parts is! List) continue;
+              for (final p in parts) {
+                if (p is! Map) continue;
+                final t = (p['text'] ?? '') as String? ?? '';
+                final thought = p['thought'] as bool? ?? false;
+                if (t.isEmpty) continue;
+                if (thought) {
+                  reasoningDelta += t;
+                } else {
+                  textDelta += t;
+                }
+              }
+            }
+
+            // Yield deltas if any
+            if (reasoningDelta.isNotEmpty) {
+              yield ChatStreamChunk(
+                content: '',
+                reasoning: reasoningDelta,
+                isDone: false,
+                totalTokens: totalTokens,
+                usage: usage,
+              );
+            }
+            if (textDelta.isNotEmpty) {
+              yield ChatStreamChunk(
+                content: textDelta,
+                isDone: false,
+                totalTokens: totalTokens,
+                usage: usage,
+              );
+            }
           }
-          if (text.isNotEmpty) {
-            yield ChatStreamChunk(content: text, isDone: false, totalTokens: totalTokens, usage: usage);
-          }
+        } catch (_) {
+          // ignore malformed chunk
         }
       }
     }
 
+    // Stream ended: send final done signal with latest usage if any
     yield ChatStreamChunk(
       content: '',
       isDone: true,
-      totalTokens: 0,
-      usage: null,
+      totalTokens: totalTokens,
+      usage: usage,
     );
   }
 }
