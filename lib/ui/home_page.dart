@@ -83,7 +83,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       }
     }
     if (streaming != null) {
-      await _chatService.updateMessage(streaming.id, isStreaming: false);
+      // Persist whatever content we have so far and mark finished
+      await _chatService.updateMessage(
+        streaming.id,
+        content: streaming.content,
+        isStreaming: false,
+        totalTokens: streaming.totalTokens,
+      );
       if (mounted) {
         setState(() {
           final idx = _messages.indexWhere((m) => m.id == streaming!.id);
@@ -541,6 +547,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               });
             }
 
+            // Persist partial content so it's saved even if interrupted
+            await _chatService.updateMessage(
+              assistantMessage.id,
+              content: fullContent,
+              totalTokens: totalTokens,
+            );
+
             // 滚动到底部显示新内容
             Future.delayed(const Duration(milliseconds: 50), () {
               _scrollToBottom();
@@ -548,9 +561,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           }
         },
         onError: (e) async {
+          // Preserve partial content; just finalize state and notify user
           await _chatService.updateMessage(
             assistantMessage.id,
-            content: '发生错误: $e',
+            content: fullContent,
+            totalTokens: totalTokens,
             isStreaming: false,
           );
 
@@ -559,8 +574,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
             if (index != -1) {
               _messages[index] = _messages[index].copyWith(
-                content: '发生错误: $e',
+                content: fullContent.isNotEmpty ? fullContent : _messages[index].content,
                 isStreaming: false,
+                totalTokens: totalTokens,
               );
             }
             _isLoading = false;
@@ -586,7 +602,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
           _messageStreamSubscription = null;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('发送失败: $e')),
+            SnackBar(content: Text('生成已中断: $e')),
           );
         },
         onDone: () async {
@@ -599,10 +615,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         cancelOnError: true,
       );
     } catch (e) {
-      // Handle error
+      // Preserve partial content on outer error as well
       await _chatService.updateMessage(
         assistantMessage.id,
-        content: '发生错误: $e',
+        content: fullContent,
+        totalTokens: totalTokens,
         isStreaming: false,
       );
 
@@ -610,8 +627,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
         if (index != -1) {
           _messages[index] = _messages[index].copyWith(
-            content: '发生错误: $e',
+            content: fullContent.isNotEmpty ? fullContent : _messages[index].content,
             isStreaming: false,
+            totalTokens: totalTokens,
           );
         }
         _isLoading = false;
@@ -635,7 +653,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
       _messageStreamSubscription = null;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('发送失败: $e')),
+        SnackBar(content: Text('生成已中断: $e')),
       );
     }
   }

@@ -6,6 +6,9 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
+import 'package:open_filex/open_filex.dart';
+import 'package:easy_image_viewer/easy_image_viewer.dart';
+import 'dart:convert';
 import '../models/chat_message.dart';
 import '../icons/lucide_adapter.dart';
 import '../theme/design_tokens.dart';
@@ -220,27 +223,49 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                   ),
                 if (parsed.images.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: parsed.images.map((p) {
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(
-                          File(p),
-                          width: 96,
-                          height: 96,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            width: 96,
-                            height: 96,
-                            color: Colors.black12,
-                            child: const Icon(Icons.broken_image),
+                  Builder(builder: (context) {
+                    final imgs = parsed.images;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: imgs.asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final p = entry.value;
+                        return Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              final providers = imgs.map((s) => _imageProviderFor(s)).toList();
+                              final multi = MultiImageProvider(providers, initialIndex: idx);
+                              showImageViewerPager(
+                                context,
+                                multi,
+                                backgroundColor: Colors.black,
+                                swipeDismissible: true,
+                                doubleTapZoomable: true,
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.file(
+                                File(p),
+                                width: 96,
+                                height: 96,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  width: 96,
+                                  height: 96,
+                                  color: Colors.black12,
+                                  child: const Icon(Icons.broken_image),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
+                        );
+                      }).toList(),
+                    );
+                  }),
                 ],
                 if (parsed.docs.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -248,22 +273,55 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                     spacing: 8,
                     runSpacing: 8,
                     children: parsed.docs.map((d) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white12 : cs.surface,
+                      return Material(
+                        color: Colors.transparent,
+                        child: InkWell(
                           borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.insert_drive_file, size: 16),
-                            const SizedBox(width: 6),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 180),
-                              child: Text(d.fileName, overflow: TextOverflow.ellipsis),
+                          overlayColor: MaterialStateProperty.resolveWith(
+                            (states) => cs.primary.withOpacity(states.contains(MaterialState.pressed) ? 0.14 : 0.08),
+                          ),
+                          splashColor: cs.primary.withOpacity(0.18),
+                          onTap: () async {
+                              try {
+                                final f = File(d.path);
+                                if (!(await f.exists())) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('文件不存在: ${d.fileName}')),
+                                  );
+                                  return;
+                                }
+                                final res = await OpenFilex.open(d.path, type: d.mime);
+                                if (res.type != ResultType.done) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('无法打开文件: ${res.message ?? res.type.toString()}')),
+                                  );
+                                }
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('打开文件失败: $e')),
+                                );
+                              }
+                            },
+                          child: Ink(
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white12 : cs.surface,
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                          ],
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.insert_drive_file, size: 16),
+                                  const SizedBox(width: 6),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 180),
+                                    child: Text(d.fileName, overflow: TextOverflow.ellipsis),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                       );
                     }).toList(),
@@ -583,6 +641,23 @@ class _DocRef {
   final String fileName;
   final String mime;
   _DocRef({required this.path, required this.fileName, required this.mime});
+}
+
+ImageProvider _imageProviderFor(String src) {
+  if (src.startsWith('http://') || src.startsWith('https://')) {
+    return NetworkImage(src);
+  }
+  if (src.startsWith('data:')) {
+    try {
+      final base64Marker = 'base64,';
+      final idx = src.indexOf(base64Marker);
+      if (idx != -1) {
+        final b64 = src.substring(idx + base64Marker.length);
+        return MemoryImage(base64Decode(b64));
+      }
+    } catch (_) {}
+  }
+  return FileImage(File(src));
 }
 
 class _ReasoningSection extends StatefulWidget {

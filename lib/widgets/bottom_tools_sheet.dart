@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../icons/lucide_adapter.dart';
 
 class BottomToolsSheet extends StatelessWidget {
@@ -20,25 +21,37 @@ class BottomToolsSheet extends StatelessWidget {
 
     Widget roundedAction({required IconData icon, required String label, VoidCallback? onTap}) {
       return Expanded(
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Container(
-            height: 72,
-            decoration: BoxDecoration(
-              color: bg,
+        child: Container(
+          height: 72,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4)),
+            ],
+          ),
+          child: Material(
+            color: bg,
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
               borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4)),
-              ],
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 24, color: primary),
-                const SizedBox(height: 6),
-                Text(label, style: const TextStyle(fontSize: 13)),
-              ],
+              overlayColor: MaterialStateProperty.resolveWith(
+                (states) => primary.withOpacity(states.contains(MaterialState.pressed) ? 0.14 : 0.08),
+              ),
+              splashColor: primary.withOpacity(0.18),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                onTap?.call();
+              },
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 24, color: primary),
+                    const SizedBox(height: 6),
+                    Text(label, style: const TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -90,7 +103,14 @@ class BottomToolsSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
               child: InkWell(
                 borderRadius: BorderRadius.circular(14),
-                onTap: onClear,
+                overlayColor: MaterialStateProperty.resolveWith(
+                  (states) => primary.withOpacity(states.contains(MaterialState.pressed) ? 0.14 : 0.08),
+                ),
+                splashColor: primary.withOpacity(0.18),
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onClear?.call();
+                },
                 child: Center(
                   child: Text(
                     _t(context, '清空上下文', 'Clear Context'),
