@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 
 import '../widgets/chat_input_bar.dart';
+import '../models/chat_input_data.dart';
 import '../widgets/bottom_tools_sheet.dart';
 import '../widgets/side_drawer.dart';
 import '../widgets/chat_message_widget.dart';
@@ -20,6 +21,9 @@ import '../models/conversation.dart';
 import 'model_select_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'reasoning_budget_sheet.dart';
 
 
@@ -39,6 +43,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final FocusNode _inputFocus = FocusNode();
   final TextEditingController _inputController = TextEditingController();
+  final ChatInputBarController _mediaController = ChatInputBarController();
   final ScrollController _scrollController = ScrollController();
 
   late ChatService _chatService;
@@ -187,6 +192,54 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     }
   }
 
+  Future<List<String>> _copyPickedFiles(List<XFile> files) async {
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory("${docs.path}/upload");
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    final out = <String>[];
+    for (final f in files) {
+      try {
+        final name = f.name.isNotEmpty ? f.name : DateTime.now().millisecondsSinceEpoch.toString();
+        final dest = File("${dir.path}/$name");
+        await dest.writeAsBytes(await f.readAsBytes());
+        out.add(dest.path);
+      } catch (_) {}
+    }
+    return out;
+  }
+
+  Future<void> _onPickPhotos() async {
+    try {
+      final picker = ImagePicker();
+      final files = await picker.pickMultiImage();
+      if (files == null || files.isEmpty) return;
+      final paths = await _copyPickedFiles(files);
+      if (paths.isNotEmpty) {
+        _mediaController.addImages(paths);
+        _scrollToBottomSoon();
+      }
+    } catch (_) {} finally {
+      if (mounted && _toolsOpen) _toggleTools();
+    }
+  }
+
+  Future<void> _onPickCamera() async {
+    try {
+      final picker = ImagePicker();
+      final file = await picker.pickImage(source: ImageSource.camera);
+      if (file == null) return;
+      final paths = await _copyPickedFiles([file]);
+      if (paths.isNotEmpty) {
+        _mediaController.addImages(paths);
+        _scrollToBottomSoon();
+      }
+    } catch (_) {} finally {
+      if (mounted && _toolsOpen) _toggleTools();
+    }
+  }
+
   Future<void> _createNewConversation() async {
     final conversation = await _chatService.createDraftConversation(title: '新对话');
     setState(() {
@@ -197,8 +250,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _scrollToBottomSoon();
   }
 
-  Future<void> _sendMessage(String content) async {
-    if (content.trim().isEmpty) return;
+  Future<void> _sendMessage(ChatInputData input) async {
+    final content = input.text.trim();
+    if (content.isEmpty && input.imagePaths.isEmpty) return;
     if (_currentConversation == null) await _createNewConversation();
 
     final settings = context.read<SettingsProvider>();
@@ -213,10 +267,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     }
 
     // Add user message
+    // Persist user message; append image markers for display
+    final imageMarkers = input.imagePaths.map((p) => '\n[image:$p]').join();
     final userMessage = await _chatService.addMessage(
       conversationId: _currentConversation!.id,
       role: 'user',
-      content: content,
+      content: content + imageMarkers,
     );
 
     setState(() {
@@ -282,6 +338,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         config: config,
         modelId: modelId,
         messages: apiMessages,
+        userImagePaths: input.imagePaths,
         thinkingBudget: settings.thinkingBudget,
       );
 
@@ -500,6 +557,21 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         SnackBar(content: Text('发送失败: $e')),
       );
     }
+  }
+
+  ChatInputData _parseInputFromRaw(String raw) {
+    final regex = RegExp(r"\[image:(.+?)\]");
+    final images = <String>[];
+    final buffer = StringBuffer();
+    int lastIndex = 0;
+    for (final m in regex.allMatches(raw)) {
+      if (m.start > lastIndex) buffer.write(raw.substring(lastIndex, m.start));
+      final p = m.group(1)?.trim();
+      if (p != null && p.isNotEmpty) images.add(p);
+      lastIndex = m.end;
+    }
+    if (lastIndex < raw.length) buffer.write(raw.substring(lastIndex));
+    return ChatInputData(text: buffer.toString().trim(), imagePaths: images);
   }
 
   Future<void> _maybeGenerateTitle({bool force = false}) async {
@@ -752,7 +824,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             // TODO: Implement regenerate
                           } : null,
                           onResend: message.role == 'user' ? () {
-                            _sendMessage(message.content);
+                            _sendMessage(_parseInputFromRaw(message.content));
                           } : null,
                         );
                       },
@@ -781,6 +853,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       : null,
                   focusNode: _inputFocus,
                   controller: _inputController,
+                  mediaController: _mediaController,
                   onConfigureReasoning: () => showReasoningBudgetSheet(context),
                   reasoningActive: _isReasoningEnabled(settings.thinkingBudget),
                   supportsReasoning: (settings.currentModelProvider != null && settings.currentModelId != null)
@@ -833,8 +906,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         topLeft: Radius.circular(20),
                         topRight: Radius.circular(20),
                       ),
-                      child: const BottomToolsSheet(),
-                    ),
+                      child: BottomToolsSheet(
+                        onPhotos: _onPickPhotos,
+                        onCamera: _onPickCamera,
+                      ),
+                      ),
                   ),
                 ),
               ),

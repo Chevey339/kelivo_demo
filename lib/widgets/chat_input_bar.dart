@@ -3,6 +3,18 @@ import '../theme/design_tokens.dart';
 import '../icons/lucide_adapter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import 'dart:io';
+import '../models/chat_input_data.dart';
+
+class ChatInputBarController {
+  _ChatInputBarState? _state;
+  void _bind(_ChatInputBarState s) => _state = s;
+  void _unbind(_ChatInputBarState s) { if (identical(_state, s)) _state = null; }
+
+  void addImages(List<String> paths) => _state?._addImages(paths);
+  void clearImages() => _state?._clearImages();
+}
+
 class ChatInputBar extends StatefulWidget {
   const ChatInputBar({
     super.key,
@@ -16,12 +28,13 @@ class ChatInputBar extends StatefulWidget {
     this.focusNode,
     this.modelIcon,
     this.controller,
+    this.mediaController,
     this.loading = false,
     this.reasoningActive = false,
     this.supportsReasoning = true,
   });
 
-  final ValueChanged<String>? onSend;
+  final ValueChanged<ChatInputData>? onSend;
   final VoidCallback? onStop;
   final VoidCallback? onSelectModel;
   final ValueChanged<bool>? onToggleSearch;
@@ -31,6 +44,7 @@ class ChatInputBar extends StatefulWidget {
   final FocusNode? focusNode;
   final Widget? modelIcon;
   final TextEditingController? controller;
+  final ChatInputBarController? mediaController;
   final bool loading;
   final bool reasoningActive;
   final bool supportsReasoning;
@@ -42,15 +56,34 @@ class ChatInputBar extends StatefulWidget {
 class _ChatInputBarState extends State<ChatInputBar> {
   late TextEditingController _controller;
   bool _searchEnabled = false;
+  final List<String> _images = <String>[]; // local file paths
+
+  void _addImages(List<String> paths) {
+    if (paths.isEmpty) return;
+    setState(() => _images.addAll(paths));
+  }
+
+  void _clearImages() {
+    setState(() => _images.clear());
+  }
+
+  void _removeImageAt(int index) async {
+    final path = _images[index];
+    setState(() => _images.removeAt(index));
+    // best-effort delete
+    try { final f = File(path); if (await f.exists()) { await f.delete(); } } catch (_) {}
+  }
 
   @override
   void initState() {
     super.initState();
     _controller = widget.controller ?? TextEditingController();
+    widget.mediaController?._bind(this);
   }
 
   @override
   void dispose() {
+    widget.mediaController?._unbind(this);
     if (widget.controller == null) {
       _controller.dispose();
     }
@@ -64,9 +97,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   void _handleSend() {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    widget.onSend?.call(text);
+    if (text.isEmpty && _images.isEmpty) return;
+    widget.onSend?.call(ChatInputData(text: text, imagePaths: List.of(_images)));
     _controller.clear();
+    _images.clear();
     setState(() {});
   }
 
@@ -75,6 +109,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final hasText = _controller.text.trim().isNotEmpty;
+    final hasImages = _images.isNotEmpty;
 
     return SafeArea(
       top: false,
@@ -86,6 +121,58 @@ class _ChatInputBarState extends State<ChatInputBar> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Image previews (if any)
+            if (hasImages) ...[
+              SizedBox(
+                height: 64,
+                child: ListView.separated(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _images.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, idx) {
+                    final path = _images[idx];
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.file(
+                            File(path),
+                            width: 64,
+                            height: 64,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              width: 64,
+                              height: 64,
+                              color: Colors.black12,
+                              child: const Icon(Icons.broken_image),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          right: -6,
+                          top: -6,
+                          child: GestureDetector(
+                            onTap: () => _removeImageAt(idx),
+                            child: Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.close, size: 14, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+            ],
             // Top: large rounded input capsule
             DecoratedBox(
               decoration: BoxDecoration(
@@ -199,7 +286,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     _SendButton(
-                      enabled: hasText && !widget.loading,
+                      enabled: (hasText || hasImages) && !widget.loading,
                       loading: widget.loading,
                       onSend: _handleSend,
                       onStop: widget.loading ? widget.onStop : null,

@@ -155,6 +155,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final userProvider = context.watch<UserProvider>();
+    final parsed = _parseUserContent(widget.message.content);
     
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -206,12 +207,42 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                   : cs.primary.withOpacity(0.08),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Text(
-              widget.message.content,
-              style: TextStyle(
-                fontSize: 14,
-                color: cs.onSurface,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (parsed.text.isNotEmpty)
+                  Text(
+                    parsed.text,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                if (parsed.images.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: parsed.images.map((p) {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.file(
+                          File(p),
+                          width: 96,
+                          height: 96,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 96,
+                            height: 96,
+                            color: Colors.black12,
+                            child: const Icon(Icons.broken_image),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
             ),
           ),
           // Action buttons
@@ -249,6 +280,23 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
         ],
       ),
     );
+  }
+
+  _ParsedUserContent _parseUserContent(String raw) {
+    final regex = RegExp(r"\[image:(.+?)\]");
+    final images = <String>[];
+    final buffer = StringBuffer();
+    int lastIndex = 0;
+    for (final m in regex.allMatches(raw)) {
+      if (m.start > lastIndex) {
+        buffer.write(raw.substring(lastIndex, m.start));
+      }
+      final path = m.group(1)?.trim();
+      if (path != null && path.isNotEmpty) images.add(path);
+      lastIndex = m.end;
+    }
+    if (lastIndex < raw.length) buffer.write(raw.substring(lastIndex));
+    return _ParsedUserContent(buffer.toString().trim(), images);
   }
 
   Widget _buildAssistantMessage() {
@@ -481,6 +529,12 @@ class _LoadingIndicatorState extends State<_LoadingIndicator>
       },
     );
   }
+}
+
+class _ParsedUserContent {
+  final String text;
+  final List<String> images;
+  _ParsedUserContent(this.text, this.images);
 }
 
 class _ReasoningSection extends StatefulWidget {

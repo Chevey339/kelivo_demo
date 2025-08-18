@@ -8,6 +8,25 @@ import '../providers/model_provider.dart';
 import '../models/token_usage.dart';
 
 class ChatApiService {
+  static String _mimeFromPath(String path) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    return 'image/png';
+  }
+
+  static Future<String> _encodeBase64File(String path, {bool withPrefix = false}) async {
+    final file = File(path);
+    final bytes = await file.readAsBytes();
+    final b64 = base64Encode(bytes);
+    if (withPrefix) {
+      final mime = _mimeFromPath(path);
+      return 'data:$mime;base64,$b64';
+    }
+    return b64;
+  }
   static http.Client _clientFor(ProviderConfig cfg) {
     final enabled = cfg.proxyEnabled == true;
     final host = (cfg.proxyHost ?? '').trim();
@@ -30,6 +49,7 @@ class ChatApiService {
     required ProviderConfig config,
     required String modelId,
     required List<Map<String, dynamic>> messages,
+    List<String>? userImagePaths,
     int? thinkingBudget,
   }) async* {
     final kind = ProviderConfig.classify(config.id);
@@ -37,11 +57,11 @@ class ChatApiService {
 
     try {
       if (kind == ProviderKind.openai) {
-        yield* _sendOpenAIStream(client, config, modelId, messages, thinkingBudget: thinkingBudget);
+        yield* _sendOpenAIStream(client, config, modelId, messages, userImagePaths: userImagePaths, thinkingBudget: thinkingBudget);
       } else if (kind == ProviderKind.claude) {
-        yield* _sendClaudeStream(client, config, modelId, messages, thinkingBudget: thinkingBudget);
+        yield* _sendClaudeStream(client, config, modelId, messages, userImagePaths: userImagePaths, thinkingBudget: thinkingBudget);
       } else if (kind == ProviderKind.google) {
-        yield* _sendGoogleStream(client, config, modelId, messages, thinkingBudget: thinkingBudget);
+        yield* _sendGoogleStream(client, config, modelId, messages, userImagePaths: userImagePaths, thinkingBudget: thinkingBudget);
       }
     } finally {
       client.close();
@@ -193,7 +213,7 @@ class ChatApiService {
     ProviderConfig config,
     String modelId,
     List<Map<String, dynamic>> messages,
-    {int? thinkingBudget}
+    {List<String>? userImagePaths, int? thinkingBudget}
   ) async* {
     final base = config.baseUrl.endsWith('/') 
         ? config.baseUrl.substring(0, config.baseUrl.length - 1) 
@@ -210,24 +230,68 @@ class ChatApiService {
 
     final effort = _effortForBudget(thinkingBudget);
     final host = Uri.tryParse(config.baseUrl)?.host.toLowerCase() ?? '';
-    final body = config.useResponseApi == true
-        ? {
-            'model': modelId,
-            'input': messages,
-            'stream': true,
-            if (isReasoning && effort != 'off')
-              'reasoning': {
-                'summary': 'auto',
-                if (effort != 'auto') 'effort': effort,
-              },
+    Map<String, dynamic> body;
+    if (config.useResponseApi == true) {
+      final input = <Map<String, dynamic>>[];
+      for (int i = 0; i < messages.length; i++) {
+        final m = messages[i];
+        final isLast = i == messages.length - 1;
+        if (isLast && (userImagePaths?.isNotEmpty == true) && (m['role'] == 'user')) {
+          final text = (m['content'] ?? '').toString();
+          final parts = <Map<String, dynamic>>[];
+          if (text.isNotEmpty) {
+            parts.add({'type': 'input_text', 'text': text});
           }
-        : {
-            'model': modelId,
-            'messages': messages,
-            'stream': true,
-            // Default OpenAI-style mapping; may be overridden by vendor-specific keys below
-            if (isReasoning && effort != 'off' && effort != 'auto') 'reasoning_effort': effort,
-          };
+          for (final p in userImagePaths!) {
+            final dataUrl = (p.startsWith('http') || p.startsWith('data:'))
+                ? p
+                : await _encodeBase64File(p, withPrefix: true);
+            parts.add({'type': 'input_image', 'image_url': dataUrl});
+          }
+          input.add({'role': m['role'] ?? 'user', 'content': parts});
+        } else {
+          input.add({'role': m['role'] ?? 'user', 'content': m['content'] ?? ''});
+        }
+      }
+      body = {
+        'model': modelId,
+        'input': input,
+        'stream': true,
+        if (isReasoning && effort != 'off')
+          'reasoning': {
+            'summary': 'auto',
+            if (effort != 'auto') 'effort': effort,
+          },
+      };
+    } else {
+      final mm = <Map<String, dynamic>>[];
+      for (int i = 0; i < messages.length; i++) {
+        final m = messages[i];
+        final isLast = i == messages.length - 1;
+        if (isLast && (userImagePaths?.isNotEmpty == true) && (m['role'] == 'user')) {
+          final text = (m['content'] ?? '').toString();
+          final parts = <Map<String, dynamic>>[];
+          if (text.isNotEmpty) {
+            parts.add({'type': 'text', 'text': text});
+          }
+          for (final p in userImagePaths!) {
+            final dataUrl = (p.startsWith('http') || p.startsWith('data:'))
+                ? p
+                : await _encodeBase64File(p, withPrefix: true);
+            parts.add({'type': 'image_url', 'image_url': {'url': dataUrl}});
+          }
+          mm.add({'role': m['role'] ?? 'user', 'content': parts});
+        } else {
+          mm.add({'role': m['role'] ?? 'user', 'content': m['content'] ?? ''});
+        }
+      }
+      body = {
+        'model': modelId,
+        'messages': mm,
+        'stream': true,
+        if (isReasoning && effort != 'off' && effort != 'auto') 'reasoning_effort': effort,
+      };
+    }
 
     // Vendor-specific reasoning knobs for chat-completions compatible hosts
     if (config.useResponseApi != true) {
@@ -416,7 +480,7 @@ class ChatApiService {
     ProviderConfig config,
     String modelId,
     List<Map<String, dynamic>> messages,
-    {int? thinkingBudget}
+    {List<String>? userImagePaths, int? thinkingBudget}
   ) async* {
     final base = config.baseUrl.endsWith('/') 
         ? config.baseUrl.substring(0, config.baseUrl.length - 1) 
@@ -428,10 +492,42 @@ class ChatApiService {
         .abilities
         .contains(ModelAbility.reasoning);
 
+    // Transform last user message to include images per Anthropic schema
+    final transformed = <Map<String, dynamic>>[];
+    for (int i = 0; i < messages.length; i++) {
+      final m = messages[i];
+      final isLast = i == messages.length - 1;
+      if (isLast && (userImagePaths?.isNotEmpty == true) && (m['role'] == 'user')) {
+        final parts = <Map<String, dynamic>>[];
+        final text = (m['content'] ?? '').toString();
+        if (text.isNotEmpty) parts.add({'type': 'text', 'text': text});
+        for (final p in userImagePaths!) {
+          if (p.startsWith('http') || p.startsWith('data:')) {
+            // Fallback: include link as text
+            parts.add({'type': 'text', 'text': p});
+          } else {
+            final mime = _mimeFromPath(p);
+            final b64 = await _encodeBase64File(p, withPrefix: false);
+            parts.add({
+              'type': 'image',
+              'source': {
+                'type': 'base64',
+                'media_type': mime,
+                'data': b64,
+              }
+            });
+          }
+        }
+        transformed.add({'role': 'user', 'content': parts});
+      } else {
+        transformed.add({'role': m['role'] ?? 'user', 'content': m['content'] ?? ''});
+      }
+    }
+
     final body = {
       'model': modelId,
       'max_tokens': 4096,
-      'messages': messages,
+      'messages': transformed,
       'stream': true,
       if (isReasoning)
         'thinking': {
@@ -528,7 +624,7 @@ class ChatApiService {
     ProviderConfig config,
     String modelId,
     List<Map<String, dynamic>> messages,
-    {int? thinkingBudget}
+    {List<String>? userImagePaths, int? thinkingBudget}
   ) async* {
     // Implement SSE streaming via :streamGenerateContent with alt=sse
     // Build endpoint per Vertex vs Gemini
@@ -555,14 +651,30 @@ class ChatApiService {
 
     // Convert messages to Google contents format
     final contents = <Map<String, dynamic>>[];
-    for (final msg in messages) {
+    for (int i = 0; i < messages.length; i++) {
+      final msg = messages[i];
       final role = msg['role'] == 'assistant' ? 'model' : 'user';
-      contents.add({
-        'role': role,
-        'parts': [
-          {'text': (msg['content'] ?? '').toString()},
-        ],
-      });
+      final isLast = i == messages.length - 1;
+      final parts = <Map<String, dynamic>>[];
+      final text = (msg['content'] ?? '').toString();
+      if (text.isNotEmpty) parts.add({'text': text});
+      if (isLast && role == 'user' && (userImagePaths?.isNotEmpty == true)) {
+        for (final p in userImagePaths!) {
+          if (p.startsWith('http') || p.startsWith('data:')) {
+            // Google inline_data expects base64; skip remote/data
+            continue;
+          }
+          final mime = _mimeFromPath(p);
+          final b64 = await _encodeBase64File(p, withPrefix: false);
+          parts.add({
+            'inline_data': {
+              'mime_type': mime,
+              'data': b64,
+            }
+          });
+        }
+      }
+      contents.add({'role': role, 'parts': parts});
     }
 
     final isReasoning = ModelRegistry
