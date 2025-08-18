@@ -14,6 +14,7 @@ import '../providers/user_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/chat_service.dart';
 import '../services/chat_api_service.dart';
+import '../services/document_text_extractor.dart';
 import '../models/token_usage.dart';
 import '../providers/model_provider.dart';
 import '../models/chat_message.dart';
@@ -22,6 +23,7 @@ import 'model_select_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'reasoning_budget_sheet.dart';
@@ -240,6 +242,51 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     }
   }
 
+  String _inferMimeByExtension(String name) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    if (lower.endsWith('.json')) return 'application/json';
+    if (lower.endsWith('.js')) return 'application/javascript';
+    if (lower.endsWith('.txt') || lower.endsWith('.md')) return 'text/plain';
+    return 'text/plain';
+  }
+
+  Future<void> _onPickFiles() async {
+    try {
+      final res = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        withData: false,
+        type: FileType.custom,
+        allowedExtensions: const [
+          'txt','md','json','js','pdf','docx'
+        ],
+      );
+      if (res == null || res.files.isEmpty) return;
+      final docs = <DocumentAttachment>[];
+      final toCopy = <XFile>[];
+      for (final f in res.files) {
+        if (f.path != null && f.path!.isNotEmpty) {
+          toCopy.add(XFile(f.path!));
+        }
+      }
+      final saved = await _copyPickedFiles(toCopy);
+      for (int i = 0; i < saved.length; i++) {
+        final orig = res.files[i];
+        final savedPath = saved[i];
+        final name = orig.name;
+        final mime = _inferMimeByExtension(name);
+        docs.add(DocumentAttachment(path: savedPath, fileName: name, mime: mime));
+      }
+      if (docs.isNotEmpty) {
+        _mediaController.addFiles(docs);
+        _scrollToBottomSoon();
+      }
+    } catch (_) {} finally {
+      if (mounted && _toolsOpen) _toggleTools();
+    }
+  }
+
   Future<void> _createNewConversation() async {
     final conversation = await _chatService.createDraftConversation(title: '新对话');
     setState(() {
@@ -252,7 +299,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   Future<void> _sendMessage(ChatInputData input) async {
     final content = input.text.trim();
-    if (content.isEmpty && input.imagePaths.isEmpty) return;
+    if (content.isEmpty && input.imagePaths.isEmpty && input.documents.isEmpty) return;
     if (_currentConversation == null) await _createNewConversation();
 
     final settings = context.read<SettingsProvider>();
@@ -267,12 +314,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     }
 
     // Add user message
-    // Persist user message; append image markers for display
+    // Persist user message; append image and document markers for display
     final imageMarkers = input.imagePaths.map((p) => '\n[image:$p]').join();
+    final docMarkers = input.documents.map((d) => '\n[file:${d.path}|${d.fileName}|${d.mime}]').join();
     final userMessage = await _chatService.addMessage(
       conversationId: _currentConversation!.id,
       role: 'user',
-      content: content + imageMarkers,
+      content: content + imageMarkers + docMarkers,
     );
 
     setState(() {
@@ -317,6 +365,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     });
 
     // Prepare messages for API
+    // Prepare messages for API, but transform the last user message to include document content
     final apiMessages = _messages
         .where((m) => m.content.isNotEmpty)
         .map((m) => {
@@ -324,6 +373,38 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       'content': m.content,
     })
         .toList();
+
+    // Build document prompts and clean markers in last user message
+    if (apiMessages.isNotEmpty) {
+      // Find last user message index in apiMessages
+      int lastUserIdx = -1;
+      for (int i = apiMessages.length - 1; i >= 0; i--) {
+        if (apiMessages[i]['role'] == 'user') { lastUserIdx = i; break; }
+      }
+      if (lastUserIdx != -1) {
+        final raw = (apiMessages[lastUserIdx]['content'] ?? '').toString();
+        final cleaned = raw
+            .replaceAll(RegExp(r"\[image:.*?\]"), '')
+            .replaceAll(RegExp(r"\[file:.*?\]"), '')
+            .trim();
+        // Build document prompts
+        final filePrompts = StringBuffer();
+        for (final d in input.documents) {
+          try {
+            final text = await DocumentTextExtractor.extract(path: d.path, mime: d.mime);
+            filePrompts.writeln('## user sent a file: ${d.fileName}');
+            filePrompts.writeln('<content>');
+            filePrompts.writeln('```');
+            filePrompts.writeln(text);
+            filePrompts.writeln('```');
+            filePrompts.writeln('</content>');
+            filePrompts.writeln();
+          } catch (_) {}
+        }
+        final merged = (filePrompts.toString() + cleaned).trim();
+        apiMessages[lastUserIdx]['content'] = merged.isEmpty ? cleaned : merged;
+      }
+    }
 
     // Get provider config
     final config = settings.getProviderConfig(providerKey);
@@ -560,18 +641,33 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 
   ChatInputData _parseInputFromRaw(String raw) {
-    final regex = RegExp(r"\[image:(.+?)\]");
+    final imgRe = RegExp(r"\[image:(.+?)\]");
+    final fileRe = RegExp(r"\[file:(.+?)\|(.+?)\|(.+?)\]");
     final images = <String>[];
+    final docs = <DocumentAttachment>[];
     final buffer = StringBuffer();
-    int lastIndex = 0;
-    for (final m in regex.allMatches(raw)) {
-      if (m.start > lastIndex) buffer.write(raw.substring(lastIndex, m.start));
-      final p = m.group(1)?.trim();
-      if (p != null && p.isNotEmpty) images.add(p);
-      lastIndex = m.end;
+    int idx = 0;
+    while (idx < raw.length) {
+      final imgMatch = imgRe.matchAsPrefix(raw, idx);
+      final fileMatch = fileRe.matchAsPrefix(raw, idx);
+      if (imgMatch != null) {
+        final p = imgMatch.group(1)?.trim();
+        if (p != null && p.isNotEmpty) images.add(p);
+        idx = imgMatch.end;
+        continue;
+      }
+      if (fileMatch != null) {
+        final path = fileMatch.group(1)?.trim() ?? '';
+        final name = fileMatch.group(2)?.trim() ?? 'file';
+        final mime = fileMatch.group(3)?.trim() ?? 'text/plain';
+        docs.add(DocumentAttachment(path: path, fileName: name, mime: mime));
+        idx = fileMatch.end;
+        continue;
+      }
+      buffer.write(raw[idx]);
+      idx++;
     }
-    if (lastIndex < raw.length) buffer.write(raw.substring(lastIndex));
-    return ChatInputData(text: buffer.toString().trim(), imagePaths: images);
+    return ChatInputData(text: buffer.toString().trim(), imagePaths: images, documents: docs);
   }
 
   Future<void> _maybeGenerateTitle({bool force = false}) async {
@@ -909,6 +1005,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       child: BottomToolsSheet(
                         onPhotos: _onPickPhotos,
                         onCamera: _onPickCamera,
+                        onUpload: _onPickFiles,
                       ),
                       ),
                   ),

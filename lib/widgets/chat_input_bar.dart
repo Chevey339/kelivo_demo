@@ -13,6 +13,8 @@ class ChatInputBarController {
 
   void addImages(List<String> paths) => _state?._addImages(paths);
   void clearImages() => _state?._clearImages();
+  void addFiles(List<DocumentAttachment> docs) => _state?._addFiles(docs);
+  void clearFiles() => _state?._clearFiles();
 }
 
 class ChatInputBar extends StatefulWidget {
@@ -57,6 +59,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
   late TextEditingController _controller;
   bool _searchEnabled = false;
   final List<String> _images = <String>[]; // local file paths
+  final List<DocumentAttachment> _docs = <DocumentAttachment>[]; // files to upload
 
   void _addImages(List<String> paths) {
     if (paths.isEmpty) return;
@@ -65,6 +68,15 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   void _clearImages() {
     setState(() => _images.clear());
+  }
+
+  void _addFiles(List<DocumentAttachment> docs) {
+    if (docs.isEmpty) return;
+    setState(() => _docs.addAll(docs));
+  }
+
+  void _clearFiles() {
+    setState(() => _docs.clear());
   }
 
   void _removeImageAt(int index) async {
@@ -97,10 +109,11 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   void _handleSend() {
     final text = _controller.text.trim();
-    if (text.isEmpty && _images.isEmpty) return;
-    widget.onSend?.call(ChatInputData(text: text, imagePaths: List.of(_images)));
+    if (text.isEmpty && _images.isEmpty && _docs.isEmpty) return;
+    widget.onSend?.call(ChatInputData(text: text, imagePaths: List.of(_images), documents: List.of(_docs)));
     _controller.clear();
     _images.clear();
+    _docs.clear();
     setState(() {});
   }
 
@@ -110,6 +123,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
     final isDark = theme.brightness == Brightness.dark;
     final hasText = _controller.text.trim().isNotEmpty;
     final hasImages = _images.isNotEmpty;
+    final hasDocs = _docs.isNotEmpty;
 
     return SafeArea(
       top: false,
@@ -121,6 +135,52 @@ class _ChatInputBarState extends State<ChatInputBar> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // File attachments (if any)
+            if (hasDocs) ...[
+              SizedBox(
+                height: 48,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _docs.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, idx) {
+                    final d = _docs[idx];
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white12 : theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: isDark ? [] : AppShadows.soft,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.insert_drive_file, size: 18),
+                          const SizedBox(width: 6),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 180),
+                            child: Text(
+                              d.fileName,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() => _docs.removeAt(idx));
+                              // best-effort delete persisted attachment
+                              try { final f = File(d.path); if (f.existsSync()) { f.deleteSync(); } } catch (_) {}
+                            },
+                            child: const Icon(Icons.close, size: 16),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+            ],
             // Image previews (if any)
             if (hasImages) ...[
               SizedBox(
@@ -286,7 +346,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     _SendButton(
-                      enabled: (hasText || hasImages) && !widget.loading,
+                      enabled: (hasText || hasImages || hasDocs) && !widget.loading,
                       loading: widget.loading,
                       onSend: _handleSend,
                       onStop: widget.loading ? widget.onStop : null,

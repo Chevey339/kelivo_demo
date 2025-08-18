@@ -242,6 +242,33 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                     }).toList(),
                   ),
                 ],
+                if (parsed.docs.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: parsed.docs.map((d) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white12 : cs.surface,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.insert_drive_file, size: 16),
+                            const SizedBox(width: 6),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 180),
+                              child: Text(d.fileName, overflow: TextOverflow.ellipsis),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
               ],
             ),
           ),
@@ -283,20 +310,33 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
   }
 
   _ParsedUserContent _parseUserContent(String raw) {
-    final regex = RegExp(r"\[image:(.+?)\]");
+    final imgRe = RegExp(r"\[image:(.+?)\]");
+    final fileRe = RegExp(r"\[file:(.+?)\|(.+?)\|(.+?)\]");
     final images = <String>[];
+    final docs = <_DocRef>[];
     final buffer = StringBuffer();
-    int lastIndex = 0;
-    for (final m in regex.allMatches(raw)) {
-      if (m.start > lastIndex) {
-        buffer.write(raw.substring(lastIndex, m.start));
+    int idx = 0;
+    while (idx < raw.length) {
+      final m1 = imgRe.matchAsPrefix(raw, idx);
+      final m2 = fileRe.matchAsPrefix(raw, idx);
+      if (m1 != null) {
+        final p = m1.group(1)?.trim();
+        if (p != null && p.isNotEmpty) images.add(p);
+        idx = m1.end;
+        continue;
       }
-      final path = m.group(1)?.trim();
-      if (path != null && path.isNotEmpty) images.add(path);
-      lastIndex = m.end;
+      if (m2 != null) {
+        final path = m2.group(1)?.trim() ?? '';
+        final name = m2.group(2)?.trim() ?? 'file';
+        final mime = m2.group(3)?.trim() ?? 'text/plain';
+        docs.add(_DocRef(path: path, fileName: name, mime: mime));
+        idx = m2.end;
+        continue;
+      }
+      buffer.write(raw[idx]);
+      idx++;
     }
-    if (lastIndex < raw.length) buffer.write(raw.substring(lastIndex));
-    return _ParsedUserContent(buffer.toString().trim(), images);
+    return _ParsedUserContent(buffer.toString().trim(), images, docs);
   }
 
   Widget _buildAssistantMessage() {
@@ -534,7 +574,15 @@ class _LoadingIndicatorState extends State<_LoadingIndicator>
 class _ParsedUserContent {
   final String text;
   final List<String> images;
-  _ParsedUserContent(this.text, this.images);
+  final List<_DocRef> docs;
+  _ParsedUserContent(this.text, this.images, this.docs);
+}
+
+class _DocRef {
+  final String path;
+  final String fileName;
+  final String mime;
+  _DocRef({required this.path, required this.fileName, required this.mime});
 }
 
 class _ReasoningSection extends StatefulWidget {
