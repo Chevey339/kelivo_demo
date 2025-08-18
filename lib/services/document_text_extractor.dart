@@ -4,27 +4,22 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:xml/xml.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_pdf_text/flutter_pdf_text.dart';
 import 'package:read_pdf_text/read_pdf_text.dart';
 
 class DocumentTextExtractor {
   static Future<String> extract({required String path, required String mime}) async {
     try {
       if (mime == 'application/pdf') {
-        // Prefer flutter_pdf_text; fallback to read_pdf_text when plugin missing
-        try {
-          final doc = await PDFDoc.fromPath(path);
-          final text = await doc.text;
-          if (text.trim().isNotEmpty) return text;
-        } on MissingPluginException catch (_) {
-          // Fallback below
-        } on PlatformException catch (_) {
-          // Fallback below
-        }
         try {
           final text = await ReadPdfText.getPDFtext(path);
           if (text.trim().isNotEmpty) return text;
-        } catch (_) {}
+        } on PlatformException catch (e) {
+          return '[[Failed to read PDF: ${e.message ?? e.code}]]';
+        } on MissingPluginException catch (_) {
+          return '[[PDF text extraction plugin not available]]';
+        } catch (e) {
+          return '[[Failed to read PDF: $e]]';
+        }
         return '[PDF] Unable to extract text from file.';
       }
       if (mime == 'application/msword') {

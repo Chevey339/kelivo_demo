@@ -888,9 +888,8 @@ extension on _SideDrawerState {
         String value = '';
         bool valid(String s) => RegExp(r'^[0-9]{5,12}$').hasMatch(s.trim());
         String randomQQ() {
-          // Weighted lengths: {5:1,6:20,7:80,8:100,9:240,10:500,11:80}
           final lengths = <int>[5, 6, 7, 8, 9, 10, 11];
-          final weights = <int>[1, 20, 80, 100, 240, 500, 80];
+          final weights = <int>[1, 20, 80, 100, 240, 3000, 80];
           final total = weights.fold<int>(0, (a, b) => a + b);
           final rnd = math.Random();
           int roll = rnd.nextInt(total) + 1;
@@ -966,7 +965,7 @@ extension on _SideDrawerState {
                   bool applied = false;
                   for (int i = 0; i < maxTries; i++) {
                     final qq = randomQQ();
-                    debugPrint(qq);
+                    // debugPrint(qq);
                     final url = 'http://q2.qlogo.cn/headimg_dl?dst_uin=' + qq + '&spec=100';
                     try {
                       final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 5));

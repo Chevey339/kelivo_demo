@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 class UserProvider extends ChangeNotifier {
   static const String _prefsUserNameKey = 'user_name';
@@ -67,12 +69,53 @@ class UserProvider extends ChangeNotifier {
   Future<void> setAvatarFilePath(String path) async {
     final p = path.trim();
     if (p.isEmpty) return;
-    _avatarType = 'file';
-    _avatarValue = p;
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsAvatarTypeKey, _avatarType!);
-    await prefs.setString(_prefsAvatarValueKey, _avatarValue!);
+    // Copy the picked image into app persistent storage so it survives reinstall/update
+    try {
+      final src = File(p);
+      if (!await src.exists()) return;
+      final dir = await getApplicationDocumentsDirectory();
+      final avatars = Directory('${dir.path}/avatars');
+      if (!await avatars.exists()) {
+        await avatars.create(recursive: true);
+      }
+      String ext = '';
+      final dot = p.lastIndexOf('.');
+      if (dot != -1 && dot < p.length - 1) {
+        ext = p.substring(dot + 1).toLowerCase();
+        // Basic sanitize
+        if (ext.length > 6) ext = 'jpg';
+      } else {
+        ext = 'jpg';
+      }
+      final filename = 'avatar_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final dest = File('${avatars.path}/$filename');
+      await src.copy(dest.path);
+
+      // Optionally clean old local avatar if it was stored inside our avatars folder
+      if (_avatarType == 'file' && _avatarValue != null) {
+        try {
+          final old = File(_avatarValue!);
+          if (old.path.contains('/avatars/') && await old.exists()) {
+            await old.delete();
+          }
+        } catch (_) {}
+      }
+
+      _avatarType = 'file';
+      _avatarValue = dest.path;
+      notifyListeners();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsAvatarTypeKey, _avatarType!);
+      await prefs.setString(_prefsAvatarValueKey, _avatarValue!);
+    } catch (_) {
+      // Fallback to original path if copy fails (may still be temporary)
+      _avatarType = 'file';
+      _avatarValue = p;
+      notifyListeners();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsAvatarTypeKey, _avatarType!);
+      await prefs.setString(_prefsAvatarValueKey, _avatarValue!);
+    }
   }
 
   Future<void> resetAvatar() async {
