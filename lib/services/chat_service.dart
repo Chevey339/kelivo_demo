@@ -1,4 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
@@ -119,6 +122,30 @@ class ChatService extends ChangeNotifier {
     final conversation = _conversationsBox.get(id);
     if (conversation == null) return;
 
+    // Collect local file paths referenced by messages in this conversation
+    final Set<String> pathsToMaybeDelete = <String>{};
+    for (final messageId in conversation.messageIds) {
+      final message = _messagesBox.get(messageId);
+      if (message == null) continue;
+      final content = message.content;
+      // [image:/abs/path]
+      final imgRe = RegExp(r"\[image:(.+?)\]");
+      for (final m in imgRe.allMatches(content)) {
+        final pth = m.group(1)?.trim();
+        if (pth != null && pth.isNotEmpty && !pth.startsWith('http') && !pth.startsWith('data:')) {
+          pathsToMaybeDelete.add(pth);
+        }
+      }
+      // [file:/abs/path|filename|mime]
+      final fileRe = RegExp(r"\[file:(.+?)\|(.+?)\|(.+?)\]");
+      for (final m in fileRe.allMatches(content)) {
+        final pth = m.group(1)?.trim();
+        if (pth != null && pth.isNotEmpty && !pth.startsWith('http') && !pth.startsWith('data:')) {
+          pathsToMaybeDelete.add(pth);
+        }
+      }
+    }
+
     // Delete all messages
     for (final messageId in conversation.messageIds) {
       await _messagesBox.delete(messageId);
@@ -127,14 +154,57 @@ class ChatService extends ChangeNotifier {
     // Delete conversation
     await _conversationsBox.delete(id);
 
+    // Remove cached messages
     // Clear cache
     _messagesCache.remove(id);
+
+    // Delete orphaned files (not referenced by any remaining conversation)
+    await _cleanupOrphanUploads();
 
     if (_currentConversationId == id) {
       _currentConversationId = null;
     }
 
     notifyListeners();
+  }
+
+  Set<String> _extractAttachmentPaths(String content) {
+    final out = <String>{};
+    final imgRe = RegExp(r"\[image:(.+?)\]");
+    for (final m in imgRe.allMatches(content)) {
+      final pth = m.group(1)?.trim();
+      if (pth != null && pth.isNotEmpty && !pth.startsWith('http') && !pth.startsWith('data:')) out.add(pth);
+    }
+    final fileRe = RegExp(r"\[file:(.+?)\|(.+?)\|(.+?)\]");
+    for (final m in fileRe.allMatches(content)) {
+      final pth = m.group(1)?.trim();
+      if (pth != null && pth.isNotEmpty && !pth.startsWith('http') && !pth.startsWith('data:')) out.add(pth);
+    }
+    return out;
+  }
+
+  Future<void> _cleanupOrphanUploads() async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final uploadDir = Directory(p.join(docs.path, 'upload'));
+      if (!await uploadDir.exists()) return;
+
+      // Build the set of all referenced paths across all messages
+      final referenced = <String>{};
+      for (final m in _messagesBox.values) {
+        referenced.addAll(_extractAttachmentPaths(m.content));
+      }
+
+      final entries = uploadDir.listSync();
+      for (final ent in entries) {
+        if (ent is File) {
+          final filePath = ent.path;
+          if (!referenced.contains(filePath)) {
+            try { await ent.delete(); } catch (_) {}
+          }
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> restoreConversation(Conversation conversation, List<ChatMessage> messages) async {
@@ -309,6 +379,9 @@ class ChatService extends ChangeNotifier {
       _messagesCache[message.conversationId]!.removeWhere((m) => m.id == messageId);
     }
 
+    // Clean up orphaned upload files that are no longer referenced by any message
+    await _cleanupOrphanUploads();
+
     notifyListeners();
   }
 
@@ -325,6 +398,14 @@ class ChatService extends ChangeNotifier {
     _messagesCache.clear();
     _draftConversations.clear();
     _currentConversationId = null;
+    // Remove uploads directory completely
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final uploadDir = Directory(p.join(docs.path, 'upload'));
+      if (await uploadDir.exists()) {
+        await uploadDir.delete(recursive: true);
+      }
+    } catch (_) {}
     notifyListeners();
   }
 }
