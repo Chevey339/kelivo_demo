@@ -330,6 +330,7 @@ class ChatService extends ChangeNotifier {
     String? reasoningText,
     DateTime? reasoningStartAt,
     DateTime? reasoningFinishedAt,
+    String? translation,
   }) async {
     if (!_initialized) return;
 
@@ -343,6 +344,7 @@ class ChatService extends ChangeNotifier {
       reasoningText: reasoningText ?? message.reasoningText,
       reasoningStartAt: reasoningStartAt ?? message.reasoningStartAt,
       reasoningFinishedAt: reasoningFinishedAt ?? message.reasoningFinishedAt,
+      translation: translation,
     );
 
     await _messagesBox.put(messageId, updatedMessage);

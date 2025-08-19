@@ -18,6 +18,8 @@ class SettingsProvider extends ChangeNotifier {
   static const String _displayAutoCollapseThinkingKey = 'display_auto_collapse_thinking_v1';
   static const String _displayNewChatOnLaunchKey = 'display_new_chat_on_launch_v1';
   static const String _displayChatFontScaleKey = 'display_chat_font_scale_v1';
+  static const String _translateModelKey = 'translate_model_v1';
+  static const String _translatePromptKey = 'translate_prompt_v1';
 
   List<String> _providersOrder = const [];
   List<String> get providersOrder => _providersOrder;
@@ -87,6 +89,18 @@ class SettingsProvider extends ChangeNotifier {
     // load title prompt
     final tp = prefs.getString(_titlePromptKey);
     _titlePrompt = (tp == null || tp.trim().isEmpty) ? defaultTitlePrompt : tp;
+    // load translate model
+    final translateSel = prefs.getString(_translateModelKey);
+    if (translateSel != null && translateSel.contains('::')) {
+      final parts = translateSel.split('::');
+      if (parts.length >= 2) {
+        _translateModelProvider = parts[0];
+        _translateModelId = parts.sublist(1).join('::');
+      }
+    }
+    // load translate prompt
+    final transp = prefs.getString(_translatePromptKey);
+    _translatePrompt = (transp == null || transp.trim().isEmpty) ? defaultTranslatePrompt : transp;
     // load thinking budget (reasoning strength)
     _thinkingBudget = prefs.getInt(_thinkingBudgetKey);
 
@@ -204,6 +218,43 @@ You need to summarize the conversation between user and assistant into a short t
   }
 
   Future<void> resetTitlePrompt() async => setTitlePrompt(defaultTitlePrompt);
+
+  // Translate model and prompt
+  String? _translateModelProvider;
+  String? _translateModelId;
+  String? get translateModelProvider => _translateModelProvider;
+  String? get translateModelId => _translateModelId;
+  String? get translateModelKey => (_translateModelProvider != null && _translateModelId != null)
+      ? '${_translateModelProvider!}::${_translateModelId!}'
+      : null;
+
+  static const String defaultTranslatePrompt = '''You are a translation expert, skilled in translating various languages, and maintaining accuracy, faithfulness, and elegance in translation.
+Next, I will send you text. Please translate it into {target_lang}, and return the translation result directly, without adding any explanations or other content.
+
+Please translate the <source_text> section:
+<source_text>
+{source_text}
+</source_text>''';
+
+  String _translatePrompt = defaultTranslatePrompt;
+  String get translatePrompt => _translatePrompt;
+
+  Future<void> setTranslateModel(String providerKey, String modelId) async {
+    _translateModelProvider = providerKey;
+    _translateModelId = modelId;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_translateModelKey, '$providerKey::$modelId');
+  }
+
+  Future<void> setTranslatePrompt(String prompt) async {
+    _translatePrompt = prompt.trim().isEmpty ? defaultTranslatePrompt : prompt;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_translatePromptKey, _translatePrompt);
+  }
+
+  Future<void> resetTranslatePrompt() async => setTranslatePrompt(defaultTranslatePrompt);
 
   // Reasoning strength / thinking budget
   int? _thinkingBudget; // null = not set, use provider defaults; -1 = auto; 0 = off; >0 = budget tokens

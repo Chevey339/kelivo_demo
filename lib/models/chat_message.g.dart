@@ -29,13 +29,14 @@ class ChatMessageAdapter extends TypeAdapter<ChatMessage> {
       reasoningText: fields[9] as String?,
       reasoningStartAt: fields[10] as DateTime?,
       reasoningFinishedAt: fields[11] as DateTime?,
+      translation: fields[12] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, ChatMessage obj) {
     writer
-      ..writeByte(12)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -59,7 +60,9 @@ class ChatMessageAdapter extends TypeAdapter<ChatMessage> {
       ..writeByte(10)
       ..write(obj.reasoningStartAt)
       ..writeByte(11)
-      ..write(obj.reasoningFinishedAt);
+      ..write(obj.reasoningFinishedAt)
+      ..writeByte(12)
+      ..write(obj.translation);
   }
 
   @override

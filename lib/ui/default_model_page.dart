@@ -57,6 +57,21 @@ class DefaultModelPage extends StatelessWidget {
             },
             configAction: () => _showTitlePromptSheet(context),
           ),
+          const SizedBox(height: 16),
+          _ModelCard(
+            icon: Lucide.Languages,
+            title: zh ? '翻译模型' : 'Translation Model',
+            subtitle: zh ? '用于翻译消息内容的模型，推荐使用快速且准确的模型' : 'Used for translating message content; prefer fast & accurate models',
+            modelProvider: settings.translateModelProvider ?? settings.currentModelProvider,
+            modelId: settings.translateModelId ?? settings.currentModelId,
+            onPick: () async {
+              final sel = await showModelSelector(context);
+              if (sel != null) {
+                await context.read<SettingsProvider>().setTranslateModel(sel.providerKey, sel.modelId);
+              }
+            },
+            configAction: () => _showTranslatePromptSheet(context),
+          ),
         ],
       ),
     );
@@ -131,6 +146,85 @@ class DefaultModelPage extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   zh ? '变量: 对话内容: {content}, 语言: {locale}' : 'Vars: content: {content}, locale: {locale}',
+                  style: TextStyle(color: cs.onSurface.withOpacity(0.6), fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showTranslatePromptSheet(BuildContext context) async {
+    final cs = Theme.of(context).colorScheme;
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final settings = context.read<SettingsProvider>();
+    final controller = TextEditingController(text: settings.translatePrompt);
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: cs.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 12,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(color: cs.onSurface.withOpacity(0.2), borderRadius: BorderRadius.circular(999)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(zh ? '提示词' : 'Prompt', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: controller,
+                  maxLines: 8,
+                  decoration: InputDecoration(
+                    hintText: zh ? '输入用于翻译的提示词模板' : 'Enter prompt template for translation',
+                    filled: true,
+                    fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.outlineVariant.withOpacity(0.4))),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.outlineVariant.withOpacity(0.4))),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.5))),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () async {
+                        await settings.resetTranslatePrompt();
+                        controller.text = settings.translatePrompt;
+                      },
+                      child: Text(zh ? '重置为默认' : 'Reset to default'),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: () async {
+                        await settings.setTranslatePrompt(controller.text.trim());
+                        if (ctx.mounted) Navigator.of(ctx).pop();
+                      },
+                      child: Text(zh ? '保存' : 'Save'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  zh ? '变量：原始文本：{source_text}，目标语言：{target_lang}' : 'Variables: source text: {source_text}, target language: {target_lang}',
                   style: TextStyle(color: cs.onSurface.withOpacity(0.6), fontSize: 12),
                 ),
               ],

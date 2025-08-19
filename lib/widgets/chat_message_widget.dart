@@ -35,6 +35,9 @@ class ChatMessageWidget extends StatefulWidget {
   final DateTime? reasoningStartAt;
   final DateTime? reasoningFinishedAt;
   final VoidCallback? onToggleReasoning;
+  // Optional translation UI props
+  final bool translationExpanded;
+  final VoidCallback? onToggleTranslation;
 
   const ChatMessageWidget({
     super.key,
@@ -55,6 +58,8 @@ class ChatMessageWidget extends StatefulWidget {
     this.reasoningStartAt,
     this.reasoningFinishedAt,
     this.onToggleReasoning,
+    this.translationExpanded = true,
+    this.onToggleTranslation,
   });
 
   @override
@@ -519,6 +524,86 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                           padding: const EdgeInsets.only(left: 4),
                           child: _LoadingIndicator(),
                         ),
+                      // Translation section (collapsible)
+                      if (widget.message.translation != null && widget.message.translation!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            // Match reasoning section background; no border
+                            color: Theme.of(context).colorScheme.primaryContainer
+                                .withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.25 : 0.30),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              InkWell(
+                                onTap: widget.onToggleTranslation,
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Lucide.Languages,
+                                        size: 16,
+                                        color: cs.secondary,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '翻译',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: cs.secondary,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Icon(
+                                        widget.translationExpanded
+                                            ? Lucide.ChevronDown
+                                            : Lucide.ChevronRight,
+                                        size: 18,
+                                        color: cs.secondary,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (widget.translationExpanded) ...[
+                                const SizedBox(height: 8),
+                                if (widget.message.translation == '翻译中...')
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+                                    child: Row(
+                                      children: [
+                                        _LoadingIndicator(),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '翻译中...',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: cs.onSurface.withOpacity(0.5),
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+                                    child: GptMarkdown(
+                                      widget.message.translation!,
+                                    ),
+                                  ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
           ),

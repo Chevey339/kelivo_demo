@@ -20,6 +20,7 @@ import '../providers/model_provider.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import 'model_select_sheet.dart';
+import 'language_select_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -54,6 +55,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   bool _isLoading = false;
   StreamSubscription? _messageStreamSubscription;
   final Map<String, _ReasoningData> _reasoning = <String, _ReasoningData>{};
+  final Map<String, _TranslationData> _translations = <String, _TranslationData>{};
 
   bool _isReasoningModel(String providerKey, String modelId) {
     final settings = context.read<SettingsProvider>();
@@ -299,6 +301,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _currentConversation = conversation;
       _messages = [];
       _reasoning.clear();
+      _translations.clear();
     });
     _scrollToBottomSoon();
   }
@@ -745,6 +748,110 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     });
   }
 
+  // Translate message functionality
+  Future<void> _translateMessage(ChatMessage message) async {
+    // Show language selector
+    final language = await showLanguageSelector(context);
+    if (language == null) return;
+
+    // Check if clear translation is selected
+    if (language.code == '__clear__') {
+      // Clear the translation
+      final updatedMessage = message.copyWith(translation: null);
+      setState(() {
+        final index = _messages.indexWhere((m) => m.id == message.id);
+        if (index != -1) {
+          _messages[index] = updatedMessage;
+        }
+        // Remove translation state
+        _translations.remove(message.id);
+      });
+      await _chatService.updateMessage(message.id, translation: '');
+      return;
+    }
+
+    final settings = context.read<SettingsProvider>();
+    
+    // Check if translation model is set
+    final translateProvider = settings.translateModelProvider ?? settings.currentModelProvider;
+    final translateModelId = settings.translateModelId ?? settings.currentModelId;
+    
+    if (translateProvider == null || translateModelId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先设置翻译模型')),
+      );
+      return;
+    }
+
+    // Extract text content from message (removing reasoning text if present)
+    String textToTranslate = message.content;
+    
+    // Set loading state and initialize translation data
+    final loadingMessage = message.copyWith(translation: '翻译中...');
+    setState(() {
+      final index = _messages.indexWhere((m) => m.id == message.id);
+      if (index != -1) {
+        _messages[index] = loadingMessage;
+      }
+      // Initialize translation state with expanded
+      _translations[message.id] = _TranslationData();
+    });
+
+    try {
+      // Get translation prompt with placeholders replaced
+      String prompt = settings.translatePrompt
+          .replaceAll('{source_text}', textToTranslate)
+          .replaceAll('{target_lang}', language.displayName);
+
+      // Create translation request
+      final provider = settings.getProviderConfig(translateProvider);
+      
+      final translationStream = ChatApiService.sendMessageStream(
+        config: provider,
+        modelId: translateModelId,
+        messages: [
+          {'role': 'user', 'content': prompt}
+        ],
+      );
+
+      final buffer = StringBuffer();
+      
+      await for (final chunk in translationStream) {
+        buffer.write(chunk.content);
+        
+        // Update translation in real-time
+        final updatingMessage = message.copyWith(translation: buffer.toString());
+        setState(() {
+          final index = _messages.indexWhere((m) => m.id == message.id);
+          if (index != -1) {
+            _messages[index] = updatingMessage;
+          }
+        });
+      }
+      
+      // Save final translation
+      await _chatService.updateMessage(message.id, translation: buffer.toString());
+      
+    } catch (e) {
+      // Clear translation on error
+      final errorMessage = message.copyWith(translation: null);
+      setState(() {
+        final index = _messages.indexWhere((m) => m.id == message.id);
+        if (index != -1) {
+          _messages[index] = errorMessage;
+        }
+        // Remove translation state on error
+        _translations.remove(message.id);
+      });
+      
+      await _chatService.updateMessage(message.id, translation: '');
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('翻译失败: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = ((_currentConversation?.title ?? '').trim().isNotEmpty)
@@ -860,7 +967,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               _currentConversation = convo;
               _messages = List.of(msgs);
               _reasoning.clear();
+              _translations.clear();
               for (final m in _messages) {
+                // Restore reasoning state
                 if (m.role == 'assistant') {
                   final txt = m.reasoningText ?? '';
                   if (txt.isNotEmpty || m.reasoningStartAt != null || m.reasoningFinishedAt != null) {
@@ -871,6 +980,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     rd.expanded = false;
                     _reasoning[m.id] = rd;
                   }
+                }
+                // Restore translation state
+                if (m.translation != null && m.translation!.isNotEmpty) {
+                  final td = _TranslationData();
+                  td.expanded = false; // default to collapsed when loading
+                  _translations[m.id] = td;
                 }
               }
             });
@@ -909,6 +1024,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       itemBuilder: (context, index) {
                         final message = _messages[index];
                         final r = _reasoning[message.id];
+                        final t = _translations[message.id];
                         final chatScale = context.watch<SettingsProvider>().chatFontScale;
                         return MediaQuery(
                           data: MediaQuery.of(context).copyWith(
@@ -939,11 +1055,22 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                   });
                                 }
                               : null,
+                          translationExpanded: t?.expanded ?? true,
+                          onToggleTranslation: (message.translation != null && message.translation!.isNotEmpty && t != null)
+                              ? () {
+                                  setState(() {
+                                    t.expanded = !t.expanded;
+                                  });
+                                }
+                              : null,
                           onRegenerate: message.role == 'assistant' ? () {
                             // TODO: Implement regenerate
                           } : null,
                           onResend: message.role == 'user' ? () {
                             _sendMessage(_parseInputFromRaw(message.content));
+                          } : null,
+                          onTranslate: message.role == 'assistant' ? () {
+                            _translateMessage(message);
                           } : null,
                           ),
                         );
@@ -1079,6 +1206,10 @@ class _ReasoningData {
   DateTime? startAt;
   DateTime? finishedAt;
   bool expanded = false;
+}
+
+class _TranslationData {
+  bool expanded = true; // default to expanded when translation is added
 }
 
 class _CurrentModelIcon extends StatelessWidget {

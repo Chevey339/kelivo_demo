@@ -42,6 +42,10 @@ class ChatMessage extends HiveObject {
   @HiveField(11)
   final DateTime? reasoningFinishedAt;
 
+  // Translation field for translated content
+  @HiveField(12)
+  final String? translation;
+
   ChatMessage({
     String? id,
     required this.role,
@@ -55,6 +59,7 @@ class ChatMessage extends HiveObject {
     this.reasoningText,
     this.reasoningStartAt,
     this.reasoningFinishedAt,
+    this.translation,
   })  : id = id ?? const Uuid().v4(),
         timestamp = timestamp ?? DateTime.now();
 
@@ -71,6 +76,7 @@ class ChatMessage extends HiveObject {
     String? reasoningText,
     DateTime? reasoningStartAt,
     DateTime? reasoningFinishedAt,
+    String? translation,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -85,6 +91,7 @@ class ChatMessage extends HiveObject {
       reasoningText: reasoningText ?? this.reasoningText,
       reasoningStartAt: reasoningStartAt ?? this.reasoningStartAt,
       reasoningFinishedAt: reasoningFinishedAt ?? this.reasoningFinishedAt,
+      translation: translation ?? this.translation,
     );
   }
 
@@ -102,6 +109,7 @@ class ChatMessage extends HiveObject {
       'reasoningText': reasoningText,
       'reasoningStartAt': reasoningStartAt?.toIso8601String(),
       'reasoningFinishedAt': reasoningFinishedAt?.toIso8601String(),
+      'translation': translation,
     };
   }
 
@@ -123,6 +131,7 @@ class ChatMessage extends HiveObject {
       reasoningFinishedAt: json['reasoningFinishedAt'] != null
           ? DateTime.parse(json['reasoningFinishedAt'] as String)
           : null,
+      translation: json['translation'] as String?,
     );
   }
 }
