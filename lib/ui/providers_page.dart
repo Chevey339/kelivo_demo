@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../icons/lucide_adapter.dart';
 import 'provider_detail_page.dart';
+import 'import_provider_sheet.dart';
 import 'add_provider_sheet.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import 'package:provider/provider.dart';
@@ -66,7 +67,11 @@ class _ProvidersPageState extends State<ProvidersPage> {
           IconButton(
             tooltip: zh ? '导入' : 'Import',
             icon: Icon(Lucide.Import, color: cs.onSurface),
-            onPressed: () => _showImportSheet(context),
+            onPressed: () async {
+              await showImportProviderSheet(context);
+              if (!mounted) return;
+              setState(() {});
+            },
           ),
           IconButton(
             tooltip: zh ? '新增' : 'Add',

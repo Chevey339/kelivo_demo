@@ -7,6 +7,7 @@ import 'model_detail_sheet.dart';
 import '../providers/model_provider.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'model_select_sheet.dart';
+import 'share_provider_sheet.dart';
 
 class ProviderDetailPage extends StatefulWidget {
   const ProviderDetailPage({super.key, required this.keyName, required this.displayName});
@@ -116,11 +117,9 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         actions: [
           IconButton(
             tooltip: zh ? '分享' : 'Share',
-            icon: Icon(Lucide.Share, color: cs.onSurface),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(zh ? '分享暂未实现' : 'Share not implemented')),
-              );
+            icon: Icon(Lucide.Share2, color: cs.onSurface),
+            onPressed: () async {
+              await showShareProviderSheet(context, widget.keyName);
             },
           ),
           if (_isUserAdded(widget.keyName))
