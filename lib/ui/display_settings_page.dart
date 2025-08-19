@@ -14,7 +14,6 @@ class _DisplaySettingsPageState extends State<DisplaySettingsPage> {
   bool showUpdates = true;
   bool showMessageNav = true;
   bool hapticsOnGenerate = false;
-  double fontScale = 1.0; // 100%
 
   @override
   Widget build(BuildContext context) {
@@ -136,15 +135,15 @@ class _DisplaySettingsPageState extends State<DisplaySettingsPage> {
                         Text('80%', style: TextStyle(color: cs.onSurface.withOpacity(0.7), fontSize: 12)),
                         Expanded(
                           child: Slider(
-                            value: fontScale,
+                            value: context.watch<SettingsProvider>().chatFontScale,
                             min: 0.8,
                             max: 1.5,
                             divisions: 14,
-                            label: '${(fontScale * 100).round()}%',
-                            onChanged: (v) => setState(() => fontScale = v),
+                            label: '${(context.watch<SettingsProvider>().chatFontScale * 100).round()}%',
+                            onChanged: (v) => context.read<SettingsProvider>().setChatFontScale(v),
                           ),
                         ),
-                        Text('${(fontScale * 100).round()}%', style: TextStyle(color: cs.onSurface, fontSize: 12)),
+                        Text('${(context.watch<SettingsProvider>().chatFontScale * 100).round()}%', style: TextStyle(color: cs.onSurface, fontSize: 12)),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -157,7 +156,7 @@ class _DisplaySettingsPageState extends State<DisplaySettingsPage> {
                       ),
                       child: Text(
                         zh ? '这是一个示例的聊天文本' : 'This is a sample chat text',
-                        style: TextStyle(fontSize: 16 * fontScale),
+                        style: TextStyle(fontSize: 16 * context.watch<SettingsProvider>().chatFontScale),
                       ),
                     ),
                   ],

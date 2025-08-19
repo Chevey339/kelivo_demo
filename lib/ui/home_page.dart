@@ -909,7 +909,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       itemBuilder: (context, index) {
                         final message = _messages[index];
                         final r = _reasoning[message.id];
-                        return ChatMessageWidget(
+                        final chatScale = context.watch<SettingsProvider>().chatFontScale;
+                        return MediaQuery(
+                          data: MediaQuery.of(context).copyWith(
+                            textScaleFactor: MediaQuery.of(context).textScaleFactor * chatScale,
+                          ),
+                          child: ChatMessageWidget(
                           message: message,
                           modelIcon: message.role == 'assistant' &&
                                   message.providerId != null &&
@@ -940,6 +945,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           onResend: message.role == 'user' ? () {
                             _sendMessage(_parseInputFromRaw(message.content));
                           } : null,
+                          ),
                         );
                       },
                     ),

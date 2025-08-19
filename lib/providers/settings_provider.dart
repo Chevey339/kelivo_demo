@@ -17,6 +17,7 @@ class SettingsProvider extends ChangeNotifier {
   static const String _displayShowTokenStatsKey = 'display_show_token_stats_v1';
   static const String _displayAutoCollapseThinkingKey = 'display_auto_collapse_thinking_v1';
   static const String _displayNewChatOnLaunchKey = 'display_new_chat_on_launch_v1';
+  static const String _displayChatFontScaleKey = 'display_chat_font_scale_v1';
 
   List<String> _providersOrder = const [];
   List<String> get providersOrder => _providersOrder;
@@ -95,6 +96,7 @@ class SettingsProvider extends ChangeNotifier {
     _showTokenStats = prefs.getBool(_displayShowTokenStatsKey) ?? true;
     _autoCollapseThinking = prefs.getBool(_displayAutoCollapseThinkingKey) ?? true;
     _newChatOnLaunch = prefs.getBool(_displayNewChatOnLaunchKey) ?? true;
+    _chatFontScale = prefs.getDouble(_displayChatFontScaleKey) ?? 1.0;
     notifyListeners();
   }
 
@@ -269,6 +271,18 @@ You need to summarize the conversation between user and assistant into a short t
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_displayNewChatOnLaunchKey, v);
+  }
+
+  // Display: chat font scale (0.8 - 1.5, default 1.0)
+  double _chatFontScale = 1.0;
+  double get chatFontScale => _chatFontScale;
+  Future<void> setChatFontScale(double scale) async {
+    final s = scale.clamp(0.8, 1.5);
+    if (_chatFontScale == s) return;
+    _chatFontScale = s;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_displayChatFontScaleKey, _chatFontScale);
   }
 }
 
