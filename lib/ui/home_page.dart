@@ -21,6 +21,7 @@ import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import 'model_select_sheet.dart';
 import 'language_select_sheet.dart';
+import 'message_more_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -1072,6 +1073,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           onTranslate: message.role == 'assistant' ? () {
                             _translateMessage(message);
                           } : null,
+                          onMore: () {
+                            showMessageMoreSheet(context, message);
+                          },
                           ),
                         );
                       },
