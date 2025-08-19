@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/model_provider.dart';
@@ -44,11 +45,17 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
   final TextEditingController _search = TextEditingController();
   final ScrollController _scroll = ScrollController();
   final Map<String, GlobalKey> _headers = {};
+  final DraggableScrollableController _sheetCtrl = DraggableScrollableController();
+  static const double _initialSize = 0.7;
+  static const double _maxSize = 0.95;
+  ScrollController? _listCtrl; // controller from DraggableScrollableSheet
+  final Map<String, double> _headerOffsets = {}; // Store computed offsets for providers
 
   @override
   void dispose() {
     _search.dispose();
     _scroll.dispose();
+    _sheetCtrl.dispose();
     super.dispose();
   }
 
@@ -99,16 +106,20 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
 
     final query = _search.text.trim().toLowerCase();
     List<Widget> slivers = [];
+    _headerOffsets.clear(); // Clear previous offsets
+    double currentOffset = 0;
 
     // Header drag indicator
-    slivers.add(Column(children: [
+    final dragIndicator = Column(children: [
       const SizedBox(height: 8),
       Container(width: 40, height: 4, decoration: BoxDecoration(color: cs.onSurface.withOpacity(0.2), borderRadius: BorderRadius.circular(999))),
       const SizedBox(height: 8),
-    ]));
+    ]);
+    slivers.add(dragIndicator);
+    currentOffset += 20; // Approximate height of drag indicator
 
     // Search field
-    slivers.add(Padding(
+    final searchField = Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: TextField(
         controller: _search,
@@ -123,7 +134,9 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.4))),
         ),
       ),
-    ));
+    );
+    slivers.add(searchField);
+    currentOffset += 64; // Approximate height of search field
 
     // Favorites section (only when not limited)
     if (favItems.isNotEmpty && widget.limitProviderKey == null) {
@@ -131,8 +144,14 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
       if (items.isNotEmpty) {
         final key = GlobalKey();
         _headers['__fav__'] = key;
+        _headerOffsets['__fav__'] = currentOffset;
         slivers.add(_sectionHeader(context, zh ? '收藏' : 'Favorites', key));
-        slivers.addAll(items.map((m) => _modelTile(context, m)));
+        currentOffset += 44; // Approximate height of section header
+        slivers.addAll(items.map((m) {
+          final tile = _modelTile(context, m);
+          currentOffset += 68; // Approximate height of model tile
+          return tile;
+        }));
       }
     }
 
@@ -142,8 +161,14 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
       if (items.isEmpty) return;
       final key = GlobalKey();
       _headers[pk] = key;
+      _headerOffsets[pk] = currentOffset;
       slivers.add(_sectionHeader(context, g.name, key));
-      slivers.addAll(items.map((m) => _modelTile(context, m)));
+      currentOffset += 44; // Approximate height of section header
+      slivers.addAll(items.map((m) {
+        final tile = _modelTile(context, m);
+        currentOffset += 68; // Approximate height of model tile
+        return tile;
+      }));
     });
 
     // Bottom provider tabs
@@ -158,11 +183,13 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
         curve: Curves.easeOutCubic,
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: DraggableScrollableSheet(
+          controller: _sheetCtrl,
           expand: false,
-          initialChildSize: 0.7,
-          maxChildSize: 0.95,
+          initialChildSize: _initialSize,
+          maxChildSize: _maxSize,
           minChildSize: 0.4,
           builder: (c, controller) {
+            _listCtrl = controller;
             return Column(
               children: [
                 Expanded(
@@ -252,12 +279,7 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: OutlinedButton.icon(
-        onPressed: () {
-          final gk = _headers[key];
-          if (gk != null && gk.currentContext != null) {
-            Scrollable.ensureVisible(gk.currentContext!, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
-          }
-        },
+        onPressed: () async { await _jumpToProvider(key); },
         icon: _BrandAvatar(name: name, size: 16),
         label: Text(name, style: const TextStyle(fontSize: 12)),
         style: OutlinedButton.styleFrom(
@@ -268,6 +290,40 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
         ),
       ),
     );
+  }
+
+  Future<void> _jumpToProvider(String pk) async {
+    // Expand sheet first if needed
+    if (_sheetCtrl.size < _maxSize) {
+      await _sheetCtrl.animateTo(
+        _maxSize,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+      // Wait a bit for the animation to complete
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
+    // Clear search if needed to ensure provider is visible
+    if (_search.text.isNotEmpty) {
+      setState(() => _search.clear());
+      // Wait for the widget tree to rebuild
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+
+    // Use pre-calculated offset
+    final targetOffset = _headerOffsets[pk];
+    if (targetOffset != null && _listCtrl?.hasClients == true) {
+      // Calculate the actual scroll position
+      // Subtract a small offset to show the header at the top with some padding
+      final scrollTo = (targetOffset - 10).clamp(0.0, _listCtrl!.position.maxScrollExtent);
+      
+      await _listCtrl!.animateTo(
+        scrollTo,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   String _displayName(BuildContext context, _ModelItem m) {
