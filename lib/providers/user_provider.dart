@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import '../utils/sandbox_path_resolver.dart';
 
 class UserProvider extends ChangeNotifier {
   static const String _prefsUserNameKey = 'user_name';
@@ -28,7 +29,8 @@ class UserProvider extends ChangeNotifier {
       notifyListeners();
     }
     _avatarType = prefs.getString(_prefsAvatarTypeKey);
-    _avatarValue = prefs.getString(_prefsAvatarValueKey);
+    final rawAvatar = prefs.getString(_prefsAvatarValueKey);
+    _avatarValue = rawAvatar == null ? null : SandboxPathResolver.fix(rawAvatar);
     // Only notify if avatar exists; otherwise rely on name notify above
     if (_avatarType != null && _avatarValue != null) {
       notifyListeners();
@@ -69,9 +71,10 @@ class UserProvider extends ChangeNotifier {
   Future<void> setAvatarFilePath(String path) async {
     final p = path.trim();
     if (p.isEmpty) return;
+    final fixedInput = SandboxPathResolver.fix(p);
     // Copy the picked image into app persistent storage so it survives reinstall/update
     try {
-      final src = File(p);
+      final src = File(fixedInput);
       if (!await src.exists()) return;
       final dir = await getApplicationDocumentsDirectory();
       final avatars = Directory('${dir.path}/avatars');
@@ -79,9 +82,9 @@ class UserProvider extends ChangeNotifier {
         await avatars.create(recursive: true);
       }
       String ext = '';
-      final dot = p.lastIndexOf('.');
+      final dot = fixedInput.lastIndexOf('.');
       if (dot != -1 && dot < p.length - 1) {
-        ext = p.substring(dot + 1).toLowerCase();
+        ext = fixedInput.substring(dot + 1).toLowerCase();
         // Basic sanitize
         if (ext.length > 6) ext = 'jpg';
       } else {
@@ -110,7 +113,7 @@ class UserProvider extends ChangeNotifier {
     } catch (_) {
       // Fallback to original path if copy fails (may still be temporary)
       _avatarType = 'file';
-      _avatarValue = p;
+      _avatarValue = fixedInput;
       notifyListeners();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_prefsAvatarTypeKey, _avatarType!);

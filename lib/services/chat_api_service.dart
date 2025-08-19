@@ -6,6 +6,7 @@ import 'package:http/io_client.dart';
 import '../providers/settings_provider.dart';
 import '../providers/model_provider.dart';
 import '../models/token_usage.dart';
+import '../utils/sandbox_path_resolver.dart';
 
 class ChatApiService {
   static String _mimeFromPath(String path) {
@@ -18,11 +19,12 @@ class ChatApiService {
   }
 
   static Future<String> _encodeBase64File(String path, {bool withPrefix = false}) async {
-    final file = File(path);
+    final fixed = SandboxPathResolver.fix(path);
+    final file = File(fixed);
     final bytes = await file.readAsBytes();
     final b64 = base64Encode(bytes);
     if (withPrefix) {
-      final mime = _mimeFromPath(path);
+      final mime = _mimeFromPath(fixed);
       return 'data:$mime;base64,$b64';
     }
     return b64;

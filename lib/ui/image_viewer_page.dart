@@ -9,7 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
-import 'package:flutter/services.dart';
+import '../utils/sandbox_path_resolver.dart';
 
 class ImageViewerPage extends StatefulWidget {
   const ImageViewerPage({super.key, required this.images, this.initialIndex = 0});
@@ -52,7 +52,9 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
         }
       } catch (_) {}
     }
-    return FileImage(File(src));
+    final fixed = SandboxPathResolver.fix(src);
+    // Use a FileImage with a unique key per path so Hero tags remain stable
+    return FileImage(File(fixed));
   }
 
   Future<void> _shareCurrent() async {
@@ -85,7 +87,8 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
           return;
         }
       } else {
-        final f = File(src);
+        final local = SandboxPathResolver.fix(src);
+        final f = File(local);
         if (await f.exists()) {
           pathToSave = f.path;
         }

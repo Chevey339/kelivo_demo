@@ -10,10 +10,15 @@ import 'providers/chat_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/settings_provider.dart';
 import 'services/chat_service.dart';
+import 'utils/sandbox_path_resolver.dart';
 
 final RouteObserver<ModalRoute<dynamic>> routeObserver = RouteObserver<ModalRoute<dynamic>>();
-void main() {
+
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Cache current Documents directory to fix sandboxed absolute paths on iOS
+  await SandboxPathResolver.init();
   // Enable edge-to-edge to allow content under system bars (Android)
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const MyApp());

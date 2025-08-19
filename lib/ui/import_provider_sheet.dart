@@ -207,8 +207,8 @@ Future<void> showImportProviderSheet(BuildContext context) async {
         top: false,
         child: DraggableScrollableSheet(
           expand: false,
-          initialChildSize: 0.75,
-          maxChildSize: 0.75,
+          initialChildSize: 0.6,
+          maxChildSize: 0.6,
           minChildSize: 0.5,
           builder: (c, sc) => Padding(
             padding: EdgeInsets.fromLTRB(16, 10, 16, 10 + MediaQuery.of(ctx).padding.bottom),

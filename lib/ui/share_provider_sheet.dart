@@ -54,8 +54,8 @@ Future<void> showShareProviderSheet(BuildContext context, String providerKey) as
         top: false,
         child: DraggableScrollableSheet(
           expand: false,
-          initialChildSize: 0.7,
-          maxChildSize: 0.95,
+          initialChildSize: 0.5,
+          maxChildSize: 0.5,
           minChildSize: 0.4,
           builder: (c, sc) => Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),

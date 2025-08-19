@@ -15,6 +15,7 @@ import '../icons/lucide_adapter.dart';
 import '../theme/design_tokens.dart';
 import '../providers/user_provider.dart';
 import 'package:intl/intl.dart';
+import '../utils/sandbox_path_resolver.dart';
 
 class ChatMessageWidget extends StatefulWidget {
   final ChatMessage message;
@@ -130,7 +131,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
     } else if (userProvider.avatarType == 'file' && userProvider.avatarValue != null) {
       avatarContent = ClipOval(
         child: Image.file(
-          File(userProvider.avatarValue!),
+          File(SandboxPathResolver.fix(userProvider.avatarValue!)),
           width: 32,
           height: 32,
           fit: BoxFit.cover,
@@ -270,7 +271,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                               child: Hero(
                                 tag: 'img:$p',
                                 child: Image.file(
-                                  File(p),
+                                  File(SandboxPathResolver.fix(p)),
                                   width: 96,
                                   height: 96,
                                   fit: BoxFit.cover,
@@ -305,14 +306,15 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                           splashColor: cs.primary.withOpacity(0.18),
                           onTap: () async {
                               try {
-                                final f = File(d.path);
+                                final fixed = SandboxPathResolver.fix(d.path);
+                                final f = File(fixed);
                                 if (!(await f.exists())) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(content: Text('文件不存在: ${d.fileName}')),
                                   );
                                   return;
                                 }
-                                final res = await OpenFilex.open(d.path, type: d.mime);
+                                final res = await OpenFilex.open(fixed, type: d.mime);
                                 if (res.type != ResultType.done) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(content: Text('无法打开文件: ${res.message ?? res.type.toString()}')),

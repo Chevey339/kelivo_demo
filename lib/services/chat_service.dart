@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
+import '../utils/sandbox_path_resolver.dart';
 
 class ChatService extends ChangeNotifier {
   static const String _conversationsBoxName = 'conversations';
@@ -37,6 +38,9 @@ class ChatService extends ChangeNotifier {
 
     _conversationsBox = await Hive.openBox<Conversation>(_conversationsBoxName);
     _messagesBox = await Hive.openBox<ChatMessage>(_messagesBoxName);
+
+    // Migrate any persisted message content that references old iOS sandbox paths
+    await _migrateSandboxPaths();
 
     _initialized = true;
     notifyListeners();
@@ -173,14 +177,60 @@ class ChatService extends ChangeNotifier {
     final imgRe = RegExp(r"\[image:(.+?)\]");
     for (final m in imgRe.allMatches(content)) {
       final pth = m.group(1)?.trim();
-      if (pth != null && pth.isNotEmpty && !pth.startsWith('http') && !pth.startsWith('data:')) out.add(pth);
+      if (pth != null && pth.isNotEmpty && !pth.startsWith('http') && !pth.startsWith('data:')) {
+        out.add(SandboxPathResolver.fix(pth));
+      }
     }
     final fileRe = RegExp(r"\[file:(.+?)\|(.+?)\|(.+?)\]");
     for (final m in fileRe.allMatches(content)) {
       final pth = m.group(1)?.trim();
-      if (pth != null && pth.isNotEmpty && !pth.startsWith('http') && !pth.startsWith('data:')) out.add(pth);
+      if (pth != null && pth.isNotEmpty && !pth.startsWith('http') && !pth.startsWith('data:')) {
+        out.add(SandboxPathResolver.fix(pth));
+      }
     }
     return out;
+  }
+
+  Future<void> _migrateSandboxPaths() async {
+    try {
+      // No-op if empty
+      if (_messagesBox.isEmpty) return;
+      final imgRe = RegExp(r"\[image:(.+?)\]");
+      final fileRe = RegExp(r"\[file:(.+?)\|(.+?)\|(.+?)\]");
+
+      for (final key in _messagesBox.keys) {
+        final msg = _messagesBox.get(key);
+        if (msg == null) continue;
+        final content = msg.content;
+        String updated = content;
+        bool changed = false;
+
+        // Rewrite image paths
+        updated = updated.replaceAllMapped(imgRe, (m) {
+          final raw = (m.group(1) ?? '').trim();
+          final fixed = SandboxPathResolver.fix(raw);
+          if (fixed != raw) changed = true;
+          return '[image:$fixed]';
+        });
+
+        // Rewrite file attachment paths
+        updated = updated.replaceAllMapped(fileRe, (m) {
+          final raw = (m.group(1) ?? '').trim();
+          final name = (m.group(2) ?? '').trim();
+          final mime = (m.group(3) ?? '').trim();
+          final fixed = SandboxPathResolver.fix(raw);
+          if (fixed != raw) changed = true;
+          return '[file:$fixed|$name|$mime]';
+        });
+
+        if (changed && updated != content) {
+          final newMsg = msg.copyWith(content: updated);
+          await _messagesBox.put(msg.id, newMsg);
+        }
+      }
+    } catch (_) {
+      // best-effort migration; ignore errors
+    }
   }
 
   Future<void> _cleanupOrphanUploads() async {
