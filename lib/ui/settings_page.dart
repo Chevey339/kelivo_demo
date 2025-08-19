@@ -151,7 +151,7 @@ class SettingsPage extends StatelessWidget {
           ),
           SettingRow(
             icon: Lucide.Boxes,
-            title: Localizations.localeOf(context).languageCode == 'zh' ? '提供商' : 'Providers',
+            title: Localizations.localeOf(context).languageCode == 'zh' ? '供应商' : 'Providers',
             onTap: () {
               Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProvidersPage()));
             },

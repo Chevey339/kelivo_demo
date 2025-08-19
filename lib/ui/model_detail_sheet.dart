@@ -354,14 +354,14 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              zh ? '提供商重写：允许为特定模型自定义提供商设置。' : 'Provider overrides: customize provider for a specific model.',
+              zh ? '供应商重写：允许为特定模型自定义供应商设置。（暂未实现）' : 'Provider overrides: customize provider for a specific model.',
               style: TextStyle(color: cs.onSurface.withOpacity(0.8), fontSize: 13),
             ),
             const SizedBox(height: 8),
             ElevatedButton.icon(
               onPressed: () {},
               icon: Icon(Lucide.Plus, size: 18),
-              label: Text(zh ? '添加提供商重写' : 'Add Provider Override'),
+              label: Text(zh ? '添加供应商重写' : 'Add Provider Override'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: cs.primary,
                 foregroundColor: cs.onPrimary,
@@ -415,7 +415,7 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: Text(
-          zh ? '内置工具仅支持部分 API（例如 Gemini 官方 API）。' : 'Built-in tools currently support limited APIs (e.g., Gemini).',
+          zh ? '内置工具仅支持部分 API（例如 Gemini 官方 API）（暂未实现）。' : 'Built-in tools currently support limited APIs (e.g., Gemini).',
           style: TextStyle(color: cs.onSurface.withOpacity(0.8), fontSize: 13),
         ),
       ),

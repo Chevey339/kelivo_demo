@@ -98,7 +98,10 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         ),
         title: Row(
           children: [
-            _BrandAvatar(name: widget.keyName, size: 22),
+            _BrandAvatar(
+              name: (_nameCtrl.text.isEmpty ? widget.displayName : _nameCtrl.text),
+              size: 22,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -122,14 +125,14 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
           ),
           if (_isUserAdded(widget.keyName))
             IconButton(
-              tooltip: zh ? '删除服务商' : 'Delete Provider',
+              tooltip: zh ? '删除供应商' : 'Delete Provider',
               icon: Icon(Lucide.Trash2, color: cs.error),
               onPressed: () async {
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    title: Text(zh ? '删除服务商' : 'Delete Provider'),
-                    content: Text(zh ? '确定要删除该服务商吗？此操作不可撤销。' : 'Are you sure you want to delete this provider? This cannot be undone.'),
+                    title: Text(zh ? '删除供应商' : 'Delete Provider'),
+                    content: Text(zh ? '确定要删除该供应商吗？此操作不可撤销。' : 'Are you sure you want to delete this provider? This cannot be undone.'),
                     actions: [
                       TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(zh ? '取消' : 'Cancel')),
                       TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(zh ? '删除' : 'Delete', style: const TextStyle(color: Colors.red))),
@@ -141,7 +144,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                   if (!mounted) return;
                   Navigator.of(context).maybePop();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(zh ? '已删除服务商' : 'Provider deleted')),
+                    SnackBar(content: Text(zh ? '已删除供应商' : 'Provider deleted')),
                   );
                 }
               },
@@ -278,7 +281,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     if (cfg == null) {
       // Provider has been removed; avoid recreating it via getProviderConfig.
       return Center(
-        child: Text(zh ? '服务商已删除' : 'Provider removed', style: TextStyle(color: cs.onSurface.withOpacity(0.7))),
+        child: Text(zh ? '供应商已删除' : 'Provider removed', style: TextStyle(color: cs.onSurface.withOpacity(0.7))),
       );
     }
     final models = cfg.models;

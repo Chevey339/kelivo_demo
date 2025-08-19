@@ -61,7 +61,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
           icon: Icon(Lucide.ArrowLeft, size: 22),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        title: Text(zh ? '提供商' : 'Providers'),
+        title: Text(zh ? '供应商' : 'Providers'),
         actions: [
           IconButton(
             tooltip: zh ? '导入' : 'Import',
@@ -252,7 +252,10 @@ class _ProviderCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  _BrandAvatar(name: provider.keyName, size: compact ? 40 : 44),
+                  _BrandAvatar(
+                    name: (cfg.name.isNotEmpty ? cfg.name : provider.keyName),
+                    size: compact ? 40 : 44,
+                  ),
                   Text(
                     (cfg.name.isNotEmpty ? cfg.name : provider.name),
                     maxLines: 1,

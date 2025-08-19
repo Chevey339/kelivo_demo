@@ -289,7 +289,7 @@ class _AddProviderSheetState extends State<_AddProviderSheet>
                   children: [
                     Expanded(
                       child: Text(
-                        zh ? '添加服务商' : 'Add Provider',
+                        zh ? '添加供应商' : 'Add Provider',
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                       ),
                     ),
