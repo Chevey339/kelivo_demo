@@ -536,9 +536,13 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                                 .withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.25 : 0.30),
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                          child: AnimatedSize(
+                            duration: const Duration(milliseconds: 300),
+                            curve: const Cubic(0.2, 0.8, 0.2, 1),
+                            alignment: Alignment.topCenter,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                               InkWell(
                                 onTap: widget.onToggleTranslation,
                                 borderRadius: BorderRadius.circular(12),
@@ -600,7 +604,8 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                                     ),
                                   ),
                               ],
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ],

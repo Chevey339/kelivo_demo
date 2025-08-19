@@ -756,8 +756,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
     // Check if clear translation is selected
     if (language.code == '__clear__') {
-      // Clear the translation
-      final updatedMessage = message.copyWith(translation: null);
+      // Clear the translation (use empty string so UI hides immediately)
+      final updatedMessage = message.copyWith(translation: '');
       setState(() {
         final index = _messages.indexWhere((m) => m.id == message.id);
         if (index != -1) {
@@ -833,8 +833,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       await _chatService.updateMessage(message.id, translation: buffer.toString());
       
     } catch (e) {
-      // Clear translation on error
-      final errorMessage = message.copyWith(translation: null);
+      // Clear translation on error (empty to hide immediately)
+      final errorMessage = message.copyWith(translation: '');
       setState(() {
         final index = _messages.indexWhere((m) => m.id == message.id);
         if (index != -1) {
