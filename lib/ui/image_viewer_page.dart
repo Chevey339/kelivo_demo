@@ -23,11 +23,13 @@ class ImageViewerPage extends StatefulWidget {
   State<ImageViewerPage> createState() => _ImageViewerPageState();
 }
 
-class _ImageViewerPageState extends State<ImageViewerPage> with SingleTickerProviderStateMixin {
+class _ImageViewerPageState extends State<ImageViewerPage> with TickerProviderStateMixin {
   late final PageController _controller;
   late int _index;
   late final AnimationController _restoreCtrl;
   late final List<TransformationController> _zoomCtrls;
+  late final AnimationController _zoomCtrl;
+  VoidCallback? _zoomTick;
 
   double _dragDy = 0.0; // current vertical drag offset
   double _bgOpacity = 1.0; // background dim opacity (0..1)
@@ -53,6 +55,7 @@ class _ImageViewerPageState extends State<ImageViewerPage> with SingleTickerProv
           _bgOpacity = 1.0 - math.min(_dragDy / 300.0, 0.7);
         });
       });
+    _zoomCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 230));
   }
 
   @override
@@ -60,7 +63,37 @@ class _ImageViewerPageState extends State<ImageViewerPage> with SingleTickerProv
     _controller.dispose();
     for (final c in _zoomCtrls) { c.dispose(); }
     _restoreCtrl.dispose();
+    _zoomCtrl.dispose();
     super.dispose();
+  }
+
+  void _animateZoomTo(TransformationController ctrl, {
+    required double toScale,
+    required double toTx,
+    required double toTy,
+  }) {
+    _zoomCtrl.stop();
+    if (_zoomTick != null) {
+      _zoomCtrl.removeListener(_zoomTick!);
+      _zoomTick = null;
+    }
+    final m = ctrl.value.clone();
+    final fromScale = m.getMaxScaleOnAxis();
+    final storage = m.storage;
+    final fromTx = storage[12];
+    final fromTy = storage[13];
+    final curve = CurvedAnimation(parent: _zoomCtrl, curve: Curves.easeOutCubic);
+    _zoomTick = () {
+      final t = curve.value;
+      final s = fromScale + (toScale - fromScale) * t;
+      final x = fromTx + (toTx - fromTx) * t;
+      final y = fromTy + (toTy - fromTy) * t;
+      ctrl.value = Matrix4.identity()
+        ..translate(x, y)
+        ..scale(s);
+    };
+    _zoomCtrl.addListener(_zoomTick!);
+    _zoomCtrl.forward(from: 0);
   }
 
   ImageProvider _providerFor(String src) {
@@ -255,7 +288,7 @@ class _ImageViewerPageState extends State<ImageViewerPage> with SingleTickerProv
                                 final double currentScale = current.getMaxScaleOnAxis();
                                 // Toggle zoom
                                 if (currentScale > 1.01) {
-                                  ctrl.value = Matrix4.identity();
+                                  _animateZoomTo(ctrl, toScale: 1.0, toTx: 0.0, toTy: 0.0);
                                 } else {
                                   final focal = _lastDoubleTapPos ?? (context.size == null
                                       ? const Offset(0, 0)
@@ -263,24 +296,29 @@ class _ImageViewerPageState extends State<ImageViewerPage> with SingleTickerProv
                                   // Convert focal from viewport to child coordinates
                                   final inv = Matrix4.inverted(current);
                                   final focalVector = inv.transform3(Vector3(focal.dx, focal.dy, 0));
-                                  final double targetScale = 2.5;
+                                  final double targetScale = 2.5; // 放大倍率
                                   final double tx = focal.dx - targetScale * focalVector.x;
                                   final double ty = focal.dy - targetScale * focalVector.y;
-                                  ctrl.value = Matrix4.identity()
-                                    ..translate(tx, ty)
-                                    ..scale(targetScale);
+                                  _animateZoomTo(ctrl, toScale: targetScale, toTx: tx, toTy: ty);
                                 }
                                 _lastDoubleTapPos = null;
                               },
-                              child: InteractiveViewer(
-                                transformationController: _zoomCtrls[i],
-                                minScale: 1.0,
-                                maxScale: 5,
-                                panEnabled: true,
-                                scaleEnabled: true,
-                                clipBehavior: Clip.none,
-                                boundaryMargin: const EdgeInsets.all(80),
-                                child: img,
+                              child: AnimatedBuilder(
+                                animation: _zoomCtrls[i],
+                                builder: (context, _) {
+                                  final scale = _zoomCtrls[i].value.getMaxScaleOnAxis();
+                                  final canPan = scale > 1.01;
+                                  return InteractiveViewer(
+                                    transformationController: _zoomCtrls[i],
+                                    minScale: 1.0,
+                                    maxScale: 5,
+                                    panEnabled: canPan,
+                                    scaleEnabled: true,
+                                    clipBehavior: Clip.none,
+                                    boundaryMargin: canPan ? const EdgeInsets.all(80) : EdgeInsets.zero,
+                                    child: img,
+                                  );
+                                },
                               ),
                             ),
                           ),
@@ -310,22 +348,15 @@ class _ImageViewerPageState extends State<ImageViewerPage> with SingleTickerProv
               ],
             ),
           ),
-          // Bottom save button
+          // Bottom share button (no gradient background)
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             child: SafeArea(
               top: false,
-              child: Container(
+              child: Padding(
                 padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment(0, 0.6),
-                    end: Alignment(0, 1),
-                    colors: [Colors.transparent, Colors.black54, Colors.black87],
-                  ),
-                ),
                 child: Center(
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
