@@ -305,11 +305,14 @@ class _AddProviderSheetState extends State<_AddProviderSheet>
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
                   ),
+                  clipBehavior: Clip.antiAlias,
                   child: TabBar(
                     controller: _tab,
                     indicatorColor: cs.primary,
                     labelColor: cs.primary,
                     unselectedLabelColor: cs.onSurface.withOpacity(0.7),
+                    dividerColor: Colors.transparent,
+                    indicatorSize: TabBarIndicatorSize.tab,
                     tabs: const [
                       Tab(text: 'OpenAI'),
                       Tab(text: 'Google'),
