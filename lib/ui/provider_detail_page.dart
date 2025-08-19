@@ -82,6 +82,13 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final zh = Localizations.localeOf(context).languageCode == 'zh';
+    bool _isUserAdded(String key) {
+      const fixed = {
+        'OpenAI', 'Gemini', 'SiliconFlow', 'OpenRouter',
+        'DeepSeek', 'Aliyun', 'Zhipu AI', 'Claude', 'Grok', 'ByteDance',
+      };
+      return !fixed.contains(key);
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -93,8 +100,14 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
           children: [
             _BrandAvatar(name: widget.keyName, size: 22),
             const SizedBox(width: 8),
-            Text(_nameCtrl.text.isEmpty ? widget.displayName : _nameCtrl.text,
-                style: const TextStyle(fontSize: 16)),
+            Expanded(
+              child: Text(
+                _nameCtrl.text.isEmpty ? widget.displayName : _nameCtrl.text,
+                style: const TextStyle(fontSize: 16),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         actions: [
@@ -107,6 +120,32 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
               );
             },
           ),
+          if (_isUserAdded(widget.keyName))
+            IconButton(
+              tooltip: zh ? '删除服务商' : 'Delete Provider',
+              icon: Icon(Lucide.Trash2, color: cs.error),
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: Text(zh ? '删除服务商' : 'Delete Provider'),
+                    content: Text(zh ? '确定要删除该服务商吗？此操作不可撤销。' : 'Are you sure you want to delete this provider? This cannot be undone.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(zh ? '取消' : 'Cancel')),
+                      TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(zh ? '删除' : 'Delete', style: const TextStyle(color: Colors.red))),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await context.read<SettingsProvider>().removeProviderConfig(widget.keyName);
+                  if (!mounted) return;
+                  Navigator.of(context).maybePop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(zh ? '已删除服务商' : 'Provider deleted')),
+                  );
+                }
+              },
+            ),
         ],
       ),
       body: PageView(
@@ -184,7 +223,13 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         _inputRow(context, label: 'API Base URL', controller: _baseCtrl, hint: ProviderConfig.defaultsFor(widget.keyName, displayName: widget.displayName).baseUrl),
         if (_kind == ProviderKind.openai) ...[
           const SizedBox(height: 12),
-          _inputRow(context, label: zh ? 'API 路径' : 'API Path', controller: _pathCtrl, enabled: false, hint: '/chat/completions'),
+          _inputRow(
+            context,
+            label: zh ? 'API 路径' : 'API Path',
+            controller: _pathCtrl,
+            enabled: widget.keyName.toLowerCase() != 'openai',
+            hint: '/chat/completions',
+          ),
           const SizedBox(height: 4),
           _checkboxRow(context, title: zh ? 'Response API (/responses)' : 'Response API (/responses)', value: _useResp, onChanged: (v) => setState(() => _useResp = v)),
         ],
@@ -229,7 +274,13 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   }
 
   Widget _buildModelsTab(BuildContext context, ColorScheme cs, bool zh) {
-    final cfg = context.watch<SettingsProvider>().getProviderConfig(widget.keyName, defaultName: widget.displayName);
+    final cfg = context.watch<SettingsProvider>().providerConfigs[widget.keyName];
+    if (cfg == null) {
+      // Provider has been removed; avoid recreating it via getProviderConfig.
+      return Center(
+        child: Text(zh ? '服务商已删除' : 'Provider removed', style: TextStyle(color: cs.onSurface.withOpacity(0.7))),
+      );
+    }
     final models = cfg.models;
     return Stack(
       children: [

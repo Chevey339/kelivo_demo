@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../icons/lucide_adapter.dart';
 import 'provider_detail_page.dart';
+import 'add_provider_sheet.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
@@ -22,16 +23,35 @@ class _ProvidersPageState extends State<ProvidersPage> {
     final cs = Theme.of(context).colorScheme;
     final zh = Localizations.localeOf(context).languageCode == 'zh';
 
-    _items ??= _providers(zh: zh);
-    final base = _items!;
-    final order = context.watch<SettingsProvider>().providersOrder;
-    // derive ordered view from provider order; append any not in order
-    final map = {for (final p in base) p.keyName: p};
+    // Base, fixed providers (recompute each build so dynamic additions reflect immediately)
+    final base = _providers(zh: zh);
+
+    // Dynamic providers from settings
+    final settings = context.watch<SettingsProvider>();
+    final cfgs = settings.providerConfigs;
+    final baseKeys = {for (final p in base) p.keyName};
+    final dynamicItems = <_Provider>[];
+    cfgs.forEach((key, cfg) {
+      if (!baseKeys.contains(key)) {
+        dynamicItems.add(_Provider(
+          name: (cfg.name.isNotEmpty ? cfg.name : key),
+          keyName: key,
+          enabled: cfg.enabled,
+          modelCount: cfg.models.length,
+        ));
+      }
+    });
+
+    // Merge base + dynamic, then apply saved order
+    final merged = <_Provider>[...base, ...dynamicItems];
+    final order = settings.providersOrder;
+    final map = {for (final p in merged) p.keyName: p};
     final tmp = <_Provider>[];
     for (final k in order) {
       final p = map.remove(k);
       if (p != null) tmp.add(p);
     }
+    // Append any remaining providers not recorded in order
     tmp.addAll(map.values);
     final items = tmp;
 
@@ -51,7 +71,15 @@ class _ProvidersPageState extends State<ProvidersPage> {
           IconButton(
             tooltip: zh ? '新增' : 'Add',
             icon: Icon(Lucide.Plus, color: cs.onSurface),
-            onPressed: () {},
+            onPressed: () async {
+              final createdKey = await showAddProviderSheet(context);
+              if (!mounted) return;
+              if (createdKey != null && createdKey.isNotEmpty) {
+                setState(() {});
+                final msg = zh ? '已添加供应商' : 'Provider added';
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+              }
+            },
           ),
         ],
       ),

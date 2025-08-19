@@ -146,6 +146,37 @@ class SettingsProvider extends ChangeNotifier {
     await prefs.setString(_providerConfigsKey, jsonEncode(map));
   }
 
+  Future<void> removeProviderConfig(String key) async {
+    if (!_providerConfigs.containsKey(key)) return;
+    _providerConfigs.remove(key);
+    // Remove from order
+    _providersOrder = List<String>.from(_providersOrder.where((k) => k != key));
+
+    // Clear selections referencing this provider to avoid re-creating defaults
+    final prefs = await SharedPreferences.getInstance();
+    if (_currentModelProvider == key) {
+      _currentModelProvider = null;
+      _currentModelId = null;
+      await prefs.remove(_selectedModelKey);
+    }
+    if (_titleModelProvider == key) {
+      _titleModelProvider = null;
+      _titleModelId = null;
+      await prefs.remove(_titleModelKey);
+    }
+    if (_translateModelProvider == key) {
+      _translateModelProvider = null;
+      _translateModelId = null;
+      await prefs.remove(_translateModelKey);
+    }
+
+    // Persist updates
+    final map = _providerConfigs.map((k, v) => MapEntry(k, v.toJson()));
+    await prefs.setString(_providerConfigsKey, jsonEncode(map));
+    await prefs.setStringList(_providersOrderKey, _providersOrder);
+    notifyListeners();
+  }
+
   // Favorites (pinned models)
   final Set<String> _pinnedModels = <String>{};
   Set<String> get pinnedModels => Set.unmodifiable(_pinnedModels);
