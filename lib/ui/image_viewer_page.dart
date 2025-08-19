@@ -230,11 +230,11 @@ class _ImageViewerPageState extends State<ImageViewerPage> with SingleTickerProv
                 },
                 itemBuilder: (context, i) {
                   final src = widget.images[i];
-                final img = Image(
-                  image: _providerFor(src),
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white70, size: 64),
-                );
+                  final img = Image(
+                    image: _providerFor(src),
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white70, size: 64),
+                  );
                   // Only transform the current page while dragging
                   final translateY = (i == _index) ? _dragDy : 0.0;
                   final scale = (i == _index) ? (1.0 - math.min(_dragDy / 800.0, 0.15)) : 1.0;
