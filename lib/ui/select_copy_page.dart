@@ -7,10 +7,13 @@ class SelectCopyPage extends StatelessWidget {
   const SelectCopyPage({super.key, required this.message});
   final ChatMessage message;
 
-  void _copyAll(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: message.content));
+  void _copyAll(BuildContext context) async {
+    // Ensure there is a text input connection on iOS before showing system copy UI
+    // Here we bypass system menu by writing directly to clipboard and showing a snackbar
+    await Clipboard.setData(ClipboardData(text: message.content));
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已复制全部')), 
+      const SnackBar(content: Text('已复制全部')),
     );
   }
 
@@ -37,9 +40,11 @@ class SelectCopyPage extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Scrollbar(
             child: SingleChildScrollView(
-              child: SelectableText(
-                message.content,
-                style: const TextStyle(fontSize: 15, height: 1.5),
+              child: SelectionArea(
+                child: Text(
+                  message.content,
+                  style: const TextStyle(fontSize: 15, height: 1.5),
+                ),
               ),
             ),
           ),
@@ -48,4 +53,3 @@ class SelectCopyPage extends StatelessWidget {
     );
   }
 }
-
