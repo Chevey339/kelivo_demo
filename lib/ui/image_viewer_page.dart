@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:vector_math/vector_math_64.dart' show Vector3;
 import 'package:share_plus/share_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
@@ -21,20 +23,43 @@ class ImageViewerPage extends StatefulWidget {
   State<ImageViewerPage> createState() => _ImageViewerPageState();
 }
 
-class _ImageViewerPageState extends State<ImageViewerPage> {
+class _ImageViewerPageState extends State<ImageViewerPage> with SingleTickerProviderStateMixin {
   late final PageController _controller;
   late int _index;
+  late final AnimationController _restoreCtrl;
+  late final List<TransformationController> _zoomCtrls;
+
+  double _dragDy = 0.0; // current vertical drag offset
+  double _bgOpacity = 1.0; // background dim opacity (0..1)
+  bool _dragActive = false; // only when zoom ~ 1.0
+  double _animFrom = 0.0; // for restore animation
+  Offset? _lastDoubleTapPos; // focal point for double-tap zoom
 
   @override
   void initState() {
     super.initState();
     _index = widget.initialIndex.clamp(0, widget.images.isEmpty ? 0 : widget.images.length - 1);
     _controller = PageController(initialPage: _index);
+    _zoomCtrls = List<TransformationController>.generate(
+      widget.images.length,
+      (_) => TransformationController(),
+      growable: false,
+    );
+    _restoreCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 220))
+      ..addListener(() {
+        final t = Curves.easeOutCubic.transform(_restoreCtrl.value);
+        setState(() {
+          _dragDy = _animFrom * (1 - t);
+          _bgOpacity = 1.0 - math.min(_dragDy / 300.0, 0.7);
+        });
+      });
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    for (final c in _zoomCtrls) { c.dispose(); }
+    _restoreCtrl.dispose();
     super.dispose();
   }
 
@@ -55,6 +80,47 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
     final fixed = SandboxPathResolver.fix(src);
     // Use a FileImage with a unique key per path so Hero tags remain stable
     return FileImage(File(fixed));
+  }
+
+  bool _canDragDismiss() {
+    if (_index < 0 || _index >= _zoomCtrls.length) return true;
+    final m = _zoomCtrls[_index].value;
+    final s = m.getMaxScaleOnAxis();
+    // Only allow when scale ~ 1 (not zooming)
+    return (s >= 0.98 && s <= 1.02);
+  }
+
+  void _handleVerticalDragStart(DragStartDetails d) {
+    _dragActive = _canDragDismiss();
+    if (!_dragActive) return;
+    _restoreCtrl.stop();
+  }
+
+  void _handleVerticalDragUpdate(DragUpdateDetails d) {
+    if (!_dragActive) return;
+    final dy = d.delta.dy;
+    if (dy <= 0 && _dragDy <= 0) return; // only handle downward
+    setState(() {
+      _dragDy = math.max(0.0, _dragDy + dy);
+      _bgOpacity = 1.0 - math.min(_dragDy / 300.0, 0.7);
+    });
+  }
+
+  void _handleVerticalDragEnd(DragEndDetails d) {
+    if (!_dragActive) return;
+    _dragActive = false;
+    final v = d.primaryVelocity ?? 0.0; // positive when swiping down
+    const double dismissDistance = 140.0;
+    const double dismissVelocity = 900.0;
+    if (_dragDy > dismissDistance || v > dismissVelocity) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    // animate back
+    _animFrom = _dragDy;
+    _restoreCtrl
+      ..reset()
+      ..forward();
   }
 
   Future<void> _shareCurrent() async {
@@ -138,33 +204,93 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
         systemNavigationBarDividerColor: Colors.transparent,
       ),
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.transparent,
         body: Stack(
           children: [
-            PageView.builder(
-              controller: _controller,
-              itemCount: widget.images.length,
-              onPageChanged: (i) => setState(() => _index = i),
-            itemBuilder: (context, i) {
-              final src = widget.images[i];
-              return Container(
-                color: Colors.black,
-                alignment: Alignment.center,
-                child: Hero(
-                  tag: 'img:$src',
-                  child: InteractiveViewer(
-                    minScale: 0.6,
-                    maxScale: 5,
-                    child: Image(
-                      image: _providerFor(src),
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white70, size: 64),
+            // Dim background behind image; becomes transparent while dragging down
+            Positioned.fill(
+              child: Container(color: Colors.black.withOpacity(_bgOpacity)),
+            ),
+            // Drag-to-dismiss gesture layered over the PageView
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onVerticalDragStart: _handleVerticalDragStart,
+              onVerticalDragUpdate: _handleVerticalDragUpdate,
+              onVerticalDragEnd: _handleVerticalDragEnd,
+              onTap: () => Navigator.of(context).maybePop(),
+              child: PageView.builder(
+                controller: _controller,
+                itemCount: widget.images.length,
+                onPageChanged: (i) {
+                  setState(() {
+                    _index = i;
+                    _dragDy = 0.0;
+                    _bgOpacity = 1.0;
+                  });
+                },
+                itemBuilder: (context, i) {
+                  final src = widget.images[i];
+                final img = Image(
+                  image: _providerFor(src),
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white70, size: 64),
+                );
+                  // Only transform the current page while dragging
+                  final translateY = (i == _index) ? _dragDy : 0.0;
+                  final scale = (i == _index) ? (1.0 - math.min(_dragDy / 800.0, 0.15)) : 1.0;
+                  return Container(
+                    alignment: Alignment.center,
+                    child: Transform.translate(
+                      offset: Offset(0, translateY),
+                      child: Transform.scale(
+                        scale: scale,
+                        child: Hero(
+                          tag: 'img:$src',
+                          child: SizedBox.expand(
+                            child: GestureDetector(
+                              onDoubleTapDown: (d) => _lastDoubleTapPos = d.localPosition,
+                              onDoubleTap: () {
+                                final ctrl = _zoomCtrls[i];
+                                final current = ctrl.value;
+                                final double currentScale = current.getMaxScaleOnAxis();
+                                // Toggle zoom
+                                if (currentScale > 1.01) {
+                                  ctrl.value = Matrix4.identity();
+                                } else {
+                                  final focal = _lastDoubleTapPos ?? (context.size == null
+                                      ? const Offset(0, 0)
+                                      : Offset(context.size!.width / 2, context.size!.height / 2));
+                                  // Convert focal from viewport to child coordinates
+                                  final inv = Matrix4.inverted(current);
+                                  final focalVector = inv.transform3(Vector3(focal.dx, focal.dy, 0));
+                                  final double targetScale = 2.5;
+                                  final double tx = focal.dx - targetScale * focalVector.x;
+                                  final double ty = focal.dy - targetScale * focalVector.y;
+                                  ctrl.value = Matrix4.identity()
+                                    ..translate(tx, ty)
+                                    ..scale(targetScale);
+                                }
+                                _lastDoubleTapPos = null;
+                              },
+                              child: InteractiveViewer(
+                                transformationController: _zoomCtrls[i],
+                                minScale: 1.0,
+                                maxScale: 5,
+                                panEnabled: true,
+                                scaleEnabled: true,
+                                clipBehavior: Clip.none,
+                                boundaryMargin: const EdgeInsets.all(80),
+                                child: img,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              );
-            },
-          ),
+                  );
+                },
+              ),
+            ),
           // Top bar
           SafeArea(
             child: Row(
