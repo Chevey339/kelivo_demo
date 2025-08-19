@@ -22,6 +22,7 @@ class Lucide {
   static const IconData Search = lucide.LucideIcons.search;
   static const IconData Edit = lucide.LucideIcons.book;
   static const IconData Pin = lucide.LucideIcons.pin;
+  static const IconData PinOff = lucide.LucideIcons.pinOff;
   static const IconData Trash = lucide.LucideIcons.trash2;
   static const IconData SunMoon = lucide.LucideIcons.sunMoon;
   static const IconData Palette = lucide.LucideIcons.palette;

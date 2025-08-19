@@ -8,6 +8,7 @@ import '../providers/settings_provider.dart';
 import '../models/chat_item.dart';
 import '../providers/user_provider.dart';
 import '../ui/settings_page.dart';
+import '../ui/chat_history_page.dart';
 import 'package:flutter/services.dart';
 import 'dart:io' show File;
 import 'dart:math' as math;
@@ -512,13 +513,12 @@ class _SideDrawerState extends State<SideDrawer> {
                 children: [
                   Row(
                     children: [
-                      // 左：机器人按钮
                       Material(
                         color: cs.surface,
                         shape: const CircleBorder(),
                         child: InkWell(
                           customBorder: const CircleBorder(),
-                          onTap: () {},
+                          onTap: () => Navigator.of(context).maybePop(),
                           child: Padding(
                             padding: const EdgeInsets.all(10),
                             child: Icon(Lucide.Bot, size: 22, color: cs.primary),
@@ -526,14 +526,17 @@ class _SideDrawerState extends State<SideDrawer> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      // 右：默认助手卡片
+                      // 右：默认助手卡片（仅关闭抽屉）
                       Expanded(
                         child: Material(
                           color: cs.surface,
                           borderRadius: BorderRadius.circular(14),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(14),
-                            onTap: () {},
+                            onTap: () {
+                              // 默认助手点击仅关闭抽屉，避免误跳转
+                              Navigator.of(context).maybePop();
+                            },
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               child: Row(
@@ -567,7 +570,15 @@ class _SideDrawerState extends State<SideDrawer> {
                           borderRadius: BorderRadius.circular(12),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(12),
-                            onTap: () {},
+                            onTap: () async {
+                              Navigator.of(context).pop();
+                              final selectedId = await Navigator.of(context).push<String>(
+                                MaterialPageRoute(builder: (_) => const ChatHistoryPage()),
+                              );
+                              if (selectedId != null && selectedId.isNotEmpty) {
+                                widget.onSelectConversation?.call(selectedId);
+                              }
+                            },
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               child: Row(
