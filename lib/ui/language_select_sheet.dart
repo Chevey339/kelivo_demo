@@ -55,7 +55,7 @@ class _LanguageSelectSheet extends StatefulWidget {
 
 class _LanguageSelectSheetState extends State<_LanguageSelectSheet> {
   final DraggableScrollableController _sheetCtrl = DraggableScrollableController();
-  static const double _initialSize = 0.6;
+  static const double _initialSize = 0.8;
   static const double _maxSize = 0.9;
 
   @override
@@ -187,14 +187,7 @@ class _LanguageSelectSheetState extends State<_LanguageSelectSheet> {
             ),
             child: Row(
               children: [
-                // Globe icon
-                Icon(
-                  Icons.language,
-                  size: 20,
-                  color: cs.onSurface.withOpacity(0.7),
-                ),
-                const SizedBox(width: 8),
-                // Flag
+                // Flag only (remove globe icon)
                 Text(
                   lang.flag,
                   style: const TextStyle(fontSize: 20),
