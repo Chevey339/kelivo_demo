@@ -120,35 +120,48 @@ class _DisplaySettingsPageState extends State<DisplaySettingsPage> {
 
           sectionTitle(zh ? '聊天字体大小' : 'Chat Font Size'),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                const Text('80%'),
-                Expanded(
-                  child: Slider(
-                    value: fontScale,
-                    min: 0.8,
-                    max: 1.5,
-                    divisions: 14,
-                    label: '${(fontScale * 100).round()}%',
-                    onChanged: (v) => setState(() => fontScale = v),
-                  ),
-                ),
-                Text('${(fontScale * 100).round()}%'),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 20),
             child: Container(
-              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: cs.surfaceVariant.withOpacity(0.5),
+                color: cs.surfaceVariant.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.5),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Text(
-                zh ? '这是一个示例的聊天文本' : 'This is a sample chat text',
-                style: TextStyle(fontSize: 16 * fontScale),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text('80%', style: TextStyle(color: cs.onSurface.withOpacity(0.7), fontSize: 12)),
+                        Expanded(
+                          child: Slider(
+                            value: fontScale,
+                            min: 0.8,
+                            max: 1.5,
+                            divisions: 14,
+                            label: '${(fontScale * 100).round()}%',
+                            onChanged: (v) => setState(() => fontScale = v),
+                          ),
+                        ),
+                        Text('${(fontScale * 100).round()}%', style: TextStyle(color: cs.onSurface, fontSize: 12)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.dark ? Colors.white12 : const Color(0xFFF2F3F5),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        zh ? '这是一个示例的聊天文本' : 'This is a sample chat text',
+                        style: TextStyle(fontSize: 16 * fontScale),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
