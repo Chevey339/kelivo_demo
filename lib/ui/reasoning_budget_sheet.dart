@@ -136,7 +136,7 @@ class _ReasoningBudgetSheetState extends State<_ReasoningBudgetSheet> {
         child: DraggableScrollableSheet(
           expand: false,
           initialChildSize: 0.6,
-          maxChildSize: 0.95,
+          maxChildSize: 0.6,
           minChildSize: 0.4,
           builder: (c, controller) {
             return Column(

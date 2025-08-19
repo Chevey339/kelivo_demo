@@ -4,10 +4,13 @@ import '../icons/lucide_adapter.dart';
 import '../models/chat_message.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
+import 'select_copy_page.dart';
 
-Future<void> showMessageMoreSheet(BuildContext context, ChatMessage message) async {
+enum MessageMoreAction { delete }
+
+Future<MessageMoreAction?> showMessageMoreSheet(BuildContext context, ChatMessage message) async {
   final cs = Theme.of(context).colorScheme;
-  await showModalBottomSheet<void>(
+  return showModalBottomSheet<MessageMoreAction?>(
     context: context,
     isScrollControlled: true,
     backgroundColor: cs.surface,
@@ -66,6 +69,7 @@ class _MessageMoreSheetState extends State<_MessageMoreSheet> {
     required String label,
     Color? iconColor,
     bool danger = false,
+    VoidCallback? onTap,
   }) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -82,9 +86,9 @@ class _MessageMoreSheetState extends State<_MessageMoreSheet> {
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => Navigator.of(context).maybePop(),
+          onTap: onTap ?? () => Navigator.of(context).maybePop(),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: borderColor, width: 1),
@@ -151,12 +155,31 @@ class _MessageMoreSheetState extends State<_MessageMoreSheet> {
                   controller: controller,
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                   children: [
-                    _actionItem(icon: Lucide.TextSelect, label: zh ? '选择复制' : 'Select & Copy'),
+                    _actionItem(
+                      icon: Lucide.TextSelect,
+                      label: zh ? '选择复制' : 'Select & Copy',
+                      onTap: () async {
+                        Navigator.of(context).pop();
+                        // Push the select copy page
+                        await Future.delayed(const Duration(milliseconds: 50));
+                        if (!mounted) return;
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => SelectCopyPage(message: widget.message)),
+                        );
+                      },
+                    ),
                     _actionItem(icon: Lucide.BookOpenText, label: zh ? '网页视图渲染' : 'Render Web View'),
                     _actionItem(icon: Lucide.Pencil, label: zh ? '编辑' : 'Edit'),
                     _actionItem(icon: Lucide.Share, label: zh ? '分享' : 'Share'),
                     _actionItem(icon: Lucide.GitFork, label: zh ? '创建分支' : 'Create Branch'),
-                    _actionItem(icon: Lucide.Trash2, label: zh ? '删除' : 'Delete', danger: true),
+                    _actionItem(
+                      icon: Lucide.Trash2,
+                      label: zh ? '删除' : 'Delete',
+                      danger: true,
+                      onTap: () {
+                        Navigator.of(context).pop(MessageMoreAction.delete);
+                      },
+                    ),
 
                     const SizedBox(height: 16),
 

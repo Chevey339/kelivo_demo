@@ -1073,8 +1073,38 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           onTranslate: message.role == 'assistant' ? () {
                             _translateMessage(message);
                           } : null,
-                          onMore: () {
-                            showMessageMoreSheet(context, message);
+                          onMore: () async {
+                            final action = await showMessageMoreSheet(context, message);
+                            if (!mounted) return;
+                            if (action == MessageMoreAction.delete) {
+                              final zh = Localizations.localeOf(context).languageCode == 'zh';
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: Text(zh ? '删除消息' : 'Delete Message'),
+                                  content: Text(zh ? '确定要删除这条消息吗？此操作不可撤销。' : 'Are you sure you want to delete this message? This cannot be undone.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(ctx).pop(false),
+                                      child: Text(zh ? '取消' : 'Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.of(ctx).pop(true),
+                                      child: Text(zh ? '删除' : 'Delete', style: const TextStyle(color: Colors.red)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                final id = message.id;
+                                setState(() {
+                                  _messages.removeWhere((m) => m.id == id);
+                                  _reasoning.remove(id);
+                                  _translations.remove(id);
+                                });
+                                await _chatService.deleteMessage(id);
+                              }
+                            }
                           },
                           ),
                         );

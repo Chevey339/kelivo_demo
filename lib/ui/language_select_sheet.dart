@@ -56,7 +56,7 @@ class _LanguageSelectSheet extends StatefulWidget {
 class _LanguageSelectSheetState extends State<_LanguageSelectSheet> {
   final DraggableScrollableController _sheetCtrl = DraggableScrollableController();
   static const double _initialSize = 0.8;
-  static const double _maxSize = 0.9;
+  static const double _maxSize = 0.8;
 
   @override
   void dispose() {
