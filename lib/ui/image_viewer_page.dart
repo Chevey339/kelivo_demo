@@ -296,7 +296,7 @@ class _ImageViewerPageState extends State<ImageViewerPage> with TickerProviderSt
                                   // Convert focal from viewport to child coordinates
                                   final inv = Matrix4.inverted(current);
                                   final focalVector = inv.transform3(Vector3(focal.dx, focal.dy, 0));
-                                  final double targetScale = 2.5; // 放大倍率
+                                  final double targetScale = 2; // 放大倍率
                                   final double tx = focal.dx - targetScale * focalVector.x;
                                   final double ty = focal.dy - targetScale * focalVector.y;
                                   _animateZoomTo(ctrl, toScale: targetScale, toTx: tx, toTy: ty);
