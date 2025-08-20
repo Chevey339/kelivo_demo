@@ -36,6 +36,7 @@ class ChatInputBar extends StatefulWidget {
     this.reasoningActive = false,
     this.supportsReasoning = true,
     this.showMcpButton = false,
+    this.mcpActive = false,
   });
 
   final ValueChanged<ChatInputData>? onSend;
@@ -54,6 +55,7 @@ class ChatInputBar extends StatefulWidget {
   final bool reasoningActive;
   final bool supportsReasoning;
   final bool showMcpButton;
+  final bool mcpActive;
 
   @override
   State<ChatInputBar> createState() => _ChatInputBarState();
@@ -304,6 +306,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       _CircleIconButton(
                         tooltip: Localizations.localeOf(context).languageCode == 'zh' ? 'MCP服务器' : 'MCP Servers',
                         icon: Lucide.Terminal,
+                        active: widget.mcpActive,
                         onTap: widget.onOpenMcp,
                       ),
                     ],

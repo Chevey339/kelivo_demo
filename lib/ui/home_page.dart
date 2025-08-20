@@ -325,6 +325,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   Future<void> _createNewConversation() async {
     final conversation = await _chatService.createDraftConversation(title: '新对话');
+    // Default-enable MCP: select all connected servers for this conversation
+    try {
+      final mcp = context.read<McpProvider>();
+      final all = mcp.connectedServers.map((s) => s.id).toList(growable: false);
+      if (all.isNotEmpty) {
+        await _chatService.setConversationMcpServers(conversation.id, all);
+      }
+    } catch (_) {}
     setState(() {
       _currentConversation = conversation;
       _messages = [];
@@ -1316,6 +1324,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   },
                   loading: _isLoading,
                   showMcpButton: context.watch<McpProvider>().servers.isNotEmpty,
+                  mcpActive: (() {
+                    final cid = _currentConversation?.id ?? _chatService.currentConversationId;
+                    if (cid == null) return false;
+                    // Watch ChatService to rebuild on selection changes
+                    final selected = context.watch<ChatService>().getConversationMcpServers(cid);
+                    return selected.isNotEmpty;
+                  })(),
                 ),
               ),
             ],
