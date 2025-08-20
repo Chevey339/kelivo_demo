@@ -301,15 +301,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
                         widget.onToggleSearch?.call(_searchEnabled);
                       },
                     ),
-                    if (widget.showMcpButton) ...[
-                      const SizedBox(width: AppSpacing.xs),
-                      _CircleIconButton(
-                        tooltip: Localizations.localeOf(context).languageCode == 'zh' ? 'MCP服务器' : 'MCP Servers',
-                        icon: Lucide.Terminal,
-                        active: widget.mcpActive,
-                        onTap: widget.onOpenMcp,
-                      ),
-                    ],
                     if (widget.supportsReasoning) ...[
                       const SizedBox(width: AppSpacing.xs),
                       _CircleIconButton(
@@ -330,6 +321,15 @@ class _ChatInputBarState extends State<ChatInputBar> {
                             BlendMode.srcIn,
                           ),
                         ),
+                      ),
+                    ],
+                    if (widget.showMcpButton) ...[
+                      const SizedBox(width: AppSpacing.xs),
+                      _CircleIconButton(
+                        tooltip: Localizations.localeOf(context).languageCode == 'zh' ? 'MCP服务器' : 'MCP Servers',
+                        icon: Lucide.Terminal,
+                        active: widget.mcpActive,
+                        onTap: widget.onOpenMcp,
                       ),
                     ],
                   ],
