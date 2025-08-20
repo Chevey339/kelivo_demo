@@ -33,6 +33,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   bool _enabled = true;
   bool _useResp = false; // openai
   bool _vertexAI = false; // google
+  bool _showApiKey = false; // toggle visibility
   // network proxy (per provider)
   bool _proxyEnabled = false;
   final _proxyHostCtrl = TextEditingController();
@@ -220,7 +221,18 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         const SizedBox(height: 12),
         _inputRow(context, label: zh ? '名称' : 'Name', controller: _nameCtrl, hint: widget.displayName),
         const SizedBox(height: 12),
-        _inputRow(context, label: 'API Key', controller: _keyCtrl, hint: zh ? '留空则使用上层默认' : 'Leave empty to use default', obscure: true),
+        _inputRow(
+          context,
+          label: 'API Key',
+          controller: _keyCtrl,
+          hint: zh ? '留空则使用上层默认' : 'Leave empty to use default',
+          obscure: !_showApiKey,
+          suffix: IconButton(
+            tooltip: _showApiKey ? (zh ? '隐藏' : 'Hide') : (zh ? '显示' : 'Show'),
+            icon: Icon(_showApiKey ? Lucide.EyeOff : Lucide.Eye, color: cs.onSurface.withOpacity(0.7), size: 18),
+            onPressed: () => setState(() => _showApiKey = !_showApiKey),
+          ),
+        ),
         const SizedBox(height: 12),
         _inputRow(context, label: 'API Base URL', controller: _baseCtrl, hint: ProviderConfig.defaultsFor(widget.keyName, displayName: widget.displayName).baseUrl),
         if (_kind == ProviderKind.openai) ...[
@@ -546,7 +558,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     );
   }
 
-  Widget _inputRow(BuildContext context, {required String label, required TextEditingController controller, String? hint, bool obscure = false, bool enabled = true}) {
+  Widget _inputRow(BuildContext context, {required String label, required TextEditingController controller, String? hint, bool obscure = false, bool enabled = true, Widget? suffix}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
     return Column(
@@ -565,6 +577,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.4))),
+            suffixIcon: suffix,
           ),
         ),
       ],
