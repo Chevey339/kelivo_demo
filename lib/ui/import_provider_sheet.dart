@@ -31,8 +31,9 @@ List<_ImportResult> _decodeChatBoxJson(BuildContext context, String s) {
   if (openai != null) {
     final apiKey = (openai['apiKey'] ?? '').toString();
     final baseUrl = (openai['baseUrl'] ?? '').toString();
+    final providedName = (openai['name'] ?? '').toString();
     if (apiKey.trim().isNotEmpty) {
-      final name = 'OpenAI-Compat';
+      final name = providedName.isNotEmpty ? providedName : 'OpenAI-Compat';
       final key = uniqueKey('OpenAI', name);
       final cfg = ProviderConfig(
         id: key,
@@ -58,8 +59,9 @@ List<_ImportResult> _decodeChatBoxJson(BuildContext context, String s) {
   if (claude != null) {
     final apiKey = (claude['apiKey'] ?? '').toString();
     final baseUrl = (claude['baseUrl'] ?? '').toString();
+    final providedName = (claude['name'] ?? '').toString();
     if (apiKey.trim().isNotEmpty) {
-      final name = 'Claude';
+      final name = providedName.isNotEmpty ? providedName : 'Claude';
       final key = uniqueKey('Claude', name);
       final cfg = ProviderConfig(
         id: key,
@@ -82,8 +84,9 @@ List<_ImportResult> _decodeChatBoxJson(BuildContext context, String s) {
   final gemini = providers['gemini'] as Map?;
   if (gemini != null) {
     final apiKey = (gemini['apiKey'] ?? '').toString();
+    final providedName = (gemini['name'] ?? '').toString();
     if (apiKey.trim().isNotEmpty) {
-      final name = 'Gemini';
+      final name = providedName.isNotEmpty ? providedName : 'Gemini';
       final key = uniqueKey('Google', name);
       final cfg = ProviderConfig(
         id: key,
