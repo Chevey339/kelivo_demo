@@ -69,4 +69,6 @@ class Lucide {
   static const IconData GitFork = lucide.LucideIcons.gitFork;
   static const IconData Eye = lucide.LucideIcons.eye;
   static const IconData EyeOff = lucide.LucideIcons.eyeOff;
+  static const IconData Clipboard = lucide.LucideIcons.clipboard;
+  static const IconData Sparkles = lucide.LucideIcons.sparkles;
 }

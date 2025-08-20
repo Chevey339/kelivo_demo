@@ -114,21 +114,20 @@ class _McpServerEditSheetState extends State<_McpServerEditSheet> with SingleTic
   }
 
   Widget _transportPicker() {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF7F7F9),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
-      ),
-      padding: const EdgeInsets.all(6),
-      child: Row(
-        children: [
-          _segButton(label: 'Streamable HTTP', selected: _transport == McpTransportType.http, onTap: () => setState(() => _transport = McpTransportType.http)),
-          const SizedBox(width: 8),
-          _segButton(label: 'SSE', selected: _transport == McpTransportType.sse, onTap: () => setState(() => _transport = McpTransportType.sse)),
-        ],
-      ),
+    return Row(
+      children: [
+        _segButton(
+          label: 'Streamable HTTP',
+          selected: _transport == McpTransportType.http,
+          onTap: () => setState(() => _transport = McpTransportType.http),
+        ),
+        const SizedBox(width: 8),
+        _segButton(
+          label: 'SSE',
+          selected: _transport == McpTransportType.sse,
+          onTap: () => setState(() => _transport = McpTransportType.sse),
+        ),
+      ],
     );
   }
 
