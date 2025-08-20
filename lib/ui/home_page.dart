@@ -189,8 +189,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           _currentConversation = recent;
           _messages = List.of(msgs);
           _reasoning.clear();
+          _translations.clear();
+          _toolParts.clear();
           for (final m in _messages) {
             if (m.role == 'assistant') {
+              // Restore reasoning state
               final txt = m.reasoningText ?? '';
               if (txt.isNotEmpty || m.reasoningStartAt != null || m.reasoningFinishedAt != null) {
                 final rd = _ReasoningData();
@@ -200,6 +203,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 rd.expanded = false;
                 _reasoning[m.id] = rd;
               }
+              // Restore tool events persisted for this assistant message
+              final events = _chatService.getToolEvents(m.id);
+              if (events.isNotEmpty) {
+                _toolParts[m.id] = events
+                    .map((e) => ToolUIPart(
+                          id: (e['id'] ?? '').toString(),
+                          toolName: (e['name'] ?? '').toString(),
+                          arguments: (e['arguments'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
+                          content: (e['content']?.toString().isNotEmpty == true) ? e['content'].toString() : null,
+                          loading: !(e['content']?.toString().isNotEmpty == true),
+                        ))
+                    .toList();
+              }
+            }
+            // Restore translation collapsed by default
+            if (m.translation != null && m.translation!.isNotEmpty) {
+              final td = _TranslationData();
+              td.expanded = false;
+              _translations[m.id] = td;
             }
           }
         });
@@ -308,6 +330,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _messages = [];
       _reasoning.clear();
       _translations.clear();
+      _toolParts.clear();
     });
     _scrollToBottomSoon();
   }
@@ -546,6 +569,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             setState(() {
               _toolParts[assistantMessage.id] = parts;
             });
+            // Persist placeholders so they show up when reloading
+            final events = parts
+                .map((p) => {
+                      'id': p.id,
+                      'name': p.toolName,
+                      'arguments': p.arguments,
+                      'content': null,
+                    })
+                .toList();
+            try {
+              await _chatService.setToolEvents(assistantMessage.id, events);
+            } catch (_) {}
           }
 
           // MCP tool results -> hydrate placeholders in-place (avoid extra tool message cards)
@@ -571,6 +606,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   loading: false,
                 ));
               }
+              // Persist each event update
+              try {
+                await _chatService.upsertToolEvent(
+                  assistantMessage.id,
+                  id: r.id,
+                  name: r.name,
+                  arguments: r.arguments,
+                  content: r.content,
+                );
+              } catch (_) {}
             }
             setState(() {
               _toolParts[assistantMessage.id] = parts;
@@ -1066,6 +1111,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               _messages = List.of(msgs);
               _reasoning.clear();
               _translations.clear();
+              _toolParts.clear();
               for (final m in _messages) {
                 // Restore reasoning state
                 if (m.role == 'assistant') {
@@ -1077,6 +1123,19 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     rd.finishedAt = m.reasoningFinishedAt;
                     rd.expanded = false;
                     _reasoning[m.id] = rd;
+                  }
+                  // Restore tool events for this message
+                  final events = _chatService.getToolEvents(m.id);
+                  if (events.isNotEmpty) {
+                    _toolParts[m.id] = events
+                        .map((e) => ToolUIPart(
+                              id: (e['id'] ?? '').toString(),
+                              toolName: (e['name'] ?? '').toString(),
+                              arguments: (e['arguments'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
+                              content: (e['content']?.toString().isNotEmpty == true) ? e['content'].toString() : null,
+                              loading: !(e['content']?.toString().isNotEmpty == true),
+                            ))
+                        .toList();
                   }
                 }
                 // Restore translation state

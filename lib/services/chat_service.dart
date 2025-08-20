@@ -10,9 +10,11 @@ import '../utils/sandbox_path_resolver.dart';
 class ChatService extends ChangeNotifier {
   static const String _conversationsBoxName = 'conversations';
   static const String _messagesBoxName = 'messages';
+  static const String _toolEventsBoxName = 'tool_events_v1';
 
   late Box<Conversation> _conversationsBox;
   late Box<ChatMessage> _messagesBox;
+  late Box _toolEventsBox; // key: assistantMessageId, value: List<Map<String,dynamic>>
   
   String? _currentConversationId;
   final Map<String, List<ChatMessage>> _messagesCache = {};
@@ -38,6 +40,7 @@ class ChatService extends ChangeNotifier {
 
     _conversationsBox = await Hive.openBox<Conversation>(_conversationsBoxName);
     _messagesBox = await Hive.openBox<ChatMessage>(_messagesBoxName);
+    _toolEventsBox = await Hive.openBox(_toolEventsBoxName);
 
     // Migrate any persisted message content that references old iOS sandbox paths
     await _migrateSandboxPaths();
@@ -152,6 +155,10 @@ class ChatService extends ChangeNotifier {
 
     // Delete all messages
     for (final messageId in conversation.messageIds) {
+      final msg = _messagesBox.get(messageId);
+      if (msg != null && msg.role == 'assistant') {
+        try { await _toolEventsBox.delete(msg.id); } catch (_) {}
+      }
       await _messagesBox.delete(messageId);
     }
 
@@ -448,6 +455,50 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Tool events persistence (per assistant message)
+  List<Map<String, dynamic>> getToolEvents(String assistantMessageId) {
+    if (!_initialized) return const <Map<String, dynamic>>[];
+    final v = _toolEventsBox.get(assistantMessageId);
+    if (v is List) {
+      return v
+          .whereType<Map>()
+          .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
+          .toList();
+    }
+    return const <Map<String, dynamic>>[];
+  }
+
+  Future<void> setToolEvents(String assistantMessageId, List<Map<String, dynamic>> events) async {
+    if (!_initialized) await init();
+    await _toolEventsBox.put(assistantMessageId, events);
+    notifyListeners();
+  }
+
+  Future<void> upsertToolEvent(
+    String assistantMessageId, {
+    required String id,
+    required String name,
+    required Map<String, dynamic> arguments,
+    String? content,
+  }) async {
+    if (!_initialized) await init();
+    final list = List<Map<String, dynamic>>.of(getToolEvents(assistantMessageId));
+    final idx = list.indexWhere((e) => (e['id']?.toString() ?? '') == id || (e['name']?.toString() ?? '') == name);
+    final record = <String, dynamic>{
+      'id': id,
+      'name': name,
+      'arguments': arguments,
+      'content': content,
+    };
+    if (idx >= 0) {
+      list[idx] = record;
+    } else {
+      list.add(record);
+    }
+    await _toolEventsBox.put(assistantMessageId, list);
+    notifyListeners();
+  }
+
   Future<void> deleteMessage(String messageId) async {
     if (!_initialized) return;
 
@@ -461,6 +512,10 @@ class ChatService extends ChangeNotifier {
     }
 
     await _messagesBox.delete(messageId);
+    // Remove any tool events linked to this assistant message
+    if (message.role == 'assistant') {
+      try { await _toolEventsBox.delete(message.id); } catch (_) {}
+    }
 
     // Update cache
     if (_messagesCache.containsKey(message.conversationId)) {
@@ -483,6 +538,7 @@ class ChatService extends ChangeNotifier {
 
     await _messagesBox.clear();
     await _conversationsBox.clear();
+    await _toolEventsBox.clear();
     _messagesCache.clear();
     _draftConversations.clear();
     _currentConversationId = null;
