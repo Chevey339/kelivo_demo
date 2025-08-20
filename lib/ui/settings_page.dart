@@ -6,6 +6,7 @@ import 'default_model_page.dart';
 import 'providers_page.dart';
 import 'display_settings_page.dart';
 import '../services/chat_service.dart';
+import 'mcp_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -158,7 +159,13 @@ class SettingsPage extends StatelessWidget {
           ),
           SettingRow(icon: Lucide.Earth, title: Localizations.localeOf(context).languageCode == 'zh' ? '搜索服务' : 'Search', onTap: () {}),
           SettingRow(icon: Lucide.Volume2, title: Localizations.localeOf(context).languageCode == 'zh' ? '语音服务' : 'TTS', onTap: () {}),
-          SettingRow(icon: Lucide.Terminal, title: Localizations.localeOf(context).languageCode == 'zh' ? 'MCP' : 'MCP', onTap: () {}),
+          SettingRow(
+            icon: Lucide.Terminal,
+            title: Localizations.localeOf(context).languageCode == 'zh' ? 'MCP' : 'MCP',
+            onTap: () {
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const McpPage()));
+            },
+          ),
 
           header(Localizations.localeOf(context).languageCode == 'zh' ? '数据设置' : 'Data'),
           SettingRow(icon: Lucide.Database, title: Localizations.localeOf(context).languageCode == 'zh' ? '数据备份' : 'Backup', onTap: () {}),

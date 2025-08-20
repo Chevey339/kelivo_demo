@@ -9,6 +9,7 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'providers/chat_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/settings_provider.dart';
+import 'providers/mcp_provider.dart';
 import 'services/chat_service.dart';
 import 'utils/sandbox_path_resolver.dart';
 
@@ -35,6 +36,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => UserProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => ChatService()),
+        ChangeNotifierProvider(create: (_) => McpProvider()),
       ],
       child: Builder(
         builder: (context) {

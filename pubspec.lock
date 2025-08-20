@@ -594,6 +594,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.11.1"
+  mcp_client:
+    dependency: "direct main"
+    description:
+      name: mcp_client
+      sha256: c28a5c06f1056ebfbe5f571bd2a24138ad9f4556540fb0d4171f5aceb85acd61
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "1.0.1"
   meta:
     dependency: transitive
     description:
