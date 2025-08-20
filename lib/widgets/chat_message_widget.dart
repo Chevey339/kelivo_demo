@@ -916,7 +916,7 @@ class _ToolCallItem extends StatelessWidget {
         final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
         return SafeArea(
           child: FractionallySizedBox(
-            heightFactor: 0.9,
+            heightFactor: 0.6,
             child: Padding(
               padding: EdgeInsets.fromLTRB(16, 16, 16, bottomInset + 20),
               child: SingleChildScrollView(

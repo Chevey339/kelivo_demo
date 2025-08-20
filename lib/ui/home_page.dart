@@ -62,6 +62,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   final Map<String, _ReasoningData> _reasoning = <String, _ReasoningData>{};
   final Map<String, _TranslationData> _translations = <String, _TranslationData>{};
   final Map<String, List<ToolUIPart>> _toolParts = <String, List<ToolUIPart>>{}; // assistantMessageId -> parts
+  McpProvider? _mcpProvider;
+  Set<String> _connectedMcpIds = <String>{};
 
   bool _isReasoningModel(String providerKey, String modelId) {
     final settings = context.read<SettingsProvider>();
@@ -161,6 +163,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _chatService = context.read<ChatService>();
     _initChat();
 
+    // Attach MCP provider listener to auto-join new connected servers
+    try {
+      _mcpProvider = context.read<McpProvider>();
+      _connectedMcpIds = _mcpProvider!.connectedServers.map((s) => s.id).toSet();
+      _mcpProvider!.addListener(_onMcpChanged);
+    } catch (_) {}
+
     // 监听键盘弹出
     _inputFocus.addListener(() {
       if (_inputFocus.hasFocus) {
@@ -227,6 +236,26 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         });
         _scrollToBottomSoon();
       }
+    }
+  }
+
+  // _onMcpChanged defined below; remove listener in the main dispose at bottom
+
+  Future<void> _onMcpChanged() async {
+    if (!mounted) return;
+    final prov = _mcpProvider;
+    if (prov == null) return;
+    final now = prov.connectedServers.map((s) => s.id).toSet();
+    final added = now.difference(_connectedMcpIds);
+    _connectedMcpIds = now;
+    if (added.isEmpty) return;
+
+    final cid = _currentConversation?.id ?? _chatService.currentConversationId;
+    if (cid == null) return;
+    final selected = _chatService.getConversationMcpServers(cid).toSet();
+    final merged = selected.union(added);
+    if (merged.length != selected.length) {
+      await _chatService.setConversationMcpServers(cid, merged.toList());
     }
   }
 
@@ -1154,6 +1183,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 }
               }
             });
+            // Default-enable currently connected MCP servers for this conversation
+            try {
+              final connected = context.read<McpProvider>().connectedServers.map((s) => s.id).toSet();
+              if (connected.isNotEmpty) {
+                final selected = _chatService.getConversationMcpServers(id).toSet();
+                final merged = selected.union(connected);
+                if (merged.length != selected.length) {
+                  // Fire-and-forget; no need to block UI thread here
+                  _chatService.setConversationMcpServers(id, merged.toList());
+                }
+              }
+            } catch (_) {}
             _scrollToBottomSoon();
           }
           // Close the drawer when a conversation is picked
@@ -1398,6 +1439,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
+    _mcpProvider?.removeListener(_onMcpChanged);
     _inputFocus.dispose();
     _inputController.dispose();
     _scrollController.dispose();
