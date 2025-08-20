@@ -210,8 +210,15 @@ Future<void> showImportProviderSheet(BuildContext context) async {
           initialChildSize: 0.6,
           maxChildSize: 0.6,
           minChildSize: 0.5,
-          builder: (c, sc) => Padding(
-            padding: EdgeInsets.fromLTRB(16, 10, 16, 10 + MediaQuery.of(ctx).padding.bottom),
+          builder: (c, sc) => AnimatedPadding(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.fromLTRB(
+              16,
+              10,
+              16,
+              10 + MediaQuery.of(ctx).padding.bottom + MediaQuery.of(ctx).viewInsets.bottom,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

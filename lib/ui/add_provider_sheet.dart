@@ -268,8 +268,8 @@ class _AddProviderSheetState extends State<_AddProviderSheet>
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: DraggableScrollableSheet(
           expand: false,
-          initialChildSize: 0.9,
-          maxChildSize: 0.95,
+          initialChildSize: 0.8,
+          maxChildSize: 0.8,
           minChildSize: 0.5,
           builder: (c, controller) => Column(
             children: [
