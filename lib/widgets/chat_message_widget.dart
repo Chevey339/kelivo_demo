@@ -39,6 +39,8 @@ class ChatMessageWidget extends StatefulWidget {
   // Optional translation UI props
   final bool translationExpanded;
   final VoidCallback? onToggleTranslation;
+  // MCP tool calls/results mixed-in cards
+  final List<ToolUIPart>? toolParts;
 
   const ChatMessageWidget({
     super.key,
@@ -61,6 +63,7 @@ class ChatMessageWidget extends StatefulWidget {
     this.onToggleReasoning,
     this.translationExpanded = true,
     this.onToggleTranslation,
+    this.toolParts,
   });
 
   @override
@@ -158,6 +161,32 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
         shape: BoxShape.circle,
       ),
       child: avatarContent,
+    );
+  }
+
+  Widget _buildToolMessage() {
+    // Parse JSON payload embedded in tool message content
+    String toolName = 'tool';
+    Map<String, dynamic> args = const {};
+    String result = '';
+    try {
+      final obj = jsonDecode(widget.message.content) as Map<String, dynamic>;
+      toolName = (obj['tool'] ?? 'tool').toString();
+      final a = obj['arguments'];
+      if (a is Map<String, dynamic>) args = a;
+      result = (obj['result'] ?? '').toString();
+    } catch (_) {}
+
+    final part = ToolUIPart(
+      id: widget.message.id,
+      toolName: toolName,
+      arguments: args,
+      content: result,
+      loading: false,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: _ToolCallItem(part: part),
     );
   }
 
@@ -497,6 +526,19 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
               onToggle: widget.onToggleReasoning,
             ),
           const SizedBox(height: 8),
+          // Tool call placeholders before content
+          if ((widget.toolParts ?? const <ToolUIPart>[]).isNotEmpty) ...[
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: widget.toolParts!
+                  .map((p) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _ToolCallItem(part: p),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 8),
+          ],
           // Message content with markdown support (fill available width)
           Container(
             width: double.infinity,
@@ -666,9 +708,9 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return widget.message.role == 'user'
-        ? _buildUserMessage()
-        : _buildAssistantMessage();
+    if (widget.message.role == 'user') return _buildUserMessage();
+    if (widget.message.role == 'tool') return _buildToolMessage();
+    return _buildAssistantMessage();
   }
 }
 
@@ -750,6 +792,184 @@ class _DocRef {
   final String fileName;
   final String mime;
   _DocRef({required this.path, required this.fileName, required this.mime});
+}
+
+// UI data for MCP tool calls/results
+class ToolUIPart {
+  final String id;
+  final String toolName;
+  final Map<String, dynamic> arguments;
+  final String? content; // null means still loading/result not yet available
+  final bool loading;
+  const ToolUIPart({
+    required this.id,
+    required this.toolName,
+    required this.arguments,
+    this.content,
+    this.loading = false,
+  });
+}
+
+class _ToolCallItem extends StatelessWidget {
+  const _ToolCallItem({required this.part});
+  final ToolUIPart part;
+
+  IconData _iconFor(String name) {
+    switch (name) {
+      case 'create_memory':
+      case 'edit_memory':
+        return Lucide.Library;
+      case 'delete_memory':
+        return Lucide.Trash2;
+      case 'search_web':
+        return Lucide.Earth;
+      default:
+        return Lucide.Wrench;
+    }
+  }
+
+
+  String _titleFor(BuildContext context, String name, Map<String, dynamic> args, {required bool isResult}) {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    switch (name) {
+      case 'create_memory':
+        return zh ? (isResult ? '工具结果 · 创建记忆' : '调用工具 · 创建记忆') : (isResult ? 'Tool Result · Create Memory' : 'Tool Call · Create Memory');
+      case 'edit_memory':
+        return zh ? (isResult ? '工具结果 · 编辑记忆' : '调用工具 · 编辑记忆') : (isResult ? 'Tool Result · Edit Memory' : 'Tool Call · Edit Memory');
+      case 'delete_memory':
+        return zh ? (isResult ? '工具结果 · 删除记忆' : '调用工具 · 删除记忆') : (isResult ? 'Tool Result · Delete Memory' : 'Tool Call · Delete Memory');
+      case 'search_web':
+        final q = (args['query'] ?? '').toString();
+        return zh ? (isResult ? '工具结果 · 联网检索: $q' : '调用工具 · 联网检索: $q') : (isResult ? 'Tool Result · Web Search: $q' : 'Tool Call · Web Search: $q');
+      default:
+        return zh ? (isResult ? '工具结果: $name' : '调用工具: $name') : (isResult ? 'Tool Result: $name' : 'Tool Call: $name');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = cs.primaryContainer.withOpacity(isDark ? 0.25 : 0.30);
+    final fg = cs.onPrimaryContainer;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showDetail(context),
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: part.loading
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
+                        ),
+                      )
+                    : Icon(_iconFor(part.toolName), size: 20, color: cs.secondary),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _titleFor(context, part.toolName, part.arguments, isResult: !part.loading),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: cs.secondary),
+                    ),
+                    // No inline result preview; tap to view details in sheet
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDetail(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final argsPretty = const JsonEncoder.withIndent('  ').convert(part.arguments);
+    final resultText = (part.content ?? '').isNotEmpty ? part.content! : (zh ? '（暂无结果）' : '(No result yet)');
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: cs.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+        return SafeArea(
+          child: FractionallySizedBox(
+            heightFactor: 0.9,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, bottomInset + 20),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(_iconFor(part.toolName), size: 18, color: cs.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _titleFor(context, part.toolName, part.arguments, isResult: !part.loading),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(zh ? '参数' : 'Arguments', style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.6))),
+                    const SizedBox(height: 6),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF7F7F9),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+                      ),
+                      child: SelectableText(argsPretty, style: const TextStyle(fontSize: 12)),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(zh ? '结果' : 'Result', style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.6))),
+                    const SizedBox(height: 6),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF7F7F9),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+                      ),
+                      child: SelectableText(resultText, style: const TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 ImageProvider _imageProviderFor(String src) {

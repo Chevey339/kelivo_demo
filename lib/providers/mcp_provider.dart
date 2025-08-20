@@ -157,6 +157,9 @@ class McpProvider extends ChangeNotifier {
   McpStatus statusFor(String id) => _status[id] ?? McpStatus.idle;
   String? errorFor(String id) => _errors[id];
   bool get hasAnyEnabled => _servers.any((s) => s.enabled);
+  bool isConnected(String id) => _clients.containsKey(id) && statusFor(id) == McpStatus.connected;
+  List<McpServerConfig> get connectedServers =>
+      _servers.where((s) => statusFor(s.id) == McpStatus.connected).toList(growable: false);
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -371,5 +374,34 @@ class McpProvider extends ChangeNotifier {
     } catch (_) {
       // ignore tool refresh errors; status stays connected
     }
+  }
+
+  Future<void> ensureConnected(String id) async {
+    if (!isConnected(id)) {
+      await connect(id);
+    }
+  }
+
+  Future<mcp.CallToolResult?> callTool(String serverId, String toolName, Map<String, dynamic> args) async {
+    try {
+      await ensureConnected(serverId);
+      final client = _clients[serverId];
+      if (client == null) return null;
+      final result = await client.callTool(toolName, args);
+      return result;
+    } catch (e) {
+      _status[serverId] = McpStatus.error;
+      _errors[serverId] = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  List<McpToolConfig> getEnabledToolsForServers(Set<String> serverIds) {
+    final tools = <McpToolConfig>[];
+    for (final s in _servers.where((s) => serverIds.contains(s.id))) {
+      tools.addAll(s.tools.where((t) => t.enabled));
+    }
+    return tools;
   }
 }

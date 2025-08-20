@@ -23,13 +23,14 @@ class ConversationAdapter extends TypeAdapter<Conversation> {
       updatedAt: fields[3] as DateTime?,
       messageIds: (fields[4] as List?)?.cast<String>(),
       isPinned: fields[5] as bool,
+      mcpServerIds: (fields[6] as List?)?.cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Conversation obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -41,7 +42,9 @@ class ConversationAdapter extends TypeAdapter<Conversation> {
       ..writeByte(4)
       ..write(obj.messageIds)
       ..writeByte(5)
-      ..write(obj.isPinned);
+      ..write(obj.isPinned)
+      ..writeByte(6)
+      ..write(obj.mcpServerIds);
   }
 
   @override

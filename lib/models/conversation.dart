@@ -23,6 +23,10 @@ class Conversation extends HiveObject {
   @HiveField(5)
   bool isPinned;
 
+  // Per-conversation enabled MCP servers (by server id)
+  @HiveField(6)
+  List<String> mcpServerIds;
+
   Conversation({
     String? id,
     required this.title,
@@ -30,10 +34,12 @@ class Conversation extends HiveObject {
     DateTime? updatedAt,
     List<String>? messageIds,
     this.isPinned = false,
+    List<String>? mcpServerIds,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
-        messageIds = messageIds ?? [];
+        messageIds = messageIds ?? [],
+        mcpServerIds = mcpServerIds ?? [];
 
   Conversation copyWith({
     String? id,
@@ -42,6 +48,7 @@ class Conversation extends HiveObject {
     DateTime? updatedAt,
     List<String>? messageIds,
     bool? isPinned,
+    List<String>? mcpServerIds,
   }) {
     return Conversation(
       id: id ?? this.id,
@@ -50,6 +57,7 @@ class Conversation extends HiveObject {
       updatedAt: updatedAt ?? this.updatedAt,
       messageIds: messageIds ?? this.messageIds,
       isPinned: isPinned ?? this.isPinned,
+      mcpServerIds: mcpServerIds ?? this.mcpServerIds,
     );
   }
 
@@ -61,6 +69,7 @@ class Conversation extends HiveObject {
       'updatedAt': updatedAt.toIso8601String(),
       'messageIds': messageIds,
       'isPinned': isPinned,
+      'mcpServerIds': mcpServerIds,
     };
   }
 
@@ -72,6 +81,7 @@ class Conversation extends HiveObject {
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       messageIds: (json['messageIds'] as List<dynamic>).cast<String>(),
       isPinned: json['isPinned'] as bool? ?? false,
+      mcpServerIds: (json['mcpServerIds'] as List?)?.cast<String>() ?? const <String>[],
     );
   }
 }

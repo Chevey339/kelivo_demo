@@ -15,15 +15,19 @@ import '../providers/settings_provider.dart';
 import '../services/chat_service.dart';
 import '../services/chat_api_service.dart';
 import '../services/document_text_extractor.dart';
+import '../services/mcp_tool_service.dart';
 import '../models/token_usage.dart';
 import '../providers/model_provider.dart';
+import '../providers/mcp_provider.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import 'model_select_sheet.dart';
 import 'language_select_sheet.dart';
 import 'message_more_sheet.dart';
+import 'mcp_conversation_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
+import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
@@ -57,6 +61,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   StreamSubscription? _messageStreamSubscription;
   final Map<String, _ReasoningData> _reasoning = <String, _ReasoningData>{};
   final Map<String, _TranslationData> _translations = <String, _TranslationData>{};
+  final Map<String, List<ToolUIPart>> _toolParts = <String, List<ToolUIPart>>{}; // assistantMessageId -> parts
 
   bool _isReasoningModel(String providerKey, String modelId) {
     final settings = context.read<SettingsProvider>();
@@ -357,6 +362,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _messages.add(assistantMessage);
     });
 
+    // Reset tool parts for this new assistant message
+    _toolParts.remove(assistantMessage.id);
+
     // Initialize reasoning state only when enabled and model supports it
     final supportsReasoning = _isReasoningModel(providerKey, modelId);
     final enableReasoning = supportsReasoning && _isReasoningEnabled(settings.thinkingBudget);
@@ -425,12 +433,54 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     TokenUsage? usage;
 
     try {
+      // Prepare MCP tools (if any selected for this conversation)
+      List<Map<String, dynamic>>? toolDefs;
+      Future<String> Function(String, Map<String, dynamic>)? onToolCall;
+      final convoId = _currentConversation?.id ?? _chatService.currentConversationId;
+      if (convoId != null) {
+        final mcp = context.read<McpProvider>();
+        final toolSvc = context.read<McpToolService>();
+        final tools = toolSvc.listAvailableToolsForConversation(mcp, _chatService, convoId);
+        if (tools.isNotEmpty) {
+          toolDefs = tools.map((t) {
+            final props = <String, dynamic>{
+              for (final p in t.params) p.name: {'type': 'string'},
+            };
+            final required = [for (final p in t.params.where((e) => e.required)) p.name];
+            return {
+              'type': 'function',
+              'function': {
+                'name': t.name,
+                if ((t.description ?? '').isNotEmpty) 'description': t.description,
+                'parameters': {
+                  'type': 'object',
+                  'properties': props,
+                  'required': required,
+                },
+              }
+            };
+          }).toList();
+          onToolCall = (name, args) async {
+            final text = await toolSvc.callToolTextForConversation(
+              mcp,
+              _chatService,
+              conversationId: convoId,
+              toolName: name,
+              arguments: args,
+            );
+            return text;
+          };
+        }
+      }
+
       final stream = ChatApiService.sendMessageStream(
         config: config,
         modelId: modelId,
         messages: apiMessages,
         userImagePaths: input.imagePaths,
         thinkingBudget: settings.thinkingBudget,
+        tools: toolDefs,
+        onToolCall: onToolCall,
       );
 
       Future<void> finish({bool generateTitle = true}) async {
@@ -488,7 +538,54 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           );
         }
 
+          // MCP tool call placeholders
+          if ((chunk.toolCalls ?? const []).isNotEmpty) {
+            final parts = chunk.toolCalls!
+                .map((c) => ToolUIPart(id: c.id, toolName: c.name, arguments: c.arguments, loading: true))
+                .toList();
+            setState(() {
+              _toolParts[assistantMessage.id] = parts;
+            });
+          }
+
+          // MCP tool results -> hydrate placeholders in-place (avoid extra tool message cards)
+          if ((chunk.toolResults ?? const []).isNotEmpty) {
+            final parts = List<ToolUIPart>.of(_toolParts[assistantMessage.id] ?? const []);
+            for (final r in chunk.toolResults!) {
+              final idx = parts.indexWhere((p) => p.id == r.id || (p.toolName == r.name));
+              if (idx >= 0) {
+                parts[idx] = ToolUIPart(
+                  id: parts[idx].id,
+                  toolName: parts[idx].toolName,
+                  arguments: parts[idx].arguments,
+                  content: r.content,
+                  loading: false,
+                );
+              } else {
+                // If we didn't see the placeholder (edge case), append a finished part
+                parts.add(ToolUIPart(
+                  id: r.id,
+                  toolName: r.name,
+                  arguments: r.arguments,
+                  content: r.content,
+                  loading: false,
+                ));
+              }
+            }
+            setState(() {
+              _toolParts[assistantMessage.id] = parts;
+            });
+            _scrollToBottomSoon();
+          }
+
           if (chunk.isDone) {
+            // Guard: if we have tool-call placeholders and no content yet,
+            // it likely means the first stage finished with tool_calls and a follow-up is coming.
+            final hasPendingTool = (fullContent.isEmpty && (_toolParts[assistantMessage.id]?.isNotEmpty ?? false));
+            if (hasPendingTool) {
+              // Skip finishing now; wait for follow-up content.
+              return;
+            }
             // Capture final usage/tokens if only provided at end
             if (chunk.totalTokens > 0) {
               totalTokens = chunk.totalTokens;
@@ -1106,6 +1203,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               }
                             }
                           },
+                          toolParts: message.role == 'assistant' ? _toolParts[message.id] : null,
                           ),
                         );
                       },
@@ -1122,6 +1220,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   onMore: _toggleTools,
                   moreOpen: _toolsOpen,
                   onSelectModel: () => showModelSelectSheet(context),
+                  onOpenMcp: () {
+                    final id = _currentConversation?.id ?? _chatService.currentConversationId;
+                    if (id != null) {
+                      showConversationMcpSheet(context, conversationId: id);
+                    } else {
+                      final zh = Localizations.localeOf(context).languageCode == 'zh';
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(zh ? '请先开始一个对话' : 'Start a conversation first')),
+                      );
+                    }
+                  },
                   onStop: _cancelStreaming,
                   modelIcon: (settings.showModelIcon &&
                           settings.currentModelProvider != null &&
@@ -1147,6 +1256,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     _dismissKeyboard();
                   },
                   loading: _isLoading,
+                  showMcpButton: context.watch<McpProvider>().servers.isNotEmpty,
                 ),
               ),
             ],

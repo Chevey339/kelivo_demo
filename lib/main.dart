@@ -11,6 +11,7 @@ import 'providers/user_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/mcp_provider.dart';
 import 'services/chat_service.dart';
+import 'services/mcp_tool_service.dart';
 import 'utils/sandbox_path_resolver.dart';
 
 final RouteObserver<ModalRoute<dynamic>> routeObserver = RouteObserver<ModalRoute<dynamic>>();
@@ -36,6 +37,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => UserProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => ChatService()),
+        ChangeNotifierProvider(create: (_) => McpToolService()),
         ChangeNotifierProvider(create: (_) => McpProvider()),
       ],
       child: Builder(

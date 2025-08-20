@@ -272,6 +272,7 @@ class ChatService extends ChangeNotifier {
       updatedAt: DateTime.now(),
       messageIds: ids,
       isPinned: conversation.isPinned,
+      mcpServerIds: List.of(conversation.mcpServerIds),
     );
     await _conversationsBox.put(restored.id, restored);
 
@@ -279,6 +280,41 @@ class ChatService extends ChangeNotifier {
     _messagesCache[restored.id] = List.of(messages);
 
     notifyListeners();
+  }
+
+  // Conversation-scoped MCP servers selection
+  List<String> getConversationMcpServers(String conversationId) {
+    if (!_initialized) return const <String>[];
+    final c = _conversationsBox.get(conversationId) ?? _draftConversations[conversationId];
+    return c?.mcpServerIds ?? const <String>[];
+  }
+
+  Future<void> setConversationMcpServers(String conversationId, List<String> serverIds) async {
+    if (!_initialized) await init();
+    if (_draftConversations.containsKey(conversationId)) {
+      final draft = _draftConversations[conversationId]!;
+      draft.mcpServerIds = List.of(serverIds);
+      draft.updatedAt = DateTime.now();
+      notifyListeners();
+      return;
+    }
+    final c = _conversationsBox.get(conversationId);
+    if (c == null) return;
+    c.mcpServerIds = List.of(serverIds);
+    c.updatedAt = DateTime.now();
+    await c.save();
+    notifyListeners();
+  }
+
+  Future<void> toggleConversationMcpServer(String conversationId, String serverId, bool enabled) async {
+    final current = getConversationMcpServers(conversationId);
+    final set = current.toSet();
+    if (enabled) {
+      set.add(serverId);
+    } else {
+      set.remove(serverId);
+    }
+    await setConversationMcpServers(conversationId, set.toList());
   }
 
   Future<void> renameConversation(String id, String newTitle) async {

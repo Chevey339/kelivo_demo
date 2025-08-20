@@ -23,6 +23,7 @@ class ChatInputBar extends StatefulWidget {
     this.onSend,
     this.onStop,
     this.onSelectModel,
+    this.onOpenMcp,
     this.onToggleSearch,
     this.onMore,
     this.onConfigureReasoning,
@@ -34,11 +35,13 @@ class ChatInputBar extends StatefulWidget {
     this.loading = false,
     this.reasoningActive = false,
     this.supportsReasoning = true,
+    this.showMcpButton = false,
   });
 
   final ValueChanged<ChatInputData>? onSend;
   final VoidCallback? onStop;
   final VoidCallback? onSelectModel;
+  final VoidCallback? onOpenMcp;
   final ValueChanged<bool>? onToggleSearch;
   final VoidCallback? onMore;
   final VoidCallback? onConfigureReasoning;
@@ -50,6 +53,7 @@ class ChatInputBar extends StatefulWidget {
   final bool loading;
   final bool reasoningActive;
   final bool supportsReasoning;
+  final bool showMcpButton;
 
   @override
   State<ChatInputBar> createState() => _ChatInputBarState();
@@ -295,6 +299,14 @@ class _ChatInputBarState extends State<ChatInputBar> {
                         widget.onToggleSearch?.call(_searchEnabled);
                       },
                     ),
+                    if (widget.showMcpButton) ...[
+                      const SizedBox(width: AppSpacing.xs),
+                      _CircleIconButton(
+                        tooltip: Localizations.localeOf(context).languageCode == 'zh' ? 'MCP服务器' : 'MCP Servers',
+                        icon: Lucide.Terminal,
+                        onTap: widget.onOpenMcp,
+                      ),
+                    ],
                     if (widget.supportsReasoning) ...[
                       const SizedBox(width: AppSpacing.xs),
                       _CircleIconButton(
