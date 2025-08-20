@@ -54,8 +54,8 @@ Future<void> showShareProviderSheet(BuildContext context, String providerKey) as
         top: false,
         child: DraggableScrollableSheet(
           expand: false,
-          initialChildSize: 0.5,
-          maxChildSize: 0.5,
+          initialChildSize: 0.6,
+          maxChildSize: 0.6,
           minChildSize: 0.4,
           builder: (c, sc) => Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
@@ -78,7 +78,8 @@ Future<void> showShareProviderSheet(BuildContext context, String providerKey) as
                         child: Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: cs.primary.withOpacity(0.05),
+                            // Always use white background to ensure visibility in dark mode
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
                           ),
@@ -91,7 +92,11 @@ Future<void> showShareProviderSheet(BuildContext context, String providerKey) as
                         ),
                       ),
                       const SizedBox(height: 14),
-                      SelectableText(code, style: const TextStyle(fontSize: 13.5, height: 1.35)),
+                      // Show non-selectable text; use the copy button to copy
+                      Text(
+                        code,
+                        style: const TextStyle(fontSize: 13.5, height: 1.35),
+                      ),
                     ],
                   ),
                 ),

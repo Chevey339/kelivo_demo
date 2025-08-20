@@ -196,6 +196,7 @@ _ImportResult _decodeSingle(BuildContext context, String s) {
 
 Future<void> showImportProviderSheet(BuildContext context) async {
   final cs = Theme.of(context).colorScheme;
+  final controller = TextEditingController();
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -205,23 +206,22 @@ Future<void> showImportProviderSheet(BuildContext context) async {
     ),
     builder: (ctx) {
       final zh = Localizations.localeOf(ctx).languageCode == 'zh';
-      final controller = TextEditingController();
       return SafeArea(
         top: false,
-        child: DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.6,
-          maxChildSize: 0.6,
-          minChildSize: 0.5,
-          builder: (c, sc) => AnimatedPadding(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            padding: EdgeInsets.fromLTRB(
+        child: AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: () {
+            final mq = MediaQueryData.fromView(View.of(context));
+            return EdgeInsets.fromLTRB(
               16,
               10,
               16,
-              10 + MediaQuery.of(ctx).padding.bottom + MediaQuery.of(ctx).viewInsets.bottom,
-            ),
+              10 + mq.padding.bottom + mq.viewInsets.bottom,
+            );
+          }(),
+          child: FractionallySizedBox(
+            heightFactor: 0.55,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -271,8 +271,8 @@ Future<void> showImportProviderSheet(BuildContext context) async {
                           final picker = ImagePicker();
                           final img = await picker.pickImage(source: ImageSource.gallery);
                           if (img == null) return;
-                          final controller = MobileScannerController();
-                          final result = await controller.analyzeImage(img.path);
+                          final scanner = MobileScannerController();
+                          final result = await scanner.analyzeImage(img.path);
                           String? code;
                           if (result != null) {
                             try {
@@ -313,11 +313,10 @@ Future<void> showImportProviderSheet(BuildContext context) async {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(zh ? '粘贴分享字符串（或 ChatBox JSON）' : 'Paste share string (or ChatBox JSON)'),
+                Text(zh ? '粘贴分享字符串（可多行，每行一个）或 ChatBox JSON' : 'Paste share strings (multi-line supported) or ChatBox JSON'),
                 const SizedBox(height: 10),
                 Expanded(
                   child: ListView(
-                    controller: sc,
                     children: [
                       TextField(
                         controller: controller,
@@ -338,7 +337,14 @@ Future<void> showImportProviderSheet(BuildContext context) async {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => Navigator.of(ctx).maybePop(),
+                        onPressed: () {
+                          FocusScope.of(ctx).unfocus();
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (Navigator.of(ctx).canPop()) {
+                              Navigator.of(ctx).maybePop();
+                            }
+                          });
+                        },
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(color: cs.primary.withOpacity(0.5)),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -351,17 +357,40 @@ Future<void> showImportProviderSheet(BuildContext context) async {
                       child: ElevatedButton.icon(
                         icon: const Icon(Lucide.Import, size: 18),
                         onPressed: () async {
-                          final text = controller.text.trim();
-                          if (text.isEmpty) return;
+                          final raw = controller.text.trim();
+                          if (raw.isEmpty) return;
                           try {
                             final settings = ctx.read<SettingsProvider>();
                             final results = <_ImportResult>[];
-                            if (text.startsWith('ai-provider:v1:')) {
-                              results.add(_decodeSingle(ctx, text));
-                            } else if (text.startsWith('{')) {
-                              results.addAll(_decodeChatBoxJson(ctx, text));
+                            // Support multi-line input where each non-empty line is a share string or JSON
+                            final lines = raw.split(RegExp(r'\r?\n'))
+                                .map((e) => e.trim())
+                                .where((e) => e.isNotEmpty)
+                                .toList();
+                            if (lines.length > 1) {
+                              for (final line in lines) {
+                                try {
+                                  if (line.startsWith('ai-provider:v1:')) {
+                                    results.add(_decodeSingle(ctx, line));
+                                  } else if (line.startsWith('{')) {
+                                    results.addAll(_decodeChatBoxJson(ctx, line));
+                                  }
+                                } catch (_) {
+                                  // skip invalid line
+                                }
+                              }
+                              if (results.isEmpty) {
+                                throw const FormatException('No valid lines');
+                              }
                             } else {
-                              throw const FormatException('Unsupported format');
+                              final text = lines.first;
+                              if (text.startsWith('ai-provider:v1:')) {
+                                results.add(_decodeSingle(ctx, text));
+                              } else if (text.startsWith('{')) {
+                                results.addAll(_decodeChatBoxJson(ctx, text));
+                              } else {
+                                throw const FormatException('Unsupported format');
+                              }
                             }
                             for (final r in results) {
                               await settings.setProviderConfig(r.key, r.cfg);
@@ -372,9 +401,13 @@ Future<void> showImportProviderSheet(BuildContext context) async {
                               await settings.setProvidersOrder(order);
                             }
                             Navigator.of(ctx).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(zh ? '已导入${results.length}个供应商' : 'Imported ${results.length} provider(s)')));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(zh ? '已导入${results.length}个供应商' : 'Imported ${results.length} provider(s)')),
+                            );
                           } catch (e) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(zh ? '导入失败: $e' : 'Import failed: $e')));
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(content: Text(zh ? '导入失败: $e' : 'Import failed: $e')),
+                            );
                           }
                         },
                         label: Text(zh ? '导入' : 'Import'),
