@@ -69,16 +69,16 @@ class SettingsPage extends StatelessWidget {
     }
 
     Widget header(String text) => Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: cs.primary,
-            ),
-          ),
-        );
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: cs.primary,
+        ),
+      ),
+    );
 
     return Scaffold(
       appBar: AppBar(

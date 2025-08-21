@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../icons/lucide_adapter.dart';
 
@@ -78,17 +79,16 @@ class _AboutPageState extends State<AboutPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white12
-                          : const Color(0xFFF2F3F5),
-                      borderRadius: BorderRadius.circular(24),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: SizedBox(
+                      width: 120,
+                      height: 120,
+                      child: SvgPicture.asset(
+                        'assets/app_icon_foreground.svg',
+                        fit: BoxFit.cover,
+                      ),
                     ),
-                    alignment: Alignment.center,
-                    child: Icon(Lucide.Bot, size: 64, color: cs.primary),
                   ),
                   const SizedBox(height: 12),
                   Text('Kelivo', style: Theme.of(context).textTheme.headlineMedium),
