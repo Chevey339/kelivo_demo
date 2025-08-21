@@ -45,6 +45,10 @@ class ChatMessage extends HiveObject {
   // Translation field for translated content
   @HiveField(12)
   final String? translation;
+  
+  // JSON encoded reasoning segments for multiple reasoning blocks
+  @HiveField(13)
+  final String? reasoningSegmentsJson;
 
   ChatMessage({
     String? id,
@@ -60,6 +64,7 @@ class ChatMessage extends HiveObject {
     this.reasoningStartAt,
     this.reasoningFinishedAt,
     this.translation,
+    this.reasoningSegmentsJson,
   })  : id = id ?? const Uuid().v4(),
         timestamp = timestamp ?? DateTime.now();
 
@@ -77,6 +82,7 @@ class ChatMessage extends HiveObject {
     DateTime? reasoningStartAt,
     DateTime? reasoningFinishedAt,
     String? translation,
+    String? reasoningSegmentsJson,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -92,6 +98,7 @@ class ChatMessage extends HiveObject {
       reasoningStartAt: reasoningStartAt ?? this.reasoningStartAt,
       reasoningFinishedAt: reasoningFinishedAt ?? this.reasoningFinishedAt,
       translation: translation ?? this.translation,
+      reasoningSegmentsJson: reasoningSegmentsJson ?? this.reasoningSegmentsJson,
     );
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:convert';
 
 import '../widgets/chat_input_bar.dart';
 import '../models/chat_input_data.dart';
@@ -65,6 +66,34 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   final Map<String, List<_ReasoningSegmentData>> _reasoningSegments = <String, List<_ReasoningSegmentData>>{}; // assistantMessageId -> reasoning segments
   McpProvider? _mcpProvider;
   Set<String> _connectedMcpIds = <String>{};
+
+  // Helper methods to serialize/deserialize reasoning segments
+  String _serializeReasoningSegments(List<_ReasoningSegmentData> segments) {
+    final list = segments.map((s) => {
+      'text': s.text,
+      'startAt': s.startAt?.toIso8601String(),
+      'finishedAt': s.finishedAt?.toIso8601String(),
+      'expanded': s.expanded,
+    }).toList();
+    return jsonEncode(list);
+  }
+  
+  List<_ReasoningSegmentData> _deserializeReasoningSegments(String? json) {
+    if (json == null || json.isEmpty) return [];
+    try {
+      final list = jsonDecode(json) as List;
+      return list.map((item) {
+        final s = _ReasoningSegmentData();
+        s.text = item['text'] ?? '';
+        s.startAt = item['startAt'] != null ? DateTime.parse(item['startAt']) : null;
+        s.finishedAt = item['finishedAt'] != null ? DateTime.parse(item['finishedAt']) : null;
+        s.expanded = item['expanded'] ?? false;
+        return s;
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
 
   bool _isReasoningModel(String providerKey, String modelId) {
     final settings = context.read<SettingsProvider>();
@@ -226,6 +255,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           loading: !(e['content']?.toString().isNotEmpty == true),
                         ))
                     .toList();
+              }
+              // Restore reasoning segments
+              final segments = _deserializeReasoningSegments(m.reasoningSegmentsJson);
+              if (segments.isNotEmpty) {
+                _reasoningSegments[m.id] = segments;
               }
             }
             // Restore translation collapsed by default
@@ -589,6 +623,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           _reasoningSegments[assistantMessage.id] = segments;
           if (mounted) setState(() {});
         }
+        
+        // Save reasoning segments to database
+        if (segments != null && segments.isNotEmpty) {
+          await _chatService.updateMessage(
+            assistantMessage.id,
+            reasoningSegmentsJson: _serializeReasoningSegments(segments),
+          );
+        }
         if (generateTitle) {
           _maybeGenerateTitle();
         }
@@ -635,6 +677,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               }
             }
             _reasoningSegments[assistantMessage.id] = segments;
+            
+            // Save segments to database periodically
+            await _chatService.updateMessage(
+              assistantMessage.id,
+              reasoningSegmentsJson: _serializeReasoningSegments(segments),
+            );
             
             if (mounted) setState(() {});
             await _chatService.updateMessage(
@@ -1276,6 +1324,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               loading: !(e['content']?.toString().isNotEmpty == true),
                             ))
                         .toList();
+                  }
+                  // Restore reasoning segments
+                  final segments = _deserializeReasoningSegments(m.reasoningSegmentsJson);
+                  if (segments.isNotEmpty) {
+                    _reasoningSegments[m.id] = segments;
                   }
                 }
                 // Restore translation state
