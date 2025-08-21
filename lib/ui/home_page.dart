@@ -713,10 +713,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
           // MCP tool call placeholders
           if ((chunk.toolCalls ?? const []).isNotEmpty) {
-            // Finish current reasoning segment if exists
+            // Finish current reasoning segment if exists, and auto-collapse per settings
             final segments = _reasoningSegments[assistantMessage.id] ?? <_ReasoningSegmentData>[];
             if (segments.isNotEmpty && segments.last.finishedAt == null) {
               segments.last.finishedAt = DateTime.now();
+              final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+              if (autoCollapse) {
+                segments.last.expanded = false;
+                final rd = _reasoning[assistantMessage.id];
+                if (rd != null) rd.expanded = false;
+              }
               _reasoningSegments[assistantMessage.id] = segments;
               // Persist closed segment state
               await _chatService.updateMessage(
