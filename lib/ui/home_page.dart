@@ -74,6 +74,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       'startAt': s.startAt?.toIso8601String(),
       'finishedAt': s.finishedAt?.toIso8601String(),
       'expanded': s.expanded,
+      'toolStartIndex': s.toolStartIndex,
     }).toList();
     return jsonEncode(list);
   }
@@ -83,13 +84,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     try {
       final list = jsonDecode(json) as List;
       return list.map((item) {
-        final s = _ReasoningSegmentData();
-        s.text = item['text'] ?? '';
-        s.startAt = item['startAt'] != null ? DateTime.parse(item['startAt']) : null;
-        s.finishedAt = item['finishedAt'] != null ? DateTime.parse(item['finishedAt']) : null;
-        s.expanded = item['expanded'] ?? false;
-        return s;
-      }).toList();
+      final s = _ReasoningSegmentData();
+      s.text = item['text'] ?? '';
+      s.startAt = item['startAt'] != null ? DateTime.parse(item['startAt']) : null;
+      s.finishedAt = item['finishedAt'] != null ? DateTime.parse(item['finishedAt']) : null;
+      s.expanded = item['expanded'] ?? false;
+      s.toolStartIndex = (item['toolStartIndex'] as int?) ?? 0;
+      return s;
+    }).toList();
     } catch (_) {
       return [];
     }
@@ -672,6 +674,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               newSegment.text = chunk.reasoning!;
               newSegment.startAt = DateTime.now();
               newSegment.expanded = true;
+              newSegment.toolStartIndex = (_toolParts[assistantMessage.id]?.length ?? 0);
               segments.add(newSegment);
             } else {
               // Check if we should start a new segment (after tool calls)
@@ -684,6 +687,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 newSegment.text = chunk.reasoning!;
                 newSegment.startAt = DateTime.now();
                 newSegment.expanded = true;
+                newSegment.toolStartIndex = (_toolParts[assistantMessage.id]?.length ?? 0);
                 segments.add(newSegment);
               } else {
                 // Continue current segment
@@ -1523,6 +1527,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                   s.expanded = !s.expanded;
                                 });
                               },
+                              toolStartIndex: s.toolStartIndex,
                             )).toList();
                           })() : null,
                           ),
@@ -1686,6 +1691,7 @@ class _ReasoningSegmentData {
   DateTime? startAt;
   DateTime? finishedAt;
   bool expanded = true;
+  int toolStartIndex = 0;
 }
 
 class _TranslationData {

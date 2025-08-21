@@ -520,64 +520,53 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
           const SizedBox(height: 8),
           // Mixed reasoning and tool sections
           if (widget.reasoningSegments != null && widget.reasoningSegments!.isNotEmpty) ...[
-            // Build mixed content: reasoning segments interleaved with tool calls
+            // Build mixed content using tool index ranges carried by segments
             ...() {
               final List<Widget> mixedContent = [];
-              int toolIndex = 0;
               final tools = widget.toolParts ?? const <ToolUIPart>[];
-              
-              for (int i = 0; i < widget.reasoningSegments!.length; i++) {
-                final segment = widget.reasoningSegments![i];
-                
-                // Add reasoning segment if it has content
-                if (segment.text.isNotEmpty) {
+              final segments = widget.reasoningSegments!;
+
+              for (int i = 0; i < segments.length; i++) {
+                final seg = segments[i];
+
+                // Add the reasoning segment (if any text)
+                if (seg.text.isNotEmpty) {
                   mixedContent.add(
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: _ReasoningSection(
-                        text: segment.text,
-                        expanded: segment.expanded,
-                        loading: segment.loading,
-                        startAt: segment.startAt,
-                        finishedAt: segment.finishedAt,
-                        onToggle: segment.onToggle,
+                        text: seg.text,
+                        expanded: seg.expanded,
+                        loading: seg.loading,
+                        startAt: seg.startAt,
+                        finishedAt: seg.finishedAt,
+                        onToggle: seg.onToggle,
                       ),
                     ),
                   );
                 }
-                
-                // Add any tool calls that should appear after this reasoning segment
-                // (This assumes tools are ordered to match reasoning segments)
-                if (i < widget.reasoningSegments!.length - 1) {
-                  // Not the last segment, so there might be tools after it
-                  while (toolIndex < tools.length) {
-                    final tool = tools[toolIndex];
-                    // Check if this tool should be placed here
-                    // We'll place tools between reasoning segments
-                    mixedContent.add(
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: _ToolCallItem(part: tool),
-                      ),
-                    );
-                    toolIndex++;
-                    // Only add one batch of tools between reasoning segments
-                    if (!tool.loading) break;
-                  }
+
+                // Determine tool range mapped to this segment: [start, end)
+                int start = seg.toolStartIndex;
+                final int end = (i < segments.length - 1)
+                    ? segments[i + 1].toolStartIndex
+                    : tools.length;
+
+                // Clamp to bounds and ensure non-decreasing
+                if (start < 0) start = 0;
+                if (start > tools.length) start = tools.length;
+                final int clampedEnd = end.clamp(start, tools.length);
+
+                for (int k = start; k < clampedEnd; k++) {
+                  mixedContent.add(
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _ToolCallItem(part: tools[k]),
+                    ),
+                  );
                 }
               }
-              
-              // Add any remaining tools at the end
-              while (toolIndex < tools.length) {
-                mixedContent.add(
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _ToolCallItem(part: tools[toolIndex]),
-                  ),
-                );
-                toolIndex++;
-              }
-              
+
               return mixedContent;
             }(),
           ] else ...[
@@ -887,6 +876,8 @@ class ReasoningSegment {
   final DateTime? startAt;
   final DateTime? finishedAt;
   final VoidCallback? onToggle;
+  // Index of the first tool call that occurs after this segment starts.
+  final int toolStartIndex;
   
   const ReasoningSegment({
     required this.text,
@@ -895,6 +886,7 @@ class ReasoningSegment {
     this.startAt,
     this.finishedAt,
     this.onToggle,
+    this.toolStartIndex = 0,
   });
 }
 
