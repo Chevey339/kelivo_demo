@@ -62,6 +62,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   final Map<String, _ReasoningData> _reasoning = <String, _ReasoningData>{};
   final Map<String, _TranslationData> _translations = <String, _TranslationData>{};
   final Map<String, List<ToolUIPart>> _toolParts = <String, List<ToolUIPart>>{}; // assistantMessageId -> parts
+  final Map<String, List<String>> _reasoningSegments = <String, List<String>>{}; // assistantMessageId -> reasoning segments
   McpProvider? _mcpProvider;
   Set<String> _connectedMcpIds = <String>{};
 
@@ -200,6 +201,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           _reasoning.clear();
           _translations.clear();
           _toolParts.clear();
+          _reasoningSegments.clear();
           for (final m in _messages) {
             if (m.role == 'assistant') {
               // Restore reasoning state
@@ -368,6 +370,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _reasoning.clear();
       _translations.clear();
       _toolParts.clear();
+      _reasoningSegments.clear();
     });
     _scrollToBottomSoon();
   }
@@ -583,40 +586,75 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _messageStreamSubscription = stream.listen(
         (chunk) async {
           // Capture reasoning deltas only when reasoning is enabled
-        if ((chunk.reasoning ?? '').isNotEmpty && _isReasoningEnabled(settings.thinkingBudget)) {
-          final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
-          r.text += chunk.reasoning!;
-          r.startAt ??= DateTime.now();
-          r.finishedAt = null;
-          r.expanded = true; // auto expand while generating
-          _reasoning[assistantMessage.id] = r;
-          if (mounted) setState(() {});
-          await _chatService.updateMessage(
-            assistantMessage.id,
-            reasoningText: r.text,
-            reasoningStartAt: r.startAt,
-          );
-        }
+          if ((chunk.reasoning ?? '').isNotEmpty && _isReasoningEnabled(settings.thinkingBudget)) {
+            final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
+            r.text += chunk.reasoning!;
+            r.startAt ??= DateTime.now();
+            r.finishedAt = null;
+            r.expanded = true; // auto expand while generating
+            _reasoning[assistantMessage.id] = r;
+            
+            // Add to reasoning segments for mixed display
+            final segments = _reasoningSegments[assistantMessage.id] ?? <String>[];
+            if (segments.isEmpty || (_toolParts[assistantMessage.id]?.isNotEmpty ?? false)) {
+              // Start a new segment if no segments exist or after tool calls
+              segments.add(chunk.reasoning!);
+            } else {
+              // Append to the last segment
+              segments[segments.length - 1] += chunk.reasoning!;
+            }
+            _reasoningSegments[assistantMessage.id] = segments;
+            
+            if (mounted) setState(() {});
+            await _chatService.updateMessage(
+              assistantMessage.id,
+              reasoningText: r.text,
+              reasoningStartAt: r.startAt,
+            );
+          }
 
           // MCP tool call placeholders
           if ((chunk.toolCalls ?? const []).isNotEmpty) {
-            final parts = chunk.toolCalls!
-                .map((c) => ToolUIPart(id: c.id, toolName: c.name, arguments: c.arguments, loading: true))
-                .toList();
+            // Start a new reasoning segment after tool calls
+            final segments = _reasoningSegments[assistantMessage.id] ?? <String>[];
+            if (segments.isNotEmpty && segments.last.isNotEmpty) {
+              // If there was reasoning before, prepare for a new segment after tools
+              segments.add(''); // Add empty segment that will be filled with post-tool reasoning
+              _reasoningSegments[assistantMessage.id] = segments;
+            }
+            
+            // Merge new tool calls with existing ones for multi-round flows
+            final existing = List<ToolUIPart>.of(_toolParts[assistantMessage.id] ?? const []);
+            final merged = <ToolUIPart>[];
+            // Map by id (fall back to name when id blank)
+            final Map<String, ToolUIPart> map = {for (final p in existing) (p.id.isNotEmpty ? p.id : 'name:${p.toolName}') : p};
+            for (final c in chunk.toolCalls!) {
+              final key = c.id.isNotEmpty ? c.id : 'name:${c.name}';
+              if (map.containsKey(key)) {
+                // Ensure it's marked loading again (a new round may reuse same id)
+                map[key] = ToolUIPart(id: c.id, toolName: c.name, arguments: c.arguments, loading: true, content: map[key]!.content);
+              } else {
+                map[key] = ToolUIPart(id: c.id, toolName: c.name, arguments: c.arguments, loading: true);
+              }
+            }
+            merged.addAll(map.values);
             setState(() {
-              _toolParts[assistantMessage.id] = parts;
+              _toolParts[assistantMessage.id] = merged;
             });
-            // Persist placeholders so they show up when reloading
-            final events = parts
-                .map((p) => {
-                      'id': p.id,
-                      'name': p.toolName,
-                      'arguments': p.arguments,
-                      'content': null,
-                    })
-                .toList();
+            // Persist placeholders (merge with existing stored events)
             try {
-              await _chatService.setToolEvents(assistantMessage.id, events);
+              final prev = _chatService.getToolEvents(assistantMessage.id);
+              final prevMap = {for (final e in prev) ((e['id']?.toString().isNotEmpty ?? false) ? e['id'].toString() : 'name:${e['name']?.toString() ?? ''}') : e};
+              for (final c in chunk.toolCalls!) {
+                final key = c.id.isNotEmpty ? c.id : 'name:${c.name}';
+                prevMap[key] = {
+                  'id': c.id,
+                  'name': c.name,
+                  'arguments': c.arguments,
+                  'content': prevMap[key]?['content'],
+                };
+              }
+              await _chatService.setToolEvents(assistantMessage.id, prevMap.values.toList());
             } catch (_) {}
           }
 
@@ -661,11 +699,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           }
 
           if (chunk.isDone) {
-            // Guard: if we have tool-call placeholders and no content yet,
-            // it likely means the first stage finished with tool_calls and a follow-up is coming.
-            final hasPendingTool = (fullContent.isEmpty && (_toolParts[assistantMessage.id]?.isNotEmpty ?? false));
-            if (hasPendingTool) {
-              // Skip finishing now; wait for follow-up content.
+            // Guard: if we have any loading tool-call placeholders, a follow-up round is coming.
+            final hasLoadingTool = (_toolParts[assistantMessage.id]?.any((p) => p.loading) ?? false);
+            if (hasLoadingTool) {
+              // Skip finishing now; wait for follow-up round.
               return;
             }
             // Capture final usage/tokens if only provided at end
@@ -1149,6 +1186,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               _reasoning.clear();
               _translations.clear();
               _toolParts.clear();
+              _reasoningSegments.clear();
               for (final m in _messages) {
                 // Restore reasoning state
                 if (m.role == 'assistant') {
@@ -1306,6 +1344,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                   _messages.removeWhere((m) => m.id == id);
                                   _reasoning.remove(id);
                                   _translations.remove(id);
+                                  _toolParts.remove(id);
+                                  _reasoningSegments.remove(id);
                                 });
                                 await _chatService.deleteMessage(id);
                               }
