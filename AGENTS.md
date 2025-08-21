@@ -1,172 +1,46 @@
 # Repository Guidelines
 
-This guide explains how to work on the `kelivo_demo` Flutter app. Keep changes small, tested, and consistent with the existing style.
-
-
-
-**Repo Overview**
-
-- Entry: `lib/main.dart` (providers wired; routeObserver added)
-- Key state: `lib/providers/settings_provider.dart`
-  - Provider configs persisted (API keys, base URL, models, overrides, proxy)
-  - Current model selection: `setCurrentModel(providerKey, modelId)`
-  - Favorites (pinned models): `togglePinModel(providerKey, modelId)`
-- Model metadata: `lib/providers/model_provider.dart`
-  - Types: `ModelType`, `Modality`, `ModelAbility`
-  - Inference tags: `ModelRegistry.infer(...)`
-  - HTTP proxy: `_Http.clientFor(cfg)` (respects per-provider proxy)
-  - ProviderManager:
-    - `listModels(cfg)` implemented for OpenAI/Claude/Google
-    - `testConnection(cfg, modelId)` implemented (minimal POSTs per provider)
-
-**UI Key Pieces**
-
-- Home screen: `lib/ui/home_page.dart`
-  - AppBar shows title + current model subtitle (“Model (Provider)”, small)
-  - `ChatInputBar` at bottom (model picker button, search toggle, more, send)
-  - Keyboard behavior fixed with `RouteObserver` and controlled `FocusNode`
-  - Current model icon shown (vendor SVG mapping; fallback initial; 28×28)
-- Model selection (Reused Component): `lib/ui/model_select_sheet.dart`
-  - `Future<ModelSelection?> showModelSelector(BuildContext context, {String? li
-    mitProviderKey})`
-    - Full selector: groups (Favorites + Providers), search, badges, vendor icon
-    - Limit mode: only a specific provider’s added models
-  - `Future<void> showModelSelectSheet(BuildContext context)` persists selected
-    model to Settings
-- Providers UI
-  - List: `lib/ui/providers_page.dart` (cards reflect enabled, model count)
-  - Detail: `lib/ui/provider_detail_page.dart`
-    - Tabs: Config / Models / Network
-    - Models: reorderable list, slidable delete (confirm + undo), add model
-    - Per-model overrides dialog: `lib/ui/model_detail_sheet.dart` (Basic/Advanc
-      ed/Tools)
-    - Test connection dialog: `_ConnectionTestDialog` (select model via shared s
-      elector, loading, result)
-- Shared styles
-  - Snackbar themed (floating, rounded, inverseSurface for contrast)
-  - Input capsules (dark/light parity, subtle shadows)
-  - Icon mapping for vendors (OpenAI, Gemini, SiliconFlow, OpenRouter, etc.) via
-    regex
-
-**Data & Persistence**
-
-- ProviderConfig fields (stored in SharedPreferences under `provider_configs_v1`
-  ):
-  - id, enabled, name, apiKey, baseUrl
-  - chatPath/useResponseApi (OpenAI), vertexAI/location/projectId (Google)
-  - models: List<String> (user-added)
-  - modelOverrides: Map<String,dynamic> (name, type, input[], output[], abilitie
-    s[])
-  - proxyEnabled/Host/Port/Username/Password
-- SettingsProvider extras:
-  - `pinnedModels` (Set<String> "provider::model")
-  - `currentModelProvider` / `currentModelId` and `setCurrentModel()`
-  - `hasAnyActiveModel` (used to hide/show “未配置” warning)
-  - Defaults: only OpenAI/Gemini/SiliconFlow/OpenRouter enabled
-
-**Network & Proxy**
-
-- Use `_Http.clientFor(cfg)` to create `http.Client` with optional proxy:
-  - `findProxy = 'PROXY host:port'`; supports basic credentials
-- Implemented calls:
-  - OpenAI: GET `/models`; POST to `/chat/completions` or `/responses`
-  - Claude: GET `/models`; POST to `/messages` (anthropic-version header)
-  - Google: GET list; POST to `...:generateContent`; Vertex AI variant supported
-
-**Model Tags (UI consistency)**
-
-- Rendered tags (type, modality, abilities) use consistent capsules:
-  - Type: “聊天/嵌入” pill with primary color
-  - Modality: icons (T/Image) with chevron
-  - Abilities: tool (hammer), reasoning (deepthink.svg)
-- Model selection and provider pages both apply overrides before rendering tags
-
-**Reorder/Delete Models**
-
-- Models tab: `ReorderableListView.builder` with `proxyDecorator` animation
-- Delete: `flutter_slidable` action with confirm dialog + SnackBar Undo
-- Persist new order and deletions to ProviderConfig.models and modelOverrides
-
-**Test Connection**
-
-- Dialog states: idle -> loading -> success/error
-- Model selection reuses shared selector (limited to current provider’s added mo
-  dels)
-- Calls `ProviderManager.testConnection(cfg, modelId)` with minimal prompt
-
-**Where to implement “Real Chat”**
-
-- Input: `lib/widgets/chat_input_bar.dart`
-  - Props: `onSend(String)`, `onSelectModel()`, `onToggleSearch(bool)`, `onMore(
-    )`
-- Likely new provider/service:
-  - Reuse `ProviderManager.forConfig(cfg)` to branch by provider
-  - Add a `generateText` method per provider (non-stream and/or stream)
-  - Use `_Http.clientFor(cfg)` for all HTTP; respect overrides if needed
-- State:
-  - Use or extend `lib/providers/chat_provider.dart` to manage chat list/message
-    s
-  - Persist titles/pinned already present; add message history persistence if re
-    quired
-- Model selection:
-  - Use `SettingsProvider.currentModelProvider/Id` to pick the model for chat
-  - Optional: fallback if not selected (open selector)
-
-**Paths to touch for chat**
-
-- New: `lib/providers/chat_service.dart` (recommended) or extend `model_provider
-  .dart`
-- Wire send:
-  - In `HomePage`, pass `onSend` into `ChatInputBar` and call your chat service
-    with current model
-  - Update ChatProvider to append user/assistant messages; consider streaming up
-    dates
-- Respect overrides:
-  - If you plan to enforce per-model overrides (type/modality), read from `Provi
-    derConfig.modelOverrides[modelId]`
-
-**Dependencies of note**
-
-- flutter_svg, flutter_slidable, reorderable_grid_view, http, shared_preferences
-  , provider, dynamic_color
-
-This is the minimal high-signal context to continue with the chat implementation
-: where the current model is stored, how to get provider config + proxy, where t
-o hook the send action, how to render tags/icons, and existing network patterns
-to follow.
-
-## Project Structure & Modules
-- `lib/`: App source (entry: `lib/main.dart`). Add features in small files by domain.
-- `test/`: Unit/widget tests mirroring `lib/` (suffix: `_test.dart`).
-- Platforms: `android/`, `ios/`, `web/`, `linux/`, `macos/`, `windows/`.
-- Config: `pubspec.yaml` (deps, assets), `analysis_options.yaml` (lints).
+## Project Structure & Module Organization
+- `lib/`: App source. Entry: `lib/main.dart` (providers and `RouteObserver`).
+- `lib/providers/`: State and network (`settings_provider.dart`, `model_provider.dart`, `chat_provider.dart`).
+- `lib/ui/`: Screens/components (`home_page.dart`, `providers_page.dart`, `provider_detail_page.dart`, `model_select_sheet.dart`).
+- `lib/widgets/`: Reusable UI (`chat_input_bar.dart`).
+- `test/`: Unit/widget tests mirroring `lib/` (suffix `_test.dart`).
+- `pubspec.yaml`: Dependencies, assets, and lints.
 
 ## Build, Test, and Development Commands
-- `flutter pub get`: Install/resolve dependencies.
-- `flutter run -d <device>`: Run locally (e.g., `-d chrome`).
-- `flutter test`: Run all tests; add `--coverage` to generate `coverage/lcov.info`.
-- `flutter analyze`: Static analysis per configured lints.
-- `dart format .`: Format Dart code (run before committing).
-- Release builds: `flutter build apk --release`, `flutter build ios`, `flutter build web`.
+```sh
+flutter pub get           # Install/resolve deps
+flutter analyze           # Static analysis (flutter_lints)
+flutter test              # Run tests
+flutter test --coverage   # Generate coverage/lcov.info
+dart format .             # Format code
+flutter run -d V1923A     # Run in browser (or other device)
+flutter build apk --release  # Release build
+```
 
 ## Coding Style & Naming Conventions
-- Lints: Uses `flutter_lints` via `analysis_options.yaml`.
-- Indentation: 2 spaces; prefer trailing commas for better diffs/formatting.
-- Naming: UpperCamelCase for classes/widgets; lowerCamelCase for vars/methods; `lower_snake_case.dart` for files (e.g., `home_page.dart`).
-- Prefer `const` constructors/vals where possible; avoid `print` in production code.
-- Organize imports: SDK → packages → relative; remove unused imports.
+- Dart/Flutter; 2-space indent; prefer trailing commas.
+- Naming: UpperCamelCase (classes/widgets), lowerCamelCase (vars/methods), `lower_snake_case.dart` (files).
+- Imports: SDK → packages → relative. Remove unused. Avoid `print` in production.
+- Keep changes minimal and aligned with existing patterns.
 
 ## Testing Guidelines
-- Framework: `flutter_test` with `testWidgets` for UI and `test` for logic.
-- Structure: Mirror `lib/` and use descriptive names (e.g., `home_page_test.dart`).
-- Deterministic tests: use `pumpWidget`, `pump`, and explicit finders.
-- Coverage: Optional, but keep meaningful widget coverage (`flutter test --coverage`).
+- Frameworks: `flutter_test` and `test`. Place tests under `test/` mirroring `lib/`.
+- Name tests: `file_name_test.dart`; use `pumpWidget`/`pump` explicitly.
+- Keep tests deterministic; add coverage where valuable.
 
 ## Commit & Pull Request Guidelines
-- Commits: Follow Conventional Commits (e.g., `feat(counter): add increment button`, `fix(home): null check state`).
-- PRs: Include summary, linked issues, test steps, and screenshots/GIFs for UI changes.
-- Quality gate: Ensure `dart format .`, `flutter analyze`, and `flutter test` pass.
+- Conventional Commits (e.g., `feat(home): add model selector`, `fix(ui): handle null state`).
+- PRs: clear summary, linked issues, test steps, and screenshots/GIFs for UI.
+- Quality gate: run `dart format .`, `flutter analyze`, and `flutter test` locally.
 
 ## Security & Configuration Tips
-- Do not commit secrets; pass config via `--dart-define=KEY=VALUE` and read with `String.fromEnvironment('KEY')`.
-- Manage assets via `pubspec.yaml` if added (e.g., `assets/`), and keep `pubspec.lock` in version control.
+- Do not commit secrets. Pass config via `--dart-define=KEY=VALUE` and read with `String.fromEnvironment`.
+- Provider configs persist in SharedPreferences (`provider_configs_v1`). Use `_Http.clientFor(cfg)` to respect per-provider proxy.
+
+## Architecture Notes
+- Current model: `SettingsProvider.currentModelProvider/Id` with `setCurrentModel()`.
+- Network: `ProviderManager` lists models and tests connections for OpenAI/Claude/Google.
+- Chat entry point: wire `ChatInputBar.onSend` via a chat service (e.g., `lib/providers/chat_service.dart`) reusing `ProviderManager` and the proxy-aware HTTP client.
+

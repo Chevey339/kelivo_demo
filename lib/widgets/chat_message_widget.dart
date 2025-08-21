@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
@@ -16,6 +15,7 @@ import '../theme/design_tokens.dart';
 import '../providers/user_provider.dart';
 import 'package:intl/intl.dart';
 import '../utils/sandbox_path_resolver.dart';
+import 'markdown_with_highlight.dart';
 
 class ChatMessageWidget extends StatefulWidget {
   final ChatMessage message;
@@ -618,8 +618,8 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      GptMarkdown(
-                        widget.message.content,
+                      MarkdownWithCodeHighlight(
+                        text: widget.message.content,
                       ),
                       if (widget.message.isStreaming)
                         Padding(
@@ -701,8 +701,8 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                                 else
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
-                                    child: GptMarkdown(
-                                      widget.message.translation!,
+                                    child: MarkdownWithCodeHighlight(
+                                      text: widget.message.translation!,
                                     ),
                                   ),
                               ],
