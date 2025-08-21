@@ -72,9 +72,27 @@ class ChatApiService {
           onToolCall: onToolCall,
         );
       } else if (kind == ProviderKind.claude) {
-        yield* _sendClaudeStream(client, config, modelId, messages, userImagePaths: userImagePaths, thinkingBudget: thinkingBudget);
+        yield* _sendClaudeStream(
+          client,
+          config,
+          modelId,
+          messages,
+          userImagePaths: userImagePaths,
+          thinkingBudget: thinkingBudget,
+          tools: tools,
+          onToolCall: onToolCall,
+        );
       } else if (kind == ProviderKind.google) {
-        yield* _sendGoogleStream(client, config, modelId, messages, userImagePaths: userImagePaths, thinkingBudget: thinkingBudget);
+        yield* _sendGoogleStream(
+          client,
+          config,
+          modelId,
+          messages,
+          userImagePaths: userImagePaths,
+          thinkingBudget: thinkingBudget,
+          tools: tools,
+          onToolCall: onToolCall,
+        );
       }
     } finally {
       client.close();
@@ -270,6 +288,8 @@ class ChatApiService {
         'model': modelId,
         'input': input,
         'stream': true,
+        if (tools != null && tools.isNotEmpty) 'tools': tools,
+        if (tools != null && tools.isNotEmpty) 'tool_choice': 'auto',
         if (isReasoning && effort != 'off')
           'reasoning': {
             'summary': 'auto',
@@ -381,6 +401,8 @@ class ChatApiService {
 
     // Track potential tool calls (OpenAI Chat Completions)
     final Map<int, Map<String, String>> toolAcc = <int, Map<String, String>>{}; // index -> {id,name,args}
+    // Track potential tool calls (OpenAI Responses API)
+    final Map<String, Map<String, String>> toolAccResp = <String, Map<String, String>>{}; // id/name -> {name,args}
     String? finishReason;
 
     await for (final chunk in stream) {
@@ -606,6 +628,17 @@ class ChatApiService {
             } else if (type == 'response.reasoning_summary_text.delta') {
               final delta = json['delta'];
               if (delta is String) reasoning = delta;
+            } else if (type is String && type.contains('function_call')) {
+              // Accumulate function call args for Responses API
+              final id = (json['id'] ?? json['call_id'] ?? '').toString();
+              final name = (json['name'] ?? json['function']?['name'] ?? '').toString();
+              final argsDelta = (json['arguments'] ?? json['arguments_delta'] ?? json['delta'] ?? '').toString();
+              if (id.isNotEmpty || name.isNotEmpty) {
+                final key = id.isNotEmpty ? id : name;
+                final entry = toolAccResp.putIfAbsent(key, () => {'name': name, 'args': ''});
+                if (name.isNotEmpty) entry['name'] = name;
+                if (argsDelta.isNotEmpty) entry['args'] = (entry['args'] ?? '') + argsDelta;
+              }
             } else if (type == 'response.completed') {
               final u = json['response']?['usage'];
               if (u != null) {
@@ -613,6 +646,35 @@ class ChatApiService {
                 final outTok = (u['output_tokens'] ?? 0) as int;
                 usage = (usage ?? const TokenUsage()).merge(TokenUsage(promptTokens: inTok, completionTokens: outTok));
                 totalTokens = usage!.totalTokens;
+              }
+              // Responses: emit any collected tool calls from previous deltas
+              if (onToolCall != null && toolAccResp.isNotEmpty) {
+                final callInfos = <ToolCallInfo>[];
+                final msgs = <Map<String, dynamic>>[];
+                int idx = 0;
+                toolAccResp.forEach((key, m) {
+                  Map<String, dynamic> args;
+                  try { args = (jsonDecode(m['args'] ?? '{}') as Map).cast<String, dynamic>(); } catch (_) { args = <String, dynamic>{}; }
+                  final id2 = key.isNotEmpty ? key : 'call_$idx';
+                  callInfos.add(ToolCallInfo(id: id2, name: (m['name'] ?? ''), arguments: args));
+                  msgs.add({'__id': id2, '__name': (m['name'] ?? ''), '__args': args});
+                  idx += 1;
+                });
+                if (callInfos.isNotEmpty) {
+                  final approxTotal = approxPromptTokens + _approxTokensFromChars(approxCompletionChars);
+                  yield ChatStreamChunk(content: '', isDone: false, totalTokens: usage?.totalTokens ?? approxTotal, usage: usage, toolCalls: callInfos);
+                }
+                final resultsInfo = <ToolResultInfo>[];
+                for (final m in msgs) {
+                  final nm = m['__name'] as String;
+                  final id2 = m['__id'] as String;
+                  final args = (m['__args'] as Map<String, dynamic>);
+                  final res = await onToolCall(nm, args) ?? '';
+                  resultsInfo.add(ToolResultInfo(id: id2, name: nm, arguments: args, content: res));
+                }
+                if (resultsInfo.isNotEmpty) {
+                  yield ChatStreamChunk(content: '', isDone: false, totalTokens: usage?.totalTokens ?? 0, usage: usage, toolResults: resultsInfo);
+                }
               }
               final approxTotal = approxPromptTokens + _approxTokensFromChars(approxCompletionChars);
               yield ChatStreamChunk(
@@ -815,7 +877,7 @@ class ChatApiService {
     ProviderConfig config,
     String modelId,
     List<Map<String, dynamic>> messages,
-    {List<String>? userImagePaths, int? thinkingBudget}
+    {List<String>? userImagePaths, int? thinkingBudget, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall}
   ) async* {
     final base = config.baseUrl.endsWith('/') 
         ? config.baseUrl.substring(0, config.baseUrl.length - 1) 
@@ -859,11 +921,32 @@ class ChatApiService {
       }
     }
 
+    // Map OpenAI-style tools to Anthropic tools if provided
+    List<Map<String, dynamic>>? anthropicTools;
+    if (tools != null && tools.isNotEmpty) {
+      anthropicTools = [];
+      for (final t in tools) {
+        final fn = (t['function'] as Map<String, dynamic>?);
+        if (fn == null) continue;
+        final name = (fn['name'] ?? '').toString();
+        if (name.isEmpty) continue;
+        final desc = (fn['description'] ?? '').toString();
+        final params = (fn['parameters'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{'type': 'object'};
+        anthropicTools.add({
+          'name': name,
+          if (desc.isNotEmpty) 'description': desc,
+          'input_schema': params,
+        });
+      }
+    }
+
     final body = {
       'model': modelId,
       'max_tokens': 4096,
       'messages': transformed,
       'stream': true,
+      if (anthropicTools != null && anthropicTools.isNotEmpty) 'tools': anthropicTools,
+      if (anthropicTools != null && anthropicTools.isNotEmpty) 'tool_choice': {'type': 'auto'},
       if (isReasoning)
         'thinking': {
           'type': (thinkingBudget == 0) ? 'disabled' : 'enabled',
@@ -891,6 +974,9 @@ class ChatApiService {
     String buffer = '';
     int totalTokens = 0;
     TokenUsage? usage;
+
+    // Accumulate tool_use inputs by id
+    final Map<String, Map<String, dynamic>> _anthToolUse = <String, Map<String, dynamic>>{}; // id -> {name, argsStr}
 
     await for (final chunk in stream) {
       buffer += chunk;
@@ -928,6 +1014,40 @@ class ChatApiService {
                     totalTokens: totalTokens,
                   );
                 }
+              } else if (delta['type'] == 'tool_use_delta') {
+                final id = (json['content_block']?['id'] ?? json['id'] ?? '').toString();
+                if (id.isNotEmpty) {
+                  final entry = _anthToolUse.putIfAbsent(id, () => {'name': (json['content_block']?['name'] ?? '').toString(), 'args': ''});
+                  final argsDelta = (delta['partial_json'] ?? delta['input'] ?? delta['text'] ?? '').toString();
+                  if (argsDelta.isNotEmpty) entry['args'] = (entry['args'] ?? '') + argsDelta;
+                }
+              }
+            }
+          } else if (type == 'content_block_start') {
+            // Start of tool_use block: we can pre-register name/id
+            final cb = json['content_block'];
+            if (cb is Map && (cb['type'] == 'tool_use')) {
+              final id = (cb['id'] ?? '').toString();
+              final name = (cb['name'] ?? '').toString();
+              if (id.isNotEmpty) {
+                _anthToolUse.putIfAbsent(id, () => {'name': name, 'args': ''});
+              }
+            }
+          } else if (type == 'content_block_stop') {
+            // Finalize tool_use and emit tool call + result
+            final id = (json['content_block']?['id'] ?? json['id'] ?? '').toString();
+            if (id.isNotEmpty && _anthToolUse.containsKey(id)) {
+              final name = (_anthToolUse[id]!['name'] ?? '').toString();
+              Map<String, dynamic> args;
+              try { args = (jsonDecode((_anthToolUse[id]!['args'] ?? '{}') as String) as Map).cast<String, dynamic>(); } catch (_) { args = <String, dynamic>{}; }
+              // Emit placeholder
+              final calls = [ToolCallInfo(id: id, name: name, arguments: args)];
+              yield ChatStreamChunk(content: '', isDone: false, totalTokens: totalTokens, toolCalls: calls, usage: usage);
+              // Execute tool and emit result
+              if (onToolCall != null) {
+                final res = await onToolCall(name, args) ?? '';
+                final results = [ToolResultInfo(id: id, name: name, arguments: args, content: res)];
+                yield ChatStreamChunk(content: '', isDone: false, totalTokens: totalTokens, toolResults: results, usage: usage);
               }
             }
           } else if (type == 'message_stop') {
@@ -959,7 +1079,7 @@ class ChatApiService {
     ProviderConfig config,
     String modelId,
     List<Map<String, dynamic>> messages,
-    {List<String>? userImagePaths, int? thinkingBudget}
+    {List<String>? userImagePaths, int? thinkingBudget, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall}
   ) async* {
     // Implement SSE streaming via :streamGenerateContent with alt=sse
     // Build endpoint per Vertex vs Gemini
@@ -1017,119 +1137,173 @@ class ChatApiService {
         .abilities
         .contains(ModelAbility.reasoning);
     final off = _isOff(thinkingBudget);
-    final body = <String, dynamic>{
-      'contents': contents,
-      if (isReasoning)
-        'generationConfig': {
-          'thinkingConfig': {
-            'includeThoughts': off ? false : true,
-            if (!off && thinkingBudget != null && thinkingBudget >= 0)
-              'thinkingBudget': thinkingBudget,
-          }
-        },
-    };
-
-    final request = http.Request('POST', uri);
-    request.headers.addAll(<String, String>{
-      'Content-Type': 'application/json',
-      'Accept': 'text/event-stream',
-      if (config.vertexAI == true && config.apiKey.isNotEmpty)
-        'Authorization': 'Bearer ${config.apiKey}',
-    });
-    request.body = jsonEncode(body);
-
-    final response = await client.send(request);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final errorBody = await response.stream.bytesToString();
-      throw HttpException('HTTP ${response.statusCode}: $errorBody');
+    // Map OpenAI tools to Gemini functionDeclarations
+    List<Map<String, dynamic>>? geminiTools;
+    if (tools != null && tools.isNotEmpty) {
+      final decls = <Map<String, dynamic>>[];
+      for (final t in tools) {
+        final fn = (t['function'] as Map<String, dynamic>?);
+        if (fn == null) continue;
+        final name = (fn['name'] ?? '').toString();
+        if (name.isEmpty) continue;
+        final desc = (fn['description'] ?? '').toString();
+        final params = (fn['parameters'] as Map?)?.cast<String, dynamic>();
+        final d = <String, dynamic>{'name': name, if (desc.isNotEmpty) 'description': desc};
+        if (params != null) d['parameters'] = params;
+        decls.add(d);
+      }
+      if (decls.isNotEmpty) geminiTools = [{'function_declarations': decls}];
     }
 
-    final stream = response.stream.transform(utf8.decoder);
-    String buffer = '';
+    // Maintain a rolling conversation for multi-round tool calls
+    List<Map<String, dynamic>> convo = List<Map<String, dynamic>>.from(contents);
     TokenUsage? usage;
     int totalTokens = 0;
 
-    await for (final chunk in stream) {
-      buffer += chunk;
-      final lines = buffer.split('\n');
-      buffer = lines.last; // keep incomplete line
+    while (true) {
+      final body = <String, dynamic>{
+        'contents': convo,
+        if (isReasoning)
+          'generationConfig': {
+            'thinkingConfig': {
+              'includeThoughts': off ? false : true,
+              if (!off && thinkingBudget != null && thinkingBudget >= 0)
+                'thinkingBudget': thinkingBudget,
+            }
+          },
+        if (geminiTools != null && geminiTools.isNotEmpty) 'tools': geminiTools,
+      };
 
-      for (int i = 0; i < lines.length - 1; i++) {
-        final line = lines[i].trim();
-        if (line.isEmpty) continue;
-        if (!line.startsWith('data:')) continue;
-        final data = line.substring(5).trim(); // after 'data:'
-        if (data.isEmpty) continue;
-        // No [DONE] sentinel for Google SSE; rely on stream close
-        try {
-          final obj = jsonDecode(data) as Map<String, dynamic>;
-          // usageMetadata may appear on any chunk
-          final um = obj['usageMetadata'];
-          if (um is Map<String, dynamic>) {
-            usage = (usage ?? const TokenUsage()).merge(TokenUsage(
-              promptTokens: (um['promptTokenCount'] ?? 0) as int,
-              completionTokens: (um['candidatesTokenCount'] ?? 0) as int,
-              totalTokens: (um['totalTokenCount'] ?? 0) as int,
-            ));
-            totalTokens = usage!.totalTokens;
-          }
+      final request = http.Request('POST', uri);
+      request.headers.addAll(<String, String>{
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+        if (config.vertexAI == true && config.apiKey.isNotEmpty)
+          'Authorization': 'Bearer ${config.apiKey}',
+      });
+      request.body = jsonEncode(body);
 
-          final candidates = obj['candidates'];
-          if (candidates is List && candidates.isNotEmpty) {
-            // Aggregate deltas in this event
-            String textDelta = '';
-            String reasoningDelta = '';
-            for (final cand in candidates) {
-              if (cand is! Map) continue;
-              final content = cand['content'];
-              if (content is! Map) continue;
-              final parts = content['parts'];
-              if (parts is! List) continue;
-              for (final p in parts) {
-                if (p is! Map) continue;
-                final t = (p['text'] ?? '') as String? ?? '';
-                final thought = p['thought'] as bool? ?? false;
-                if (t.isEmpty) continue;
-                if (thought) {
-                  reasoningDelta += t;
-                } else {
-                  textDelta += t;
+      final resp = await client.send(request);
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        final errorBody = await resp.stream.bytesToString();
+        throw HttpException('HTTP ${resp.statusCode}: $errorBody');
+      }
+
+      final stream = resp.stream.transform(utf8.decoder);
+      String buffer = '';
+      // Collect any function calls in this round
+      final List<Map<String, dynamic>> calls = <Map<String, dynamic>>[]; // {id,name,args,res}
+
+      await for (final chunk in stream) {
+        buffer += chunk;
+        final lines = buffer.split('\n');
+        buffer = lines.last; // keep incomplete line
+
+        for (int i = 0; i < lines.length - 1; i++) {
+          final line = lines[i].trim();
+          if (line.isEmpty) continue;
+          if (!line.startsWith('data:')) continue;
+          final data = line.substring(5).trim(); // after 'data:'
+          if (data.isEmpty) continue;
+          try {
+            final obj = jsonDecode(data) as Map<String, dynamic>;
+            final um = obj['usageMetadata'];
+            if (um is Map<String, dynamic>) {
+              usage = (usage ?? const TokenUsage()).merge(TokenUsage(
+                promptTokens: (um['promptTokenCount'] ?? 0) as int,
+                completionTokens: (um['candidatesTokenCount'] ?? 0) as int,
+                totalTokens: (um['totalTokenCount'] ?? 0) as int,
+              ));
+              totalTokens = usage!.totalTokens;
+            }
+
+            final candidates = obj['candidates'];
+            if (candidates is List && candidates.isNotEmpty) {
+              String textDelta = '';
+              String reasoningDelta = '';
+              for (final cand in candidates) {
+                if (cand is! Map) continue;
+                final content = cand['content'];
+                if (content is! Map) continue;
+                final parts = content['parts'];
+                if (parts is! List) continue;
+                for (final p in parts) {
+                  if (p is! Map) continue;
+                  final t = (p['text'] ?? '') as String? ?? '';
+                  final thought = p['thought'] as bool? ?? false;
+                  if (t.isNotEmpty) {
+                    if (thought) {
+                      reasoningDelta += t;
+                    } else {
+                      textDelta += t;
+                    }
+                  }
+                  final fc = p['functionCall'];
+                  if (fc is Map) {
+                    final name = (fc['name'] ?? '').toString();
+                    Map<String, dynamic> args = const <String, dynamic>{};
+                    final rawArgs = fc['args'];
+                    if (rawArgs is Map) {
+                      args = rawArgs.cast<String, dynamic>();
+                    } else if (rawArgs is String && rawArgs.isNotEmpty) {
+                      try { args = (jsonDecode(rawArgs) as Map).cast<String, dynamic>(); } catch (_) {}
+                    }
+                    final id = 'call_${DateTime.now().microsecondsSinceEpoch}';
+                    // Emit placeholder immediately
+                    yield ChatStreamChunk(content: '', isDone: false, totalTokens: totalTokens, usage: usage, toolCalls: [ToolCallInfo(id: id, name: name, arguments: args)]);
+                    String resText = '';
+                    if (onToolCall != null) {
+                      resText = await onToolCall(name, args) ?? '';
+                      yield ChatStreamChunk(content: '', isDone: false, totalTokens: totalTokens, usage: usage, toolResults: [ToolResultInfo(id: id, name: name, arguments: args, content: resText)]);
+                    }
+                    calls.add({'id': id, 'name': name, 'args': args, 'result': resText});
+                  }
                 }
               }
-            }
 
-            // Yield deltas if any
-            if (reasoningDelta.isNotEmpty) {
-              yield ChatStreamChunk(
-                content: '',
-                reasoning: reasoningDelta,
-                isDone: false,
-                totalTokens: totalTokens,
-                usage: usage,
-              );
+              if (reasoningDelta.isNotEmpty) {
+                yield ChatStreamChunk(content: '', reasoning: reasoningDelta, isDone: false, totalTokens: totalTokens, usage: usage);
+              }
+              if (textDelta.isNotEmpty) {
+                yield ChatStreamChunk(content: textDelta, isDone: false, totalTokens: totalTokens, usage: usage);
+              }
             }
-            if (textDelta.isNotEmpty) {
-              yield ChatStreamChunk(
-                content: textDelta,
-                isDone: false,
-                totalTokens: totalTokens,
-                usage: usage,
-              );
-            }
+          } catch (_) {
+            // ignore malformed chunk
           }
-        } catch (_) {
-          // ignore malformed chunk
         }
       }
-    }
 
-    // Stream ended: send final done signal with latest usage if any
-    yield ChatStreamChunk(
-      content: '',
-      isDone: true,
-      totalTokens: totalTokens,
-      usage: usage,
-    );
+      if (calls.isEmpty) {
+        // No tool calls; this round finished
+        yield ChatStreamChunk(content: '', isDone: true, totalTokens: totalTokens, usage: usage);
+        return;
+      }
+
+      // Append model functionCall(s) and user functionResponse(s) to conversation, then loop
+      for (final c in calls) {
+        final name = (c['name'] ?? '').toString();
+        final args = (c['args'] as Map<String, dynamic>? ?? const <String, dynamic>{});
+        final resText = (c['result'] ?? '').toString();
+        // Add the model's functionCall turn
+        convo.add({'role': 'model', 'parts': [
+          {'functionCall': {'name': name, 'args': args}},
+        ]});
+        // Prepare JSON response object
+        Map<String, dynamic> responseObj;
+        try {
+          responseObj = (jsonDecode(resText) as Map).cast<String, dynamic>();
+        } catch (_) {
+          // Wrap plain text result
+          responseObj = {'result': resText};
+        }
+        // Add user's functionResponse turn
+        convo.add({'role': 'user', 'parts': [
+          {'functionResponse': {'name': name, 'response': responseObj}},
+        ]});
+      }
+      // Continue while(true) for next round
+    }
   }
 }
 
