@@ -36,6 +36,8 @@ class ChatMessageWidget extends StatefulWidget {
   final DateTime? reasoningStartAt;
   final DateTime? reasoningFinishedAt;
   final VoidCallback? onToggleReasoning;
+  // For multiple reasoning segments
+  final List<ReasoningSegment>? reasoningSegments;
   // Optional translation UI props
   final bool translationExpanded;
   final VoidCallback? onToggleTranslation;
@@ -61,6 +63,7 @@ class ChatMessageWidget extends StatefulWidget {
     this.reasoningStartAt,
     this.reasoningFinishedAt,
     this.onToggleReasoning,
+    this.reasoningSegments,
     this.translationExpanded = true,
     this.onToggleTranslation,
     this.toolParts,
@@ -515,29 +518,95 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
             ],
           ),
           const SizedBox(height: 8),
-          // Reasoning preview (if provided)
-          if ((widget.reasoningText != null && widget.reasoningText!.isNotEmpty) || widget.reasoningLoading)
-            _ReasoningSection(
-              text: widget.reasoningText ?? '',
-              expanded: widget.reasoningExpanded,
-              loading: widget.reasoningFinishedAt == null,
-              startAt: widget.reasoningStartAt,
-              finishedAt: widget.reasoningFinishedAt,
-              onToggle: widget.onToggleReasoning,
-            ),
-          const SizedBox(height: 8),
-          // Tool call placeholders before content
-          if ((widget.toolParts ?? const <ToolUIPart>[]).isNotEmpty) ...[
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: widget.toolParts!
-                  .map((p) => Padding(
+          // Mixed reasoning and tool sections
+          if (widget.reasoningSegments != null && widget.reasoningSegments!.isNotEmpty) ...[
+            // Build mixed content: reasoning segments interleaved with tool calls
+            ...() {
+              final List<Widget> mixedContent = [];
+              int toolIndex = 0;
+              final tools = widget.toolParts ?? const <ToolUIPart>[];
+              
+              for (int i = 0; i < widget.reasoningSegments!.length; i++) {
+                final segment = widget.reasoningSegments![i];
+                
+                // Add reasoning segment if it has content
+                if (segment.text.isNotEmpty) {
+                  mixedContent.add(
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _ReasoningSection(
+                        text: segment.text,
+                        expanded: segment.expanded,
+                        loading: segment.loading,
+                        startAt: segment.startAt,
+                        finishedAt: segment.finishedAt,
+                        onToggle: segment.onToggle,
+                      ),
+                    ),
+                  );
+                }
+                
+                // Add any tool calls that should appear after this reasoning segment
+                // (This assumes tools are ordered to match reasoning segments)
+                if (i < widget.reasoningSegments!.length - 1) {
+                  // Not the last segment, so there might be tools after it
+                  while (toolIndex < tools.length) {
+                    final tool = tools[toolIndex];
+                    // Check if this tool should be placed here
+                    // We'll place tools between reasoning segments
+                    mixedContent.add(
+                      Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: _ToolCallItem(part: p),
-                      ))
-                  .toList(),
-            ),
-            const SizedBox(height: 8),
+                        child: _ToolCallItem(part: tool),
+                      ),
+                    );
+                    toolIndex++;
+                    // Only add one batch of tools between reasoning segments
+                    if (!tool.loading) break;
+                  }
+                }
+              }
+              
+              // Add any remaining tools at the end
+              while (toolIndex < tools.length) {
+                mixedContent.add(
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _ToolCallItem(part: tools[toolIndex]),
+                  ),
+                );
+                toolIndex++;
+              }
+              
+              return mixedContent;
+            }(),
+          ] else ...[
+            // Fallback to old behavior if no reasoning segments
+            // Reasoning preview (if provided)
+            if ((widget.reasoningText != null && widget.reasoningText!.isNotEmpty) || widget.reasoningLoading) ...[
+              _ReasoningSection(
+                text: widget.reasoningText ?? '',
+                expanded: widget.reasoningExpanded,
+                loading: widget.reasoningFinishedAt == null,
+                startAt: widget.reasoningStartAt,
+                finishedAt: widget.reasoningFinishedAt,
+                onToggle: widget.onToggleReasoning,
+              ),
+              const SizedBox(height: 8),
+            ],
+            // Tool call placeholders before content
+            if ((widget.toolParts ?? const <ToolUIPart>[]).isNotEmpty) ...[
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: widget.toolParts!
+                    .map((p) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _ToolCallItem(part: p),
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(height: 8),
+            ],
           ],
           // Message content with markdown support (fill available width)
           Container(
@@ -807,6 +876,25 @@ class ToolUIPart {
     required this.arguments,
     this.content,
     this.loading = false,
+  });
+}
+
+// Data for a reasoning segment (for mixed display)
+class ReasoningSegment {
+  final String text;
+  final bool expanded;
+  final bool loading;
+  final DateTime? startAt;
+  final DateTime? finishedAt;
+  final VoidCallback? onToggle;
+  
+  const ReasoningSegment({
+    required this.text,
+    required this.expanded,
+    required this.loading,
+    this.startAt,
+    this.finishedAt,
+    this.onToggle,
   });
 }
 

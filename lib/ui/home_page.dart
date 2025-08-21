@@ -62,7 +62,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   final Map<String, _ReasoningData> _reasoning = <String, _ReasoningData>{};
   final Map<String, _TranslationData> _translations = <String, _TranslationData>{};
   final Map<String, List<ToolUIPart>> _toolParts = <String, List<ToolUIPart>>{}; // assistantMessageId -> parts
-  final Map<String, List<String>> _reasoningSegments = <String, List<String>>{}; // assistantMessageId -> reasoning segments
+  final Map<String, List<_ReasoningSegmentData>> _reasoningSegments = <String, List<_ReasoningSegmentData>>{}; // assistantMessageId -> reasoning segments
   McpProvider? _mcpProvider;
   Set<String> _connectedMcpIds = <String>{};
 
@@ -577,6 +577,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           _reasoning[assistantMessage.id] = r;
           if (mounted) setState(() {});
         }
+        
+        // Also finish any unfinished reasoning segments
+        final segments = _reasoningSegments[assistantMessage.id];
+        if (segments != null && segments.isNotEmpty && segments.last.finishedAt == null) {
+          segments.last.finishedAt = DateTime.now();
+          final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+          if (autoCollapse) {
+            segments.last.expanded = false;
+          }
+          _reasoningSegments[assistantMessage.id] = segments;
+          if (mounted) setState(() {});
+        }
         if (generateTitle) {
           _maybeGenerateTitle();
         }
@@ -595,13 +607,32 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             _reasoning[assistantMessage.id] = r;
             
             // Add to reasoning segments for mixed display
-            final segments = _reasoningSegments[assistantMessage.id] ?? <String>[];
-            if (segments.isEmpty || (_toolParts[assistantMessage.id]?.isNotEmpty ?? false)) {
-              // Start a new segment if no segments exist or after tool calls
-              segments.add(chunk.reasoning!);
+            final segments = _reasoningSegments[assistantMessage.id] ?? <_ReasoningSegmentData>[];
+            
+            if (segments.isEmpty) {
+              // First reasoning segment
+              final newSegment = _ReasoningSegmentData();
+              newSegment.text = chunk.reasoning!;
+              newSegment.startAt = DateTime.now();
+              newSegment.expanded = true;
+              segments.add(newSegment);
             } else {
-              // Append to the last segment
-              segments[segments.length - 1] += chunk.reasoning!;
+              // Check if we should start a new segment (after tool calls)
+              final hasToolsAfterLastSegment = (_toolParts[assistantMessage.id]?.isNotEmpty ?? false);
+              final lastSegment = segments.last;
+              
+              if (hasToolsAfterLastSegment && lastSegment.finishedAt != null) {
+                // Start a new segment after tools
+                final newSegment = _ReasoningSegmentData();
+                newSegment.text = chunk.reasoning!;
+                newSegment.startAt = DateTime.now();
+                newSegment.expanded = true;
+                segments.add(newSegment);
+              } else {
+                // Continue current segment
+                lastSegment.text += chunk.reasoning!;
+                lastSegment.startAt ??= DateTime.now();
+              }
             }
             _reasoningSegments[assistantMessage.id] = segments;
             
@@ -615,46 +646,37 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
           // MCP tool call placeholders
           if ((chunk.toolCalls ?? const []).isNotEmpty) {
-            // Start a new reasoning segment after tool calls
-            final segments = _reasoningSegments[assistantMessage.id] ?? <String>[];
-            if (segments.isNotEmpty && segments.last.isNotEmpty) {
-              // If there was reasoning before, prepare for a new segment after tools
-              segments.add(''); // Add empty segment that will be filled with post-tool reasoning
+            // Finish current reasoning segment if exists
+            final segments = _reasoningSegments[assistantMessage.id] ?? <_ReasoningSegmentData>[];
+            if (segments.isNotEmpty && segments.last.finishedAt == null) {
+              segments.last.finishedAt = DateTime.now();
               _reasoningSegments[assistantMessage.id] = segments;
             }
             
-            // Merge new tool calls with existing ones for multi-round flows
+            // Simply append new tool calls instead of merging by ID/name
+            // This allows multiple calls to the same tool
             final existing = List<ToolUIPart>.of(_toolParts[assistantMessage.id] ?? const []);
-            final merged = <ToolUIPart>[];
-            // Map by id (fall back to name when id blank)
-            final Map<String, ToolUIPart> map = {for (final p in existing) (p.id.isNotEmpty ? p.id : 'name:${p.toolName}') : p};
             for (final c in chunk.toolCalls!) {
-              final key = c.id.isNotEmpty ? c.id : 'name:${c.name}';
-              if (map.containsKey(key)) {
-                // Ensure it's marked loading again (a new round may reuse same id)
-                map[key] = ToolUIPart(id: c.id, toolName: c.name, arguments: c.arguments, loading: true, content: map[key]!.content);
-              } else {
-                map[key] = ToolUIPart(id: c.id, toolName: c.name, arguments: c.arguments, loading: true);
-              }
+              existing.add(ToolUIPart(id: c.id, toolName: c.name, arguments: c.arguments, loading: true));
             }
-            merged.addAll(map.values);
             setState(() {
-              _toolParts[assistantMessage.id] = merged;
+              _toolParts[assistantMessage.id] = existing;
             });
-            // Persist placeholders (merge with existing stored events)
+            
+            // Persist placeholders - append new events
             try {
               final prev = _chatService.getToolEvents(assistantMessage.id);
-              final prevMap = {for (final e in prev) ((e['id']?.toString().isNotEmpty ?? false) ? e['id'].toString() : 'name:${e['name']?.toString() ?? ''}') : e};
-              for (final c in chunk.toolCalls!) {
-                final key = c.id.isNotEmpty ? c.id : 'name:${c.name}';
-                prevMap[key] = {
-                  'id': c.id,
-                  'name': c.name,
-                  'arguments': c.arguments,
-                  'content': prevMap[key]?['content'],
-                };
-              }
-              await _chatService.setToolEvents(assistantMessage.id, prevMap.values.toList());
+              final newEvents = <Map<String, dynamic>>[
+                ...prev,
+                for (final c in chunk.toolCalls!)
+                  {
+                    'id': c.id,
+                    'name': c.name,
+                    'arguments': c.arguments,
+                    'content': null,
+                  },
+              ];
+              await _chatService.setToolEvents(assistantMessage.id, newEvents);
             } catch (_) {}
           }
 
@@ -662,7 +684,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           if ((chunk.toolResults ?? const []).isNotEmpty) {
             final parts = List<ToolUIPart>.of(_toolParts[assistantMessage.id] ?? const []);
             for (final r in chunk.toolResults!) {
-              final idx = parts.indexWhere((p) => p.id == r.id || (p.toolName == r.name));
+              // Find the first loading tool with matching ID or name
+              // This ensures we update the correct placeholder even with multiple same-name tools
+              int idx = -1;
+              for (int i = 0; i < parts.length; i++) {
+                if (parts[i].loading && (parts[i].id == r.id || (parts[i].id.isEmpty && parts[i].toolName == r.name))) {
+                  idx = i;
+                  break;
+                }
+              }
+              
               if (idx >= 0) {
                 parts[idx] = ToolUIPart(
                   id: parts[idx].id,
@@ -752,6 +783,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 );
                 if (mounted) setState(() {});
               }
+              
+              // Also finish the current reasoning segment
+              final segments = _reasoningSegments[assistantMessage.id];
+              if (segments != null && segments.isNotEmpty && segments.last.finishedAt == null) {
+                segments.last.finishedAt = DateTime.now();
+                final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+                if (autoCollapse) {
+                  segments.last.expanded = false;
+                }
+                _reasoningSegments[assistantMessage.id] = segments;
+                if (mounted) setState(() {});
+              }
             }
 
             // Update UI with streaming content
@@ -819,6 +862,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             }
             _reasoning[assistantMessage.id] = r;
           }
+          
+          // Also finish any unfinished reasoning segments on error
+          final segments = _reasoningSegments[assistantMessage.id];
+          if (segments != null && segments.isNotEmpty && segments.last.finishedAt == null) {
+            segments.last.finishedAt = DateTime.now();
+            final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+            if (autoCollapse) {
+              segments.last.expanded = false;
+            }
+            _reasoningSegments[assistantMessage.id] = segments;
+          }
 
           _messageStreamSubscription = null;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -869,6 +923,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           reasoningText: r.text,
           reasoningFinishedAt: r.finishedAt,
         );
+      }
+      
+      // Also finish any unfinished reasoning segments on error
+      final segments = _reasoningSegments[assistantMessage.id];
+      if (segments != null && segments.isNotEmpty && segments.last.finishedAt == null) {
+        segments.last.finishedAt = DateTime.now();
+        final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+        if (autoCollapse) {
+          segments.last.expanded = false;
+        }
+        _reasoningSegments[assistantMessage.id] = segments;
       }
 
       _messageStreamSubscription = null;
@@ -1352,6 +1417,22 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                             }
                           },
                           toolParts: message.role == 'assistant' ? _toolParts[message.id] : null,
+                          reasoningSegments: message.role == 'assistant' ? (() {
+                            final segments = _reasoningSegments[message.id];
+                            if (segments == null || segments.isEmpty) return null;
+                            return segments.map((s) => ReasoningSegment(
+                              text: s.text,
+                              expanded: s.expanded,
+                              loading: s.finishedAt == null && s.text.isNotEmpty,
+                              startAt: s.startAt,
+                              finishedAt: s.finishedAt,
+                              onToggle: () {
+                                setState(() {
+                                  s.expanded = !s.expanded;
+                                });
+                              },
+                            )).toList();
+                          })() : null,
                           ),
                         );
                       },
@@ -1506,6 +1587,13 @@ class _ReasoningData {
   DateTime? startAt;
   DateTime? finishedAt;
   bool expanded = false;
+}
+
+class _ReasoningSegmentData {
+  String text = '';
+  DateTime? startAt;
+  DateTime? finishedAt;
+  bool expanded = true;
 }
 
 class _TranslationData {
