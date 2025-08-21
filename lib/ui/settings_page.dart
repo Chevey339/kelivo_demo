@@ -7,6 +7,9 @@ import 'providers_page.dart';
 import 'display_settings_page.dart';
 import '../services/chat_service.dart';
 import 'mcp_page.dart';
+import 'about_page.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -203,10 +206,40 @@ class SettingsPage extends StatelessWidget {
           ),
 
           header(Localizations.localeOf(context).languageCode == 'zh' ? '关于' : 'About'),
-          SettingRow(icon: Lucide.BadgeInfo, title: Localizations.localeOf(context).languageCode == 'zh' ? '关于' : 'About', onTap: () {}),
-          SettingRow(icon: Lucide.Library, title: Localizations.localeOf(context).languageCode == 'zh' ? '使用文档' : 'Docs', onTap: () {}),
-          SettingRow(icon: Lucide.Heart, title: Localizations.localeOf(context).languageCode == 'zh' ? '赞助' : 'Sponsor', onTap: () {}),
-          SettingRow(icon: Lucide.Share2, title: Localizations.localeOf(context).languageCode == 'zh' ? '分享' : 'Share', onTap: () {}),
+          SettingRow(
+            icon: Lucide.BadgeInfo,
+            title: Localizations.localeOf(context).languageCode == 'zh' ? '关于' : 'About',
+            onTap: () {
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AboutPage()));
+            },
+          ),
+          SettingRow(
+            icon: Lucide.Library,
+            title: Localizations.localeOf(context).languageCode == 'zh' ? '使用文档' : 'Docs',
+            onTap: () async {
+              final uri = Uri.parse('https://psycheas.top/');
+              if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+                await launchUrl(uri, mode: LaunchMode.platformDefault);
+              }
+            },
+          ),
+          SettingRow(
+            icon: Lucide.Heart,
+            title: Localizations.localeOf(context).languageCode == 'zh' ? '赞助' : 'Sponsor',
+            onTap: () async {
+              final uri = Uri.parse('https://c.img.dasctf.com/LightPicture/2024/12/6c2a6df245ed97b3.jpg');
+              if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+                await launchUrl(uri, mode: LaunchMode.platformDefault);
+              }
+            },
+          ),
+          SettingRow(
+            icon: Lucide.Share2,
+            title: Localizations.localeOf(context).languageCode == 'zh' ? '分享' : 'Share',
+            onTap: () async {
+              await Share.share('Kelivo - 开源移动端AI助手');
+            },
+          ),
 
           const SizedBox(height: 24),
         ],
