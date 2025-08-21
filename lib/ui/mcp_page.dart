@@ -79,6 +79,14 @@ class McpPage extends StatelessWidget {
                           onPressed: () => Navigator.of(ctx).maybePop(),
                           icon: Icon(Lucide.X, size: 16, color: cs.primary),
                           label: Text(zh ? '关闭' : 'Close', style: TextStyle(color: cs.primary)),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(44),
+                            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white10
+                                : const Color(0xFFF2F3F5),
+                            side: BorderSide(color: cs.outlineVariant.withOpacity(0.35)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -90,6 +98,13 @@ class McpPage extends StatelessWidget {
                           },
                           icon: const Icon(Lucide.RefreshCw, size: 18),
                           label: Text(zh ? '重新连接' : 'Reconnect'),
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(44),
+                            backgroundColor: cs.primary,
+                            foregroundColor: cs.onPrimary,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                         ),
                       ),
                     ],

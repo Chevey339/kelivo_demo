@@ -218,10 +218,31 @@ class _McpServerEditSheetState extends State<_McpServerEditSheet> with SingleTic
         ],
         Align(
           alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            onPressed: () => setState(() => _headers.add(_HeaderEntry(TextEditingController(), TextEditingController()))),
-            icon: Icon(Lucide.Plus, size: 16, color: cs.primary),
-            label: Text(zh ? '添加请求头' : 'Add Header', style: TextStyle(color: cs.primary)),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(999),
+              onTap: () => setState(() => _headers.add(_HeaderEntry(TextEditingController(), TextEditingController()))),
+              child: Ink(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Lucide.Plus, size: 16, color: cs.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      zh ? '添加请求头' : 'Add Header',
+                      style: TextStyle(fontSize: 13, color: cs.primary, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ],
