@@ -485,9 +485,23 @@ class ChatService extends ChangeNotifier {
   }) async {
     if (!_initialized) await init();
     final list = List<Map<String, dynamic>>.of(getToolEvents(assistantMessageId));
-    final idx = list.indexWhere((e) => (e['id']?.toString() ?? '') == id || (e['name']?.toString() ?? '') == name);
+    final cleanId = (id).toString();
+
+    int idx = -1;
+    // Prefer matching by a non-empty id
+    if (cleanId.isNotEmpty) {
+      idx = list.indexWhere((e) => (e['id']?.toString() ?? '') == cleanId);
+    }
+    // If no id or not found, match the first placeholder (no content) with same name
+    if (idx < 0) {
+      idx = list.indexWhere((e) =>
+          (e['name']?.toString() ?? '') == name &&
+          (e['content'] == null || (e['content']?.toString().isEmpty ?? true))
+      );
+    }
+
     final record = <String, dynamic>{
-      'id': id,
+      'id': cleanId,
       'name': name,
       'arguments': arguments,
       'content': content,

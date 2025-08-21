@@ -156,6 +156,21 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         _reasoning[streaming.id] = r;
         if (mounted) setState(() {});
       }
+
+      // Also finalize any unfinished reasoning segment blocks and persist them
+      final segs = _reasoningSegments[streaming.id];
+      if (segs != null && segs.isNotEmpty && segs.last.finishedAt == null) {
+        segs.last.finishedAt = DateTime.now();
+        final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+        if (autoCollapse) {
+          segs.last.expanded = false;
+        }
+        _reasoningSegments[streaming.id] = segs;
+        await _chatService.updateMessage(
+          streaming.id,
+          reasoningSegmentsJson: _serializeReasoningSegments(segs),
+        );
+      }
     } else {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -699,6 +714,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             if (segments.isNotEmpty && segments.last.finishedAt == null) {
               segments.last.finishedAt = DateTime.now();
               _reasoningSegments[assistantMessage.id] = segments;
+              // Persist closed segment state
+              await _chatService.updateMessage(
+                assistantMessage.id,
+                reasoningSegmentsJson: _serializeReasoningSegments(segments),
+              );
             }
             
             // Simply append new tool calls instead of merging by ID/name
@@ -842,6 +862,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 }
                 _reasoningSegments[assistantMessage.id] = segments;
                 if (mounted) setState(() {});
+                // Persist closed segment state
+                await _chatService.updateMessage(
+                  assistantMessage.id,
+                  reasoningSegmentsJson: _serializeReasoningSegments(segments),
+                );
               }
             }
 
@@ -920,6 +945,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               segments.last.expanded = false;
             }
             _reasoningSegments[assistantMessage.id] = segments;
+            // Persist closed segment state
+            try {
+              await _chatService.updateMessage(
+                assistantMessage.id,
+                reasoningSegmentsJson: _serializeReasoningSegments(segments),
+              );
+            } catch (_) {}
           }
 
           _messageStreamSubscription = null;
@@ -982,6 +1014,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           segments.last.expanded = false;
         }
         _reasoningSegments[assistantMessage.id] = segments;
+        // Persist closed segment state
+        try {
+          await _chatService.updateMessage(
+            assistantMessage.id,
+            reasoningSegmentsJson: _serializeReasoningSegments(segments),
+          );
+        } catch (_) {}
       }
 
       _messageStreamSubscription = null;

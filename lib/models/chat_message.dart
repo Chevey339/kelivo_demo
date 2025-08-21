@@ -117,6 +117,7 @@ class ChatMessage extends HiveObject {
       'reasoningStartAt': reasoningStartAt?.toIso8601String(),
       'reasoningFinishedAt': reasoningFinishedAt?.toIso8601String(),
       'translation': translation,
+      'reasoningSegmentsJson': reasoningSegmentsJson,
     };
   }
 
@@ -139,6 +140,7 @@ class ChatMessage extends HiveObject {
           ? DateTime.parse(json['reasoningFinishedAt'] as String)
           : null,
       translation: json['translation'] as String?,
+      reasoningSegmentsJson: json['reasoningSegmentsJson'] as String?,
     );
   }
 }
