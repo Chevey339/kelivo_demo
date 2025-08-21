@@ -148,6 +148,10 @@ class McpProvider extends ChangeNotifier {
   final Map<String, McpStatus> _status = {}; // id -> status
   final Map<String, String> _errors = {}; // id -> last error
   List<McpServerConfig> _servers = [];
+  // Reconnect bookkeeping to avoid duplicate concurrent retries
+  final Set<String> _reconnecting = <String>{};
+  // Heartbeat timers for live-connection health checks
+  final Map<String, Timer> _heartbeats = <String, Timer>{};
 
   McpProvider() {
     _load();
@@ -302,6 +306,9 @@ class McpProvider extends ChangeNotifier {
 
       // Try to refresh tools once connected
       await refreshTools(id);
+
+      // Start/refresh heartbeat for this connection
+      _startHeartbeat(id);
     } catch (e, st) {
       _status[id] = McpStatus.error;
       _errors[id] = e.toString();
@@ -316,12 +323,60 @@ class McpProvider extends ChangeNotifier {
     } catch (_) {}
     _status[id] = McpStatus.idle;
     _errors.remove(id);
+    _stopHeartbeat(id);
     notifyListeners();
   }
 
   Future<void> reconnect(String id) async {
     await disconnect(id);
     await connect(id);
+  }
+
+  Future<void> _reconnectWithBackoff(String id, {int maxAttempts = 3}) async {
+    if (_reconnecting.contains(id)) return;
+    _reconnecting.add(id);
+    try {
+      for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        await reconnect(id);
+        if (isConnected(id)) return;
+        // progressive backoff: 600ms, 1200ms, 2400ms
+        final delayMs = 600 * (1 << (attempt - 1));
+        await Future.delayed(Duration(milliseconds: delayMs));
+      }
+    } finally {
+      _reconnecting.remove(id);
+    }
+  }
+
+  void _startHeartbeat(String id, {Duration interval = const Duration(seconds: 12)}) {
+    _stopHeartbeat(id);
+    _heartbeats[id] = Timer.periodic(interval, (t) async {
+      // Heartbeat only when we think we're connected
+      if (!isConnected(id)) return;
+      final client = _clients[id];
+      if (client == null) return;
+      try {
+        // A lightweight call to verify liveness
+        // listTools is relatively cheap and available
+        final fut = client.listTools();
+        // Add a soft timeout to avoid piling up
+        await fut.timeout(const Duration(seconds: 6));
+      } catch (e) {
+        // Consider connection lost; mark error and try auto-reconnect
+        _status[id] = McpStatus.error;
+        _errors[id] = e.toString();
+        notifyListeners();
+        await _reconnectWithBackoff(id, maxAttempts: 3);
+        // If reconnected, restart heartbeat (connect() also starts it)
+        if (!isConnected(id)) {
+          // keep error state; next heartbeat tick will be a no-op
+        }
+      }
+    });
+  }
+
+  void _stopHeartbeat(String id) {
+    _heartbeats.remove(id)?.cancel();
   }
 
   Future<void> refreshTools(String id) async {
@@ -377,15 +432,15 @@ class McpProvider extends ChangeNotifier {
   }
 
   Future<void> ensureConnected(String id) async {
-    if (!isConnected(id)) {
-      await connect(id);
-    }
+    if (isConnected(id)) return;
+    // Try a few times with short backoff in case server blips
+    await _reconnectWithBackoff(id, maxAttempts: 3);
   }
 
   Future<mcp.CallToolResult?> callTool(String serverId, String toolName, Map<String, dynamic> args) async {
     try {
       await ensureConnected(serverId);
-      final client = _clients[serverId];
+      var client = _clients[serverId];
       if (client == null) return null;
       final result = await client.callTool(toolName, args);
       return result;
@@ -393,7 +448,22 @@ class McpProvider extends ChangeNotifier {
       _status[serverId] = McpStatus.error;
       _errors[serverId] = e.toString();
       notifyListeners();
-      return null;
+      // Auto-reconnect a few times and try once more
+      try {
+        await _reconnectWithBackoff(serverId, maxAttempts: 3);
+        if (!isConnected(serverId)) return null;
+        final client = _clients[serverId];
+        if (client == null) return null;
+        final result = await client.callTool(toolName, args);
+        // Mark healthy again
+        _status[serverId] = McpStatus.connected;
+        _errors.remove(serverId);
+        notifyListeners();
+        return result;
+      } catch (_) {
+        // Keep error state; give up
+        return null;
+      }
     }
   }
 
@@ -403,5 +473,15 @@ class McpProvider extends ChangeNotifier {
       tools.addAll(s.tools.where((t) => t.enabled));
     }
     return tools;
+  }
+
+  @override
+  void dispose() {
+    // Clean up timers
+    for (final t in _heartbeats.values) {
+      t.cancel();
+    }
+    _heartbeats.clear();
+    super.dispose();
   }
 }
