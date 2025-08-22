@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:gpt_markdown/custom_widgets/markdown_config.dart' show GptMarkdownConfig;
 import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/github.dart';
 import 'package:flutter_highlight/themes/atom-one-dark-reasonable.dart';
@@ -24,13 +25,19 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
     final imageUrls = _extractImageUrls(text);
 
     final normalized = _preprocessFences(text);
+    // Use default text style but avoid forcing color, so HR can use its own color
+    final baseTextStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(color: null);
+
+    // Replace default HrLine with a softer, shorter one
+    final components = List<MarkdownComponent>.from(MarkdownComponent.globalComponents);
+    final hrIdx = components.indexWhere((c) => c is HrLine);
+    if (hrIdx != -1) components[hrIdx] = SoftHrLine();
     return GptMarkdown(
       normalized,
-      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: cs.onSurface,
-          ),
+      style: baseTextStyle,
       followLinkColor: true,
       onLinkTap: (url, title) => _handleLinkTap(context, url),
+      components: components,
       imageBuilder: (ctx, url) {
         final imgs = imageUrls.isNotEmpty ? imageUrls : [url];
         final idx = imgs.indexOf(url);
@@ -62,7 +69,7 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
             ));
           },
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             child: Image(
               image: provider,
               fit: BoxFit.contain,
@@ -348,5 +355,32 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
     }
     final fixed = SandboxPathResolver.fix(src);
     return FileImage(File(fixed));
+  }
+}
+
+// Softer horizontal rule: shorter width and subtle color
+class SoftHrLine extends BlockMd {
+  @override
+  String get expString => (r"^\s*(?:-{3,}|⸻)\s*$");
+
+  @override
+  Widget build(BuildContext context, String text, GptMarkdownConfig config) {
+    final cs = Theme.of(context).colorScheme;
+    final width = MediaQuery.of(context).size.width;
+    final lineWidth = (width * 0.42).clamp(120.0, 420.0);
+    final color = cs.outlineVariant.withOpacity(0.9);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Center(
+        child: Container(
+          width: lineWidth,
+          height: 1,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(1),
+          ),
+        ),
+      ),
+    );
   }
 }
