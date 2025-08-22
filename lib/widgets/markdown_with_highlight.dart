@@ -6,6 +6,10 @@ import 'package:flutter_highlight/themes/github.dart';
 import 'package:flutter_highlight/themes/atom-one-dark-reasonable.dart';
 import '../icons/lucide_adapter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
+import 'dart:convert';
+import '../utils/sandbox_path_resolver.dart';
+import '../ui/image_viewer_page.dart';
 
 /// gpt_markdown with custom code block highlight and inline code styling.
 class MarkdownWithCodeHighlight extends StatelessWidget {
@@ -17,6 +21,7 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
+    final imageUrls = _extractImageUrls(text);
 
     final normalized = _preprocessFences(text);
     return GptMarkdown(
@@ -26,6 +31,43 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
           ),
       followLinkColor: true,
       onLinkTap: (url, title) => _handleLinkTap(context, url),
+      imageBuilder: (ctx, url) {
+        final imgs = imageUrls.isNotEmpty ? imageUrls : [url];
+        final idx = imgs.indexOf(url);
+        final initial = idx >= 0 ? idx : 0;
+        final provider = _imageProviderFor(url);
+        return GestureDetector(
+          onTap: () {
+            Navigator.of(ctx).push(PageRouteBuilder(
+              pageBuilder: (_, __, ___) => ImageViewerPage(images: imgs, initialIndex: initial),
+              transitionDuration: const Duration(milliseconds: 360),
+              reverseTransitionDuration: const Duration(milliseconds: 280),
+              transitionsBuilder: (context, anim, sec, child) {
+                final curved = CurvedAnimation(
+                  parent: anim,
+                  curve: Curves.easeOutCubic,
+                  reverseCurve: Curves.easeInCubic,
+                );
+                return FadeTransition(
+                  opacity: curved,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 0.02),
+                      end: Offset.zero,
+                    ).animate(curved),
+                    child: child,
+                  ),
+                );
+              },
+            ));
+          },
+          child: Image(
+            image: provider,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stack) => const Icon(Icons.broken_image),
+          ),
+        );
+      },
       linkBuilder: (ctx, span, url, style) {
         final text = span.toPlainText();
         final cs = Theme.of(ctx).colorScheme;
@@ -256,5 +298,32 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
       u = 'https://'+u;
     }
     return Uri.parse(u);
+  }
+
+  static List<String> _extractImageUrls(String md) {
+    final re = RegExp(r"!\[[^\]]*\]\(([^)\s]+)\)");
+    return re
+        .allMatches(md)
+        .map((m) => (m.group(1) ?? '').trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+
+  static ImageProvider _imageProviderFor(String src) {
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      return NetworkImage(src);
+    }
+    if (src.startsWith('data:')) {
+      try {
+        final base64Marker = 'base64,';
+        final idx = src.indexOf(base64Marker);
+        if (idx != -1) {
+          final b64 = src.substring(idx + base64Marker.length);
+          return MemoryImage(base64Decode(b64));
+        }
+      } catch (_) {}
+    }
+    final fixed = SandboxPathResolver.fix(src);
+    return FileImage(File(fixed));
   }
 }
