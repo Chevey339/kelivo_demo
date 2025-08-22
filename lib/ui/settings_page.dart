@@ -7,6 +7,7 @@ import 'providers_page.dart';
 import 'display_settings_page.dart';
 import '../services/chat_service.dart';
 import 'mcp_page.dart';
+import 'assistant_settings_page.dart';
 import 'about_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
@@ -140,7 +141,11 @@ class SettingsPage extends StatelessWidget {
             icon: Lucide.Bot,
             title: Localizations.localeOf(context).languageCode == 'zh' ? '助手' : 'Assistant',
             subtitle: Localizations.localeOf(context).languageCode == 'zh' ? '默认助手与对话风格' : 'Default assistant and style',
-            onTap: () {},
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AssistantSettingsPage()),
+              );
+            },
           ),
 
           header(Localizations.localeOf(context).languageCode == 'zh' ? '模型与服务' : 'Models & Services'),
