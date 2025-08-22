@@ -32,6 +32,8 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
     final components = List<MarkdownComponent>.from(MarkdownComponent.globalComponents);
     final hrIdx = components.indexWhere((c) => c is HrLine);
     if (hrIdx != -1) components[hrIdx] = SoftHrLine();
+    final bqIdx = components.indexWhere((c) => c is BlockQuote);
+    if (bqIdx != -1) components[bqIdx] = ModernBlockQuote();
     return GptMarkdown(
       normalized,
       style: baseTextStyle,
@@ -381,6 +383,64 @@ class SoftHrLine extends BlockMd {
           ),
         ),
       ),
+    );
+  }
+}
+
+// Modern, app-styled block quote with soft background and accent border
+class ModernBlockQuote extends InlineMd {
+  @override
+  bool get inline => false;
+
+  @override
+  RegExp get exp => RegExp(
+        r"(?:(?:^)\ *>[^\n]+)(?:(?:\n)\ *>[^\n]+)*",
+        dotAll: true,
+        multiLine: true,
+      );
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text);
+    final m = match?[0] ?? '';
+    final sb = StringBuffer();
+    for (final line in m.split('\n')) {
+      if (RegExp(r'^\ *>').hasMatch(line)) {
+        var sub = line.trimLeft();
+        sub = sub.substring(1); // remove '>'
+        if (sub.startsWith(' ')) sub = sub.substring(1);
+        sb.writeln(sub);
+      } else {
+        sb.writeln(line);
+      }
+    }
+    final data = sb.toString().trim();
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = cs.primaryContainer.withOpacity(isDark ? 0.18 : 0.12);
+    final accent = cs.primary.withOpacity(isDark ? 0.90 : 0.80);
+
+    final inner = TextSpan(children: MarkdownComponent.generate(context, data, config, true));
+    final child = Directionality(
+      textDirection: config.textDirection,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border(left: BorderSide(color: accent, width: 3)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          child: config.getRich(inner),
+        ),
+      ),
+    );
+
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: child,
     );
   }
 }
