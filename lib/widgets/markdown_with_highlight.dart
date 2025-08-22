@@ -17,8 +17,9 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
 
+    final normalized = _preprocessFences(text);
     return GptMarkdown(
-      text,
+      normalized,
       // Inline `code` styling via highlightBuilder in gpt_markdown
       highlightBuilder: (ctx, inline, style) {
         final bg = isDark ? Colors.white12 : const Color(0xFFF1F3F5);
@@ -45,7 +46,7 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
         return Container(
           width: double.infinity,
           margin: const EdgeInsets.symmetric(vertical: 6),
-          padding: const EdgeInsets.fromLTRB(10, 0, 6, 10),
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
           decoration: BoxDecoration(
             color: isDark ? Colors.white10 : const Color(0xFFF7F7F9),
             borderRadius: BorderRadius.circular(10),
@@ -95,7 +96,7 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 child: HighlightView(
                   code,
-                  language: _normalizeLanguage(lang),
+                  language: _normalizeLanguage(lang) ?? 'plaintext',
                   theme: _transparentBgTheme(
                     isDark ? atomOneDarkReasonableTheme : githubTheme,
                   ),
@@ -190,5 +191,21 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
       default:
         return l; // try as-is
     }
+  }
+
+  static String _preprocessFences(String input) {
+    // 1) Move fenced code from list lines to the next line: "* ```lang" -> "*\n```lang"
+    final bulletFence = RegExp(r"^(\s*(?:[*+-]|\d+\.)\s+)```([^\s`]*)\s*$", multiLine: true);
+    var out = input.replaceAllMapped(bulletFence, (m) => "${m[1]}\n```${m[2]}" );
+
+    // 2) Dedent opening fences: leading spaces before ```lang
+    final dedentOpen = RegExp(r"^[ \t]+```([^\n`]*)\s*$", multiLine: true);
+    out = out.replaceAllMapped(dedentOpen, (m) => "```${m[1]}" );
+
+    // 3) Dedent closing fences: leading spaces before ```
+    final dedentClose = RegExp(r"^[ \t]+```\s*$", multiLine: true);
+    out = out.replaceAllMapped(dedentClose, (m) => "```" );
+
+    return out;
   }
 }
