@@ -5,6 +5,7 @@ import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/github.dart';
 import 'package:flutter_highlight/themes/atom-one-dark-reasonable.dart';
 import '../icons/lucide_adapter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// gpt_markdown with custom code block highlight and inline code styling.
 class MarkdownWithCodeHighlight extends StatelessWidget {
@@ -20,6 +21,24 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
     final normalized = _preprocessFences(text);
     return GptMarkdown(
       normalized,
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: cs.onSurface,
+          ),
+      followLinkColor: true,
+      onLinkTap: (url, title) => _handleLinkTap(context, url),
+      linkBuilder: (ctx, span, url, style) {
+        final text = span.toPlainText();
+        final cs = Theme.of(ctx).colorScheme;
+        return Text(
+          text,
+          style: style.copyWith(
+            color: cs.primary,
+            decoration: TextDecoration.none,
+          ),
+          textAlign: TextAlign.start,
+          textScaler: MediaQuery.of(ctx).textScaler,
+        );
+      },
       // Inline `code` styling via highlightBuilder in gpt_markdown
       highlightBuilder: (ctx, inline, style) {
         final bg = isDark ? Colors.white12 : const Color(0xFFF1F3F5);
@@ -46,7 +65,7 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
         return Container(
           width: double.infinity,
           margin: const EdgeInsets.symmetric(vertical: 6),
-          padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+          padding: const EdgeInsets.fromLTRB(10, 0, 6, 10),
           decoration: BoxDecoration(
             color: isDark ? Colors.white10 : const Color(0xFFF7F7F9),
             borderRadius: BorderRadius.circular(10),
@@ -60,7 +79,7 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
                   Text(
                     _displayLanguage(context, lang),
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: cs.secondary,
                       height: 1.0,
@@ -206,6 +225,36 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
     final dedentClose = RegExp(r"^[ \t]+```\s*$", multiLine: true);
     out = out.replaceAllMapped(dedentClose, (m) => "```" );
 
+    // 4) Ensure closing fences are on their own line: transform "} ```" or "}```" into "}\n```"
+    final inlineClosing = RegExp(r"([^\r\n`])```(?=\s*(?:\r?\n|$))");
+    out = out.replaceAllMapped(inlineClosing, (m) => "${m[1]}\n```");
+
     return out;
+  }
+
+  Future<void> _handleLinkTap(BuildContext context, String url) async {
+    Uri uri;
+    try {
+      uri = _normalizeUrl(url);
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_isZh(context) ? '无效链接' : 'Invalid link')),
+      );
+      return;
+    }
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_isZh(context) ? '无法打开链接' : 'Cannot open link')),
+      );
+    }
+  }
+
+  Uri _normalizeUrl(String url) {
+    var u = url.trim();
+    if (!RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*:').hasMatch(u)) {
+      u = 'https://'+u;
+    }
+    return Uri.parse(u);
   }
 }
