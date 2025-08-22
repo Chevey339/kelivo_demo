@@ -34,6 +34,10 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
     if (hrIdx != -1) components[hrIdx] = SoftHrLine();
     final bqIdx = components.indexWhere((c) => c is BlockQuote);
     if (bqIdx != -1) components[bqIdx] = ModernBlockQuote();
+    final cbIdx = components.indexWhere((c) => c is CheckBoxMd);
+    if (cbIdx != -1) components[cbIdx] = ModernCheckBoxMd();
+    final rbIdx = components.indexWhere((c) => c is RadioButtonMd);
+    if (rbIdx != -1) components[rbIdx] = ModernRadioMd();
     return GptMarkdown(
       normalized,
       style: baseTextStyle,
@@ -110,6 +114,90 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
               ),
               Flexible(child: child),
             ],
+          ),
+        );
+      },
+      tableBuilder: (ctx, rows, style, cfg) {
+        final cs = Theme.of(ctx).colorScheme;
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final borderColor = cs.outlineVariant.withOpacity(isDark ? 0.22 : 0.28);
+        final headerBg = cs.primary.withOpacity(isDark ? 0.10 : 0.08);
+        final headerStyle = (style).copyWith(fontWeight: FontWeight.w600);
+
+        int maxCol = 0;
+        for (final r in rows) {
+          if (r.fields.length > maxCol) maxCol = r.fields.length;
+        }
+
+        Widget cell(String text, TextAlign align, {bool header = false, bool lastCol = false, bool lastRow = false}) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border(
+                right: lastCol ? BorderSide.none : BorderSide(color: borderColor, width: 0.5),
+                bottom: lastRow ? BorderSide.none : BorderSide(color: borderColor, width: 0.5),
+              ),
+            ),
+            child: Align(
+              alignment: () {
+                switch (align) {
+                  case TextAlign.center:
+                    return Alignment.center;
+                  case TextAlign.right:
+                    return Alignment.centerRight;
+                  default:
+                    return Alignment.centerLeft;
+                }
+              }(),
+              child: Text(text, style: header ? headerStyle : style, textAlign: align),
+            ),
+          );
+        }
+
+        final table = Table(
+          defaultColumnWidth: const IntrinsicColumnWidth(),
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+          children: [
+            if (rows.isNotEmpty)
+              TableRow(
+                decoration: BoxDecoration(
+                  color: headerBg,
+                  border: Border(bottom: BorderSide(color: borderColor, width: 0.8)),
+                ),
+                children: List.generate(maxCol, (i) {
+                  final f = i < rows.first.fields.length ? rows.first.fields[i] : null;
+                  final txt = f?.data ?? '';
+                  final align = f?.alignment ?? TextAlign.left;
+                  return cell(txt, align, header: true, lastCol: i == maxCol - 1, lastRow: false);
+                }),
+              ),
+            for (int r = 1; r < rows.length; r++)
+              TableRow(
+                children: List.generate(maxCol, (c) {
+                  final f = c < rows[r].fields.length ? rows[r].fields[c] : null;
+                  final txt = f?.data ?? '';
+                  final align = f?.alignment ?? TextAlign.left;
+                  return cell(txt, align, lastCol: c == maxCol - 1, lastRow: r == rows.length - 1);
+                }),
+              ),
+          ],
+        );
+
+        return Scrollbar(
+          thumbVisibility: false,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surface,
+                  border: Border.all(color: borderColor, width: 0.8),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: table,
+              ),
+            ),
           ),
         );
       },
@@ -441,6 +529,119 @@ class ModernBlockQuote extends InlineMd {
       alignment: PlaceholderAlignment.baseline,
       baseline: TextBaseline.alphabetic,
       child: child,
+    );
+  }
+}
+
+// Modern task checkbox: square with subtle border, primary check on done
+class ModernCheckBoxMd extends BlockMd {
+  @override
+  String get expString => (r"\[((?:\x|\ ))\]\ (\S[^\n]*?)$");
+
+  @override
+  Widget build(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text.trim());
+    final checked = (match?[1] == 'x');
+    final content = match?[2] ?? '';
+    final cs = Theme.of(context).colorScheme;
+
+    final contentStyle = (config.style ?? const TextStyle()).copyWith(
+      decoration: checked ? TextDecoration.lineThrough : null,
+      color: (config.style?.color ?? cs.onSurface).withOpacity(checked ? 0.75 : 1.0),
+    );
+
+    final child = MdWidget(
+      context,
+      content,
+      false,
+      config: config.copyWith(style: contentStyle),
+    );
+
+    return Directionality(
+      textDirection: config.textDirection,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        textBaseline: TextBaseline.alphabetic,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 6, end: 8),
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: cs.outlineVariant.withOpacity(0.8), width: 1),
+                color: checked ? cs.primary.withOpacity(0.12) : Colors.transparent,
+              ),
+              child: checked
+                  ? Icon(Icons.check, size: 14, color: cs.primary)
+                  : null,
+            ),
+          ),
+          Flexible(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+// Modern radio (optional): circle with primary dot when selected
+class ModernRadioMd extends BlockMd {
+  @override
+  String get expString => (r"\(((?:\x|\ ))\)\ (\S[^\n]*)$");
+
+  @override
+  Widget build(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text.trim());
+    final selected = (match?[1] == 'x');
+    final content = match?[2] ?? '';
+    final cs = Theme.of(context).colorScheme;
+
+    final contentStyle = (config.style ?? const TextStyle()).copyWith(
+      color: (config.style?.color ?? cs.onSurface).withOpacity(selected ? 0.95 : 1.0),
+    );
+
+    final child = MdWidget(
+      context,
+      content,
+      false,
+      config: config.copyWith(style: contentStyle),
+    );
+
+    return Directionality(
+      textDirection: config.textDirection,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        textBaseline: TextBaseline.alphabetic,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 6, end: 8),
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: cs.outlineVariant.withOpacity(0.8), width: 1),
+              ),
+              child: selected
+                  ? Center(
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: cs.primary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+          Flexible(child: child),
+        ],
+      ),
     );
   }
 }
