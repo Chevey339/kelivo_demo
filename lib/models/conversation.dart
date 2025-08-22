@@ -27,6 +27,10 @@ class Conversation extends HiveObject {
   @HiveField(6)
   List<String> mcpServerIds;
 
+  // Owner assistant id; null for global/default
+  @HiveField(7)
+  String? assistantId;
+
   Conversation({
     String? id,
     required this.title,
@@ -35,11 +39,13 @@ class Conversation extends HiveObject {
     List<String>? messageIds,
     this.isPinned = false,
     List<String>? mcpServerIds,
+    String? assistantId,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
         messageIds = messageIds ?? [],
-        mcpServerIds = mcpServerIds ?? [];
+        mcpServerIds = mcpServerIds ?? [],
+        assistantId = assistantId;
 
   Conversation copyWith({
     String? id,
@@ -49,6 +55,7 @@ class Conversation extends HiveObject {
     List<String>? messageIds,
     bool? isPinned,
     List<String>? mcpServerIds,
+    String? assistantId,
   }) {
     return Conversation(
       id: id ?? this.id,
@@ -58,6 +65,7 @@ class Conversation extends HiveObject {
       messageIds: messageIds ?? this.messageIds,
       isPinned: isPinned ?? this.isPinned,
       mcpServerIds: mcpServerIds ?? this.mcpServerIds,
+      assistantId: assistantId ?? this.assistantId,
     );
   }
 
@@ -70,6 +78,7 @@ class Conversation extends HiveObject {
       'messageIds': messageIds,
       'isPinned': isPinned,
       'mcpServerIds': mcpServerIds,
+      'assistantId': assistantId,
     };
   }
 
@@ -82,6 +91,7 @@ class Conversation extends HiveObject {
       messageIds: (json['messageIds'] as List<dynamic>).cast<String>(),
       isPinned: json['isPinned'] as bool? ?? false,
       mcpServerIds: (json['mcpServerIds'] as List?)?.cast<String>() ?? const <String>[],
+      assistantId: json['assistantId'] as String?,
     );
   }
 }

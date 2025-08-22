@@ -90,11 +90,12 @@ class ChatService extends ChangeNotifier {
     return messages;
   }
 
-  Future<Conversation> createConversation({String? title}) async {
+  Future<Conversation> createConversation({String? title, String? assistantId}) async {
     if (!_initialized) await init();
 
     final conversation = Conversation(
       title: title ?? '新对话',
+      assistantId: assistantId,
     );
 
     await _conversationsBox.put(conversation.id, conversation);
@@ -104,9 +105,9 @@ class ChatService extends ChangeNotifier {
   }
 
   // Create a draft conversation that is not persisted until first message arrives.
-  Future<Conversation> createDraftConversation({String? title}) async {
+  Future<Conversation> createDraftConversation({String? title, String? assistantId}) async {
     if (!_initialized) await init();
-    final conversation = Conversation(title: title ?? '新对话');
+    final conversation = Conversation(title: title ?? '新对话', assistantId: assistantId);
     _draftConversations[conversation.id] = conversation;
     _currentConversationId = conversation.id;
     notifyListeners();

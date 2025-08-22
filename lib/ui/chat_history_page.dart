@@ -7,7 +7,8 @@ import '../services/chat_service.dart';
 import '../models/conversation.dart';
 
 class ChatHistoryPage extends StatefulWidget {
-  const ChatHistoryPage({super.key});
+  const ChatHistoryPage({super.key, this.assistantId});
+  final String? assistantId;
 
   @override
   State<ChatHistoryPage> createState() => _ChatHistoryPageState();
@@ -35,7 +36,10 @@ class _ChatHistoryPageState extends State<ChatHistoryPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     final chatService = context.watch<ChatService>();
-    final List<Conversation> all = chatService.getAllConversations();
+    final List<Conversation> all = chatService
+        .getAllConversations()
+        .where((c) => widget.assistantId == null || c.assistantId == widget.assistantId || c.assistantId == null)
+        .toList();
 
     final q = _searchCtrl.text.trim().toLowerCase();
     final filtered = q.isEmpty ? all : all.where((c) => c.title.toLowerCase().contains(q)).toList();

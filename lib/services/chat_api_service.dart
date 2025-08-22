@@ -53,6 +53,9 @@ class ChatApiService {
     required List<Map<String, dynamic>> messages,
     List<String>? userImagePaths,
     int? thinkingBudget,
+    double? temperature,
+    double? topP,
+    int? maxTokens,
     List<Map<String, dynamic>>? tools,
     Future<String> Function(String name, Map<String, dynamic> args)? onToolCall,
   }) async* {
@@ -68,6 +71,9 @@ class ChatApiService {
           messages,
           userImagePaths: userImagePaths,
           thinkingBudget: thinkingBudget,
+          temperature: temperature,
+          topP: topP,
+          maxTokens: maxTokens,
           tools: tools,
           onToolCall: onToolCall,
         );
@@ -79,6 +85,9 @@ class ChatApiService {
           messages,
           userImagePaths: userImagePaths,
           thinkingBudget: thinkingBudget,
+          temperature: temperature,
+          topP: topP,
+          maxTokens: maxTokens,
           tools: tools,
           onToolCall: onToolCall,
         );
@@ -90,6 +99,9 @@ class ChatApiService {
           messages,
           userImagePaths: userImagePaths,
           thinkingBudget: thinkingBudget,
+          temperature: temperature,
+          topP: topP,
+          maxTokens: maxTokens,
           tools: tools,
           onToolCall: onToolCall,
         );
@@ -244,7 +256,7 @@ class ChatApiService {
     ProviderConfig config,
     String modelId,
     List<Map<String, dynamic>> messages,
-    {List<String>? userImagePaths, int? thinkingBudget, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall}
+    {List<String>? userImagePaths, int? thinkingBudget, double? temperature, double? topP, int? maxTokens, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall}
   ) async* {
     final base = config.baseUrl.endsWith('/') 
         ? config.baseUrl.substring(0, config.baseUrl.length - 1) 
@@ -288,6 +300,9 @@ class ChatApiService {
         'model': modelId,
         'input': input,
         'stream': true,
+        if (temperature != null) 'temperature': temperature,
+        if (topP != null) 'top_p': topP,
+        if (maxTokens != null) 'max_output_tokens': maxTokens,
         if (tools != null && tools.isNotEmpty) 'tools': tools,
         if (tools != null && tools.isNotEmpty) 'tool_choice': 'auto',
         if (isReasoning && effort != 'off')
@@ -322,6 +337,9 @@ class ChatApiService {
         'model': modelId,
         'messages': mm,
         'stream': true,
+        if (temperature != null) 'temperature': temperature,
+        if (topP != null) 'top_p': topP,
+        if (maxTokens != null) 'max_tokens': maxTokens,
         if (isReasoning && effort != 'off' && effort != 'auto') 'reasoning_effort': effort,
         if (tools != null && tools.isNotEmpty) 'tools': tools,
         if (tools != null && tools.isNotEmpty) 'tool_choice': 'auto',
@@ -877,7 +895,7 @@ class ChatApiService {
     ProviderConfig config,
     String modelId,
     List<Map<String, dynamic>> messages,
-    {List<String>? userImagePaths, int? thinkingBudget, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall}
+    {List<String>? userImagePaths, int? thinkingBudget, double? temperature, double? topP, int? maxTokens, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall}
   ) async* {
     final base = config.baseUrl.endsWith('/') 
         ? config.baseUrl.substring(0, config.baseUrl.length - 1) 
@@ -940,11 +958,13 @@ class ChatApiService {
       }
     }
 
-    final body = {
+    final body = <String, dynamic>{
       'model': modelId,
-      'max_tokens': 4096,
+      'max_tokens': maxTokens ?? 4096,
       'messages': transformed,
       'stream': true,
+      if (temperature != null) 'temperature': temperature,
+      if (topP != null) 'top_p': topP,
       if (anthropicTools != null && anthropicTools.isNotEmpty) 'tools': anthropicTools,
       if (anthropicTools != null && anthropicTools.isNotEmpty) 'tool_choice': {'type': 'auto'},
       if (isReasoning)
@@ -1079,7 +1099,7 @@ class ChatApiService {
     ProviderConfig config,
     String modelId,
     List<Map<String, dynamic>> messages,
-    {List<String>? userImagePaths, int? thinkingBudget, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall}
+    {List<String>? userImagePaths, int? thinkingBudget, double? temperature, double? topP, int? maxTokens, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall}
   ) async* {
     // Implement SSE streaming via :streamGenerateContent with alt=sse
     // Build endpoint per Vertex vs Gemini
@@ -1161,16 +1181,20 @@ class ChatApiService {
     int totalTokens = 0;
 
     while (true) {
+      final gen = <String, dynamic>{
+        if (temperature != null) 'temperature': temperature,
+        if (topP != null) 'topP': topP,
+        if (maxTokens != null) 'maxOutputTokens': maxTokens,
+        if (isReasoning)
+          'thinkingConfig': {
+            'includeThoughts': off ? false : true,
+            if (!off && thinkingBudget != null && thinkingBudget >= 0)
+              'thinkingBudget': thinkingBudget,
+          },
+      };
       final body = <String, dynamic>{
         'contents': convo,
-        if (isReasoning)
-          'generationConfig': {
-            'thinkingConfig': {
-              'includeThoughts': off ? false : true,
-              if (!off && thinkingBudget != null && thinkingBudget >= 0)
-                'thinkingBudget': thinkingBudget,
-            }
-          },
+        if (gen.isNotEmpty) 'generationConfig': gen,
         if (geminiTools != null && geminiTools.isNotEmpty) 'tools': geminiTools,
       };
 

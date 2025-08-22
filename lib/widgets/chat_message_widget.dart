@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:open_filex/open_filex.dart';
+import 'dart:io';
 // import 'package:easy_image_viewer/easy_image_viewer.dart';
 import 'dart:convert';
 import '../ui/image_viewer_page.dart';
@@ -21,6 +22,10 @@ class ChatMessageWidget extends StatefulWidget {
   final ChatMessage message;
   final Widget? modelIcon;
   final bool showModelIcon;
+  // Assistant identity override
+  final bool useAssistantAvatar;
+  final String? assistantName;
+  final String? assistantAvatar; // path/url/emoji; null => use initial
   final bool showUserAvatar;
   final bool showTokenStats;
   final VoidCallback? onRegenerate;
@@ -49,6 +54,9 @@ class ChatMessageWidget extends StatefulWidget {
     required this.message,
     this.modelIcon,
     this.showModelIcon = true,
+    this.useAssistantAvatar = false,
+    this.assistantName,
+    this.assistantAvatar,
     this.showUserAvatar = true,
     this.showTokenStats = true,
     this.onRegenerate,
@@ -464,8 +472,10 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
           // Header: Model info and time
           Row(
             children: [
-              if (widget.showModelIcon) ...[
-                // Model icon
+              if (widget.useAssistantAvatar) ...[
+                _buildAssistantAvatar(cs),
+                const SizedBox(width: 8),
+              ] else if (widget.showModelIcon) ...[
                 widget.modelIcon ?? Container(
                   width: 32,
                   height: 32,
@@ -473,11 +483,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                     color: cs.secondary.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Lucide.Bot,
-                    size: 18,
-                    color: cs.secondary,
-                  ),
+                  child: Icon(Lucide.Bot, size: 18, color: cs.secondary),
                 ),
                 const SizedBox(width: 8),
               ],
@@ -485,7 +491,9 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.message.modelId ?? 'AI Assistant',
+                    widget.useAssistantAvatar
+                        ? (widget.assistantName?.trim().isNotEmpty == true ? widget.assistantName!.trim() : 'Assistant')
+                        : (widget.message.modelId ?? 'AI Assistant'),
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
@@ -761,6 +769,45 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildAssistantAvatar(ColorScheme cs) {
+    final av = (widget.assistantAvatar ?? '').trim();
+    if (av.isNotEmpty) {
+      if (av.startsWith('http')) {
+        return ClipOval(
+          child: Image.network(av, width: 32, height: 32, fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _assistantInitial(cs)),
+        );
+      }
+      if (av.startsWith('/') || av.contains(':')) {
+        return ClipOval(
+          child: Image.file(File(av), width: 32, height: 32, fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _assistantInitial(cs)),
+        );
+      }
+      // treat as emoji or single char label
+      return Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(color: cs.primary.withOpacity(0.1), shape: BoxShape.circle),
+        alignment: Alignment.center,
+        child: Text(av.characters.take(1).toString(), style: const TextStyle(fontSize: 18)),
+      );
+    }
+    return _assistantInitial(cs);
+  }
+
+  Widget _assistantInitial(ColorScheme cs) {
+    final name = (widget.assistantName ?? '').trim();
+    final ch = name.isNotEmpty ? name.characters.first.toUpperCase() : 'A';
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(color: cs.primary.withOpacity(0.1), shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: Text(ch, style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700)),
     );
   }
 

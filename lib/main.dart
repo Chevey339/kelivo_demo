@@ -10,6 +10,7 @@ import 'providers/chat_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/mcp_provider.dart';
+import 'providers/assistant_provider.dart';
 import 'services/chat_service.dart';
 import 'services/mcp_tool_service.dart';
 import 'utils/sandbox_path_resolver.dart';
@@ -39,6 +40,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ChatService()),
         ChangeNotifierProvider(create: (_) => McpToolService()),
         ChangeNotifierProvider(create: (_) => McpProvider()),
+        ChangeNotifierProvider(create: (_) => AssistantProvider()),
       ],
       child: Builder(
         builder: (context) {

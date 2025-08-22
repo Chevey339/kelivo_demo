@@ -13,6 +13,8 @@ import 'package:provider/provider.dart';
 import '../main.dart';
 import '../providers/user_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/assistant_provider.dart';
+import '../services/prompt_transformer.dart';
 import '../services/chat_service.dart';
 import '../services/chat_api_service.dart';
 import '../services/document_text_extractor.dart';
@@ -25,7 +27,7 @@ import '../models/conversation.dart';
 import 'model_select_sheet.dart';
 import 'language_select_sheet.dart';
 import 'message_more_sheet.dart';
-import 'mcp_conversation_sheet.dart';
+import 'mcp_assistant_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
@@ -301,15 +303,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     final now = prov.connectedServers.map((s) => s.id).toSet();
     final added = now.difference(_connectedMcpIds);
     _connectedMcpIds = now;
-    if (added.isEmpty) return;
-
-    final cid = _currentConversation?.id ?? _chatService.currentConversationId;
-    if (cid == null) return;
-    final selected = _chatService.getConversationMcpServers(cid).toSet();
-    final merged = selected.union(added);
-    if (merged.length != selected.length) {
-      await _chatService.setConversationMcpServers(cid, merged.toList());
-    }
+    // Assistant-level MCP selection is managed in Assistant settings; no per-conversation merge.
   }
 
   Future<List<String>> _copyPickedFiles(List<XFile> files) async {
@@ -406,15 +400,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 
   Future<void> _createNewConversation() async {
-    final conversation = await _chatService.createDraftConversation(title: '新对话');
+    final assistantId = context.read<AssistantProvider>().currentAssistantId;
+    final conversation = await _chatService.createDraftConversation(title: '新对话', assistantId: assistantId);
     // Default-enable MCP: select all connected servers for this conversation
-    try {
-      final mcp = context.read<McpProvider>();
-      final all = mcp.connectedServers.map((s) => s.id).toList(growable: false);
-      if (all.isNotEmpty) {
-        await _chatService.setConversationMcpServers(conversation.id, all);
-      }
-    } catch (_) {}
+    // MCP defaults are now managed per assistant; no per-conversation enabling here
     setState(() {
       _currentConversation = conversation;
       _messages = [];
@@ -432,8 +421,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     if (_currentConversation == null) await _createNewConversation();
 
     final settings = context.read<SettingsProvider>();
-    final providerKey = settings.currentModelProvider;
-    final modelId = settings.currentModelId;
+    final assistant = context.read<AssistantProvider>().currentAssistant;
+    final providerKey = assistant?.chatModelProvider ?? settings.currentModelProvider;
+    final modelId = assistant?.chatModelId ?? settings.currentModelId;
 
     if (providerKey == null || modelId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -481,7 +471,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
     // Initialize reasoning state only when enabled and model supports it
     final supportsReasoning = _isReasoningModel(providerKey, modelId);
-    final enableReasoning = supportsReasoning && _isReasoningEnabled(settings.thinkingBudget);
+    final enableReasoning = supportsReasoning && _isReasoningEnabled((assistant?.thinkingBudget) ?? settings.thinkingBudget);
     if (enableReasoning) {
       final rd = _ReasoningData();
       _reasoning[assistantMessage.id] = rd;
@@ -501,9 +491,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     final apiMessages = _messages
         .where((m) => m.content.isNotEmpty)
         .map((m) => {
-      'role': m.role == 'assistant' ? 'assistant' : 'user',
-      'content': m.content,
-    })
+              'role': m.role == 'assistant' ? 'assistant' : 'user',
+              'content': m.content,
+            })
         .toList();
 
     // Build document prompts and clean markers in last user message
@@ -534,7 +524,48 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           } catch (_) {}
         }
         final merged = (filePrompts.toString() + cleaned).trim();
-        apiMessages[lastUserIdx]['content'] = merged.isEmpty ? cleaned : merged;
+        final userText = merged.isEmpty ? cleaned : merged;
+        // Apply message template if set
+        final templ = (assistant?.messageTemplate ?? '{{ message }}').trim().isEmpty
+            ? '{{ message }}'
+            : (assistant!.messageTemplate);
+        final templated = PromptTransformer.applyMessageTemplate(
+          templ,
+          role: 'user',
+          message: userText,
+          now: DateTime.now(),
+        );
+        apiMessages[lastUserIdx]['content'] = templated;
+      }
+    }
+
+    // Inject system prompt (assistant.systemPrompt with placeholders)
+    if ((assistant?.systemPrompt.trim().isNotEmpty ?? false)) {
+      final vars = PromptTransformer.buildPlaceholders(
+        context: context,
+        assistant: assistant!,
+        modelId: modelId,
+        modelName: modelId,
+        userNickname: context.read<UserProvider>().name,
+      );
+      final sys = PromptTransformer.replacePlaceholders(assistant.systemPrompt, vars);
+      apiMessages.insert(0, {'role': 'system', 'content': sys});
+    }
+
+    // Limit context length according to assistant settings
+    if ((assistant?.contextMessageSize ?? 0) > 0) {
+      final keep = (assistant!.contextMessageSize).clamp(1, 512);
+      // Always keep the first message if it's system
+      int startIdx = 0;
+      if (apiMessages.isNotEmpty && apiMessages.first['role'] == 'system') {
+        startIdx = 1;
+      }
+      final tail = apiMessages.sublist(startIdx);
+      if (tail.length > keep) {
+        final trimmed = tail.sublist(tail.length - keep);
+        apiMessages
+          ..removeRange(startIdx, apiMessages.length)
+          ..addAll(trimmed);
       }
     }
 
@@ -550,13 +581,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       // Prepare MCP tools (if any selected for this conversation)
       List<Map<String, dynamic>>? toolDefs;
       Future<String> Function(String, Map<String, dynamic>)? onToolCall;
-      final convoId = _currentConversation?.id ?? _chatService.currentConversationId;
-      if (convoId != null) {
-        final mcp = context.read<McpProvider>();
-        final toolSvc = context.read<McpToolService>();
-        final tools = toolSvc.listAvailableToolsForConversation(mcp, _chatService, convoId);
-        if (tools.isNotEmpty) {
-          toolDefs = tools.map((t) {
+      final mcp = context.read<McpProvider>();
+      final toolSvc = context.read<McpToolService>();
+      final tools = toolSvc.listAvailableToolsForAssistant(mcp, context.read<AssistantProvider>(), assistant?.id);
+      if (tools.isNotEmpty) {
+        toolDefs = tools.map((t) {
             final props = <String, dynamic>{
               for (final p in t.params) p.name: {'type': 'string'},
             };
@@ -574,17 +603,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               }
             };
           }).toList();
-          onToolCall = (name, args) async {
-            final text = await toolSvc.callToolTextForConversation(
-              mcp,
-              _chatService,
-              conversationId: convoId,
-              toolName: name,
-              arguments: args,
-            );
-            return text;
-          };
-        }
+        onToolCall = (name, args) async {
+          final text = await toolSvc.callToolTextForAssistant(
+            mcp,
+            context.read<AssistantProvider>(),
+            assistantId: assistant?.id,
+            toolName: name,
+            arguments: args,
+          );
+          return text;
+        };
       }
 
       final stream = ChatApiService.sendMessageStream(
@@ -592,7 +620,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         modelId: modelId,
         messages: apiMessages,
         userImagePaths: input.imagePaths,
-        thinkingBudget: settings.thinkingBudget,
+        thinkingBudget: assistant?.thinkingBudget ?? settings.thinkingBudget,
+        temperature: assistant?.temperature,
+        topP: assistant?.topP,
+        maxTokens: assistant?.maxTokens,
         tools: toolDefs,
         onToolCall: onToolCall,
       );
@@ -657,7 +688,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _messageStreamSubscription = stream.listen(
         (chunk) async {
           // Capture reasoning deltas only when reasoning is enabled
-          if ((chunk.reasoning ?? '').isNotEmpty && _isReasoningEnabled(settings.thinkingBudget)) {
+          if ((chunk.reasoning ?? '').isNotEmpty && _isReasoningEnabled((assistant?.thinkingBudget) ?? settings.thinkingBudget)) {
             final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
             r.text += chunk.reasoning!;
             r.startAt ??= DateTime.now();
@@ -1335,7 +1366,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       ),
       drawer: SideDrawer(
         userName: context.watch<UserProvider>().name,
-        assistantName: Localizations.localeOf(context).languageCode == 'zh' ? '默认助手' : 'Default Assistant',
+        assistantName: (() {
+          final zh = Localizations.localeOf(context).languageCode == 'zh';
+          final a = context.watch<AssistantProvider>().currentAssistant;
+          final n = a?.name.trim();
+          return (n == null || n.isEmpty) ? (zh ? '默认助手' : 'Default Assistant') : n;
+        })(),
         onSelectConversation: (id) {
           // Update current selection for highlight in drawer
           _chatService.setCurrentConversation(id);
@@ -1388,18 +1424,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 }
               }
             });
-            // Default-enable currently connected MCP servers for this conversation
-            try {
-              final connected = context.read<McpProvider>().connectedServers.map((s) => s.id).toSet();
-              if (connected.isNotEmpty) {
-                final selected = _chatService.getConversationMcpServers(id).toSet();
-                final merged = selected.union(connected);
-                if (merged.length != selected.length) {
-                  // Fire-and-forget; no need to block UI thread here
-                  _chatService.setConversationMcpServers(id, merged.toList());
-                }
-              }
-            } catch (_) {}
+            // MCP selection is now per-assistant; no per-conversation defaults here
             _scrollToBottomSoon();
           }
           // Close the drawer when a conversation is picked
@@ -1415,6 +1440,28 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       ),
       body: Stack(
         children: [
+          // Assistant-specific chat background
+          Builder(builder: (context) {
+            final bg = context.watch<AssistantProvider>().currentAssistant?.background;
+            if (bg == null || bg.trim().isEmpty) return const SizedBox.shrink();
+            ImageProvider provider;
+            if (bg.startsWith('http')) {
+              provider = NetworkImage(bg);
+            } else {
+              provider = FileImage(File(bg));
+            }
+            return Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: provider,
+                    fit: BoxFit.cover,
+                    colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.04), BlendMode.srcATop),
+                  ),
+                ),
+              ),
+            );
+          }),
           // Main column content
           Column(
             children: [
@@ -1437,21 +1484,21 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         final r = _reasoning[message.id];
                         final t = _translations[message.id];
                         final chatScale = context.watch<SettingsProvider>().chatFontScale;
+                        final assistant = context.watch<AssistantProvider>().currentAssistant;
+                        final useAssist = assistant?.useAssistantAvatar == true;
                         return MediaQuery(
                           data: MediaQuery.of(context).copyWith(
                             textScaleFactor: MediaQuery.of(context).textScaleFactor * chatScale,
                           ),
                           child: ChatMessageWidget(
                           message: message,
-                          modelIcon: message.role == 'assistant' &&
-                                  message.providerId != null &&
-                                  message.modelId != null
-                              ? _CurrentModelIcon(
-                                  providerKey: message.providerId,
-                                  modelId: message.modelId,
-                                )
+                          modelIcon: (!useAssist && message.role == 'assistant' && message.providerId != null && message.modelId != null)
+                              ? _CurrentModelIcon(providerKey: message.providerId, modelId: message.modelId)
                               : null,
-                          showModelIcon: context.watch<SettingsProvider>().showModelIcon,
+                          showModelIcon: useAssist ? false : context.watch<SettingsProvider>().showModelIcon,
+                          useAssistantAvatar: useAssist && message.role == 'assistant',
+                          assistantName: useAssist ? (assistant?.name ?? 'Assistant') : null,
+                          assistantAvatar: useAssist ? (assistant?.avatar ?? '') : null,
                           showUserAvatar: context.watch<SettingsProvider>().showUserAvatar,
                           showTokenStats: context.watch<SettingsProvider>().showTokenStats,
                           reasoningText: (message.role == 'assistant') ? (r?.text ?? '') : null,
@@ -1553,14 +1600,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   moreOpen: _toolsOpen,
                   onSelectModel: () => showModelSelectSheet(context),
                   onOpenMcp: () {
-                    final id = _currentConversation?.id ?? _chatService.currentConversationId;
-                    if (id != null) {
-                      showConversationMcpSheet(context, conversationId: id);
-                    } else {
-                      final zh = Localizations.localeOf(context).languageCode == 'zh';
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(zh ? '请先开始一个对话' : 'Start a conversation first')),
-                      );
+                    final a = context.read<AssistantProvider>().currentAssistant;
+                    if (a != null) {
+                      showAssistantMcpSheet(context, assistantId: a.id);
                     }
                   },
                   onStop: _cancelStreaming,
@@ -1576,8 +1618,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   focusNode: _inputFocus,
                   controller: _inputController,
                   mediaController: _mediaController,
-                  onConfigureReasoning: () => showReasoningBudgetSheet(context),
-                  reasoningActive: _isReasoningEnabled(settings.thinkingBudget),
+                  onConfigureReasoning: () async {
+                    await showReasoningBudgetSheet(context);
+                    // Sync the updated thinking budget to the current assistant
+                    final assistant = context.read<AssistantProvider>().currentAssistant;
+                    if (assistant != null) {
+                      final global = context.read<SettingsProvider>().thinkingBudget;
+                      await context.read<AssistantProvider>().updateAssistant(
+                        assistant.copyWith(thinkingBudget: global),
+                      );
+                    }
+                  },
+                  reasoningActive: _isReasoningEnabled((context.watch<AssistantProvider>().currentAssistant?.thinkingBudget) ?? settings.thinkingBudget),
                   supportsReasoning: (settings.currentModelProvider != null && settings.currentModelId != null)
                       ? _isReasoningModel(settings.currentModelProvider!, settings.currentModelId!)
                       : false,
@@ -1589,13 +1641,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   },
                   loading: _isLoading,
                   showMcpButton: context.watch<McpProvider>().servers.isNotEmpty,
-                  mcpActive: (() {
-                    final cid = _currentConversation?.id ?? _chatService.currentConversationId;
-                    if (cid == null) return false;
-                    // Watch ChatService to rebuild on selection changes
-                    final selected = context.watch<ChatService>().getConversationMcpServers(cid);
-                    return selected.isNotEmpty;
-                  })(),
+                  mcpActive: context.select<AssistantProvider, bool>((ap) => (ap.currentAssistant?.mcpServerIds.isNotEmpty ?? false)),
                 ),
               ),
             ],

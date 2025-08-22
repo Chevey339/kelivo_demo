@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:characters/characters.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import '../icons/lucide_adapter.dart';
 import 'package:provider/provider.dart';
 import '../services/chat_service.dart';
@@ -8,13 +11,14 @@ import '../providers/settings_provider.dart';
 import '../models/chat_item.dart';
 import '../providers/user_provider.dart';
 import '../ui/settings_page.dart';
+import '../providers/assistant_provider.dart';
+import '../ui/assistant_settings_edit_page.dart';
 import '../ui/chat_history_page.dart';
 import 'package:flutter/services.dart';
 import 'dart:io' show File;
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
+import '../widgets/avatar_picker_sheet.dart';
 
 class SideDrawer extends StatefulWidget {
   const SideDrawer({
@@ -249,7 +253,12 @@ class _SideDrawerState extends State<SideDrawer> {
     final isDark = theme.brightness == Brightness.dark;
     final textBase = isDark ? Colors.white : Colors.black; // 纯黑（白天），夜间自动适配
     final chatService = context.watch<ChatService>();
-    final conversations = chatService.getAllConversations();
+    final ap = context.watch<AssistantProvider>();
+    final currentAssistantId = ap.currentAssistantId;
+    final conversations = chatService
+        .getAllConversations()
+        .where((c) => c.assistantId == currentAssistantId || c.assistantId == null)
+        .toList();
     final all = conversations
         .map((c) => ChatItem(id: c.id, title: c.title, created: c.createdAt))
         .toList();
@@ -518,7 +527,14 @@ class _SideDrawerState extends State<SideDrawer> {
                         shape: const CircleBorder(),
                         child: InkWell(
                           customBorder: const CircleBorder(),
-                          onTap: () => Navigator.of(context).maybePop(),
+                          onTap: () {
+                            final id = context.read<AssistantProvider>().currentAssistantId;
+                            if (id != null) {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => AssistantSettingsEditPage(assistantId: id)),
+                              );
+                            }
+                          },
                           child: Padding(
                             padding: const EdgeInsets.all(10),
                             child: Icon(Lucide.Bot, size: 22, color: cs.primary),
@@ -533,10 +549,7 @@ class _SideDrawerState extends State<SideDrawer> {
                           borderRadius: BorderRadius.circular(14),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(14),
-                            onTap: () {
-                              // 默认助手点击仅关闭抽屉，避免误跳转
-                              Navigator.of(context).maybePop();
-                            },
+                            onTap: () => _showAssistantPicker(context),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               child: Row(
@@ -573,7 +586,7 @@ class _SideDrawerState extends State<SideDrawer> {
                             onTap: () async {
                               Navigator.of(context).pop();
                               final selectedId = await Navigator.of(context).push<String>(
-                                MaterialPageRoute(builder: (_) => const ChatHistoryPage()),
+                                MaterialPageRoute(builder: (_) => ChatHistoryPage(assistantId: currentAssistantId)),
                               );
                               if (selectedId != null && selectedId.isNotEmpty) {
                                 widget.onSelectConversation?.call(selectedId);
@@ -634,6 +647,66 @@ class _SideDrawerState extends State<SideDrawer> {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _showAssistantPicker(BuildContext context) async {
+    final cs = Theme.of(context).colorScheme;
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final ap = context.read<AssistantProvider>();
+    final list = ap.assistants;
+    final currentId = ap.currentAssistantId;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: cs.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                child: Row(
+                  children: [
+                    Icon(Lucide.Bot, size: 18, color: cs.primary),
+                    const SizedBox(width: 8),
+                    Text(zh ? '选择助手' : 'Choose Assistant', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+              for (final a in list)
+                ListTile(
+                  leading: CircleAvatar(
+                    radius: 18,
+                    backgroundColor: cs.primary.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.12),
+                    child: Text(
+                      (a.name.trim().isNotEmpty ? String.fromCharCode(a.name.trim().runes.first).toUpperCase() : 'A'),
+                      style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: (a.id == currentId) ? Icon(Lucide.Check, size: 18, color: cs.primary) : null,
+                  onTap: () async {
+                    await context.read<AssistantProvider>().setCurrentAssistant(a.id);
+                    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+                    final msg = zh ? '已切换到助手：${a.name}' : 'Switched to ${a.name}';
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+                  },
+                  onLongPress: () {
+                    // Long press opens settings quickly
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => AssistantSettingsEditPage(assistantId: a.id)),
+                    );
+                  },
+                ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
     );
   }
 }
