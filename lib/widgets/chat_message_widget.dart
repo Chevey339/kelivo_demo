@@ -943,7 +943,7 @@ class _ToolCallItem extends StatelessWidget {
             color: bg,
             borderRadius: BorderRadius.circular(16),
           ),
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -951,14 +951,14 @@ class _ToolCallItem extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 2),
                 child: part.loading
                     ? SizedBox(
-                        width: 20,
-                        height: 20,
+                        width: 18,
+                        height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
                         ),
                       )
-                    : Icon(_iconFor(part.toolName), size: 20, color: cs.secondary),
+                    : Icon(_iconFor(part.toolName), size: 18, color: cs.secondary),
               ),
               const SizedBox(width: 10),
               Expanded(
