@@ -42,6 +42,7 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
       normalized,
       style: baseTextStyle,
       followLinkColor: true,
+      useDollarSignsForLatex: true,
       onLinkTap: (url, title) => _handleLinkTap(context, url),
       components: components,
       imageBuilder: (ctx, url) {
