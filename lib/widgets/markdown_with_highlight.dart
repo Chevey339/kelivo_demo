@@ -84,6 +84,26 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
           textScaler: MediaQuery.of(ctx).textScaler,
         );
       },
+      orderedListBuilder: (ctx, no, child, cfg) {
+        final style = (cfg.style ?? const TextStyle()).copyWith(
+          fontWeight: FontWeight.w400, // normal weight
+        );
+        return Directionality(
+          textDirection: cfg.textDirection,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            textBaseline: TextBaseline.alphabetic,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            children: [
+              Padding(
+                padding: const EdgeInsetsDirectional.only(start: 6, end: 6),
+                child: Text("$no.", style: style),
+              ),
+              Flexible(child: child),
+            ],
+          ),
+        );
+      },
       // Inline `code` styling via highlightBuilder in gpt_markdown
       highlightBuilder: (ctx, inline, style) {
         final bg = isDark ? Colors.white12 : const Color(0xFFF1F3F5);
