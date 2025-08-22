@@ -72,4 +72,6 @@ class Lucide {
   static const IconData Clipboard = lucide.LucideIcons.clipboard;
   static const IconData Sparkles = lucide.LucideIcons.sparkles;
   static const IconData Phone = lucide.LucideIcons.phone;
+  static const IconData Github = lucide.LucideIcons.github;
+  static const IconData Code = lucide.LucideIcons.code;
 }

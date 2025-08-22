@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -19,6 +18,8 @@ class _AboutPageState extends State<AboutPage> {
   String _version = '';
   String _buildNumber = '';
   String _systemInfo = '';
+  int _versionTapCount = 0;
+  DateTime? _lastVersionTap;
 
   @override
   void initState() {
@@ -55,6 +56,77 @@ class _AboutPageState extends State<AboutPage> {
       // Fallback: try in-app web view
       await launchUrl(uri, mode: LaunchMode.platformDefault);
     }
+  }
+
+  void _onVersionTap() {
+    final now = DateTime.now();
+    // Reset the counter if taps are spaced too far apart
+    if (_lastVersionTap == null || now.difference(_lastVersionTap!) > const Duration(seconds: 2)) {
+      _versionTapCount = 0;
+    }
+    _lastVersionTap = now;
+    _versionTapCount++;
+
+    const threshold = 7;
+    if (_versionTapCount < threshold) return;
+
+    _versionTapCount = 0; // reset after unlock
+    _showEasterEgg();
+  }
+
+  void _showEasterEgg() {
+    final cs = Theme.of(context).colorScheme;
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: BoxConstraints(
+        minWidth: MediaQuery.of(context).size.width,
+        maxWidth: MediaQuery.of(context).size.width,
+      ),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: FractionallySizedBox(
+            heightFactor: 0.5,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(Lucide.Sparkles, size: 28, color: cs.primary),
+                  const SizedBox(height: 10),
+                  Text(
+                    zh ? '彩蛋已解锁！' : 'Easter Egg Unlocked!',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Text(
+                        zh
+                            ? '\n（好吧现在还没彩蛋）'
+                            : 'Thanks for exploring! \n (No egg yet)',
+                        style: TextStyle(color: cs.onSurface.withOpacity(0.75), height: 1.3),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () => Navigator.of(ctx).maybePop(),
+                    child: Text(zh ? '好的' : 'Nice!'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -101,25 +173,17 @@ class _AboutPageState extends State<AboutPage> {
                   Wrap(
                     spacing: 8,
                     children: [
-                      _ChipButton(
-                        icon: Lucide.Earth,
-                        label: zh ? '官网' : 'Website',
-                        onTap: () => _openUrl('https://psycheas.top/'),
+                      _SvgChipButton(
+                        assetPath: 'assets/icons/tencent-qq.svg',
+                        label: 'Tencent',
+                        onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(zh ? '暂无QQ群' : 'No QQ group yet')),
+                        ),
                       ),
-                      _ChipButton(
-                        icon: Lucide.GitFork,
-                        label: 'GitHub',
-                        onTap: () => _openUrl('https://github.com/Chevey339/kelivo_demo'),
-                      ),
-                      _ChipButton(
-                        icon: Lucide.FileText,
-                        label: zh ? '许可证' : 'License',
-                        onTap: () => _openUrl('https://github.com/Chevey339/kelivo_demo/blob/main/LICENSE'),
-                      ),
-                      _ChipButton(
-                        icon: Lucide.Share2,
-                        label: zh ? '分享' : 'Share',
-                        onTap: () => Share.share('Kelivo - 开源移动端AI助手'),
+                      _SvgChipButton(
+                        assetPath: 'assets/icons/discord.svg',
+                        label: 'Discord',
+                        onTap: () => _openUrl('https://discord.gg/UjBxY78T'),
                       ),
                     ],
                   ),
@@ -132,9 +196,10 @@ class _AboutPageState extends State<AboutPage> {
             children: [
               const SizedBox(height: 8),
               _AboutItem(
-                icon: Lucide.BadgeInfo,
+                icon: Lucide.Code,
                 title: zh ? '版本' : 'Version',
                 subtitle: _version.isEmpty ? '...' : '$_version / $_buildNumber',
+                onTap: _onVersionTap,
               ),
               _AboutItem(
                 icon: Lucide.Phone,
@@ -148,7 +213,7 @@ class _AboutPageState extends State<AboutPage> {
                 onTap: () => _openUrl('https://psycheas.top/'),
               ),
               _AboutItem(
-                icon: Lucide.GitFork,
+                icon: Lucide.Github,
                 title: 'GitHub',
                 subtitle: 'https://github.com/Chevey339/kelivo_demo',
                 onTap: () => _openUrl('https://github.com/Chevey339/kelivo_demo'),
@@ -223,7 +288,6 @@ class _AboutItem extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (onTap != null) Icon(Lucide.ChevronRight, size: 18, color: cs.onSurfaceVariant),
               ],
             ),
           ),
@@ -254,6 +318,43 @@ class _ChipButton extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon, size: 16, color: cs.primary),
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(color: cs.primary)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SvgChipButton extends StatelessWidget {
+  const _SvgChipButton({required this.assetPath, required this.label, required this.onTap});
+  final String assetPath;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: isDark ? Colors.white10 : cs.primary.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SvgPicture.asset(
+                assetPath,
+                width: 16,
+                height: 16,
+                colorFilter: ColorFilter.mode(cs.primary, BlendMode.srcIn),
+              ),
               const SizedBox(width: 6),
               Text(label, style: TextStyle(color: cs.primary)),
             ],
