@@ -61,10 +61,13 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
               },
             ));
           },
-          child: Image(
-            image: provider,
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stack) => const Icon(Icons.broken_image),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image(
+              image: provider,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stack) => const Icon(Icons.broken_image),
+            ),
           ),
         );
       },
