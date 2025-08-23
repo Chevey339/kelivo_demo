@@ -727,7 +727,16 @@ class _SideDrawerState extends State<SideDrawer> {
                   title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                   trailing: (a.id == currentId) ? Icon(Lucide.Check, size: 18, color: cs.primary) : null,
                   onTap: () async {
-                    await context.read<AssistantProvider>().setCurrentAssistant(a.id);
+                    final ap = context.read<AssistantProvider>();
+                    final settings = context.read<SettingsProvider>();
+                    await ap.setCurrentAssistant(a.id);
+                    // Seed current model with assistant default if provided
+                    if ((a.chatModelProvider ?? '').isNotEmpty && (a.chatModelId ?? '').isNotEmpty) {
+                      await settings.setCurrentModel(a.chatModelProvider!, a.chatModelId!);
+                    }
+                    // Start a new conversation for this assistant
+                    final chat = context.read<ChatService>();
+                    await chat.createDraftConversation(title: zh ? '新对话' : 'New Chat', assistantId: a.id);
                     if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
                     final msg = zh ? '已切换到助手：${a.name}' : 'Switched to ${a.name}';
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));

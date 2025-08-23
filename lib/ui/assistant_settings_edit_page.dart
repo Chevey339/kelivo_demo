@@ -224,26 +224,7 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
               padding: const EdgeInsets.all(12),
               child: Row(
                 children: [
-                  Stack(
-                    children: [
-                      avatarWidget(size: 64),
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          width: 22,
-                          height: 22,
-                          decoration: BoxDecoration(
-                            color: cs.primary,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: cs.surface, width: 2),
-                          ),
-                          alignment: Alignment.center,
-                          child: Icon(Lucide.Pencil, size: 12, color: cs.onPrimary),
-                        ),
-                      ),
-                    ],
-                  ),
+                  avatarWidget(size: 64),
                   const SizedBox(width: 14),
                   Expanded(
                     child: _InputRow(
