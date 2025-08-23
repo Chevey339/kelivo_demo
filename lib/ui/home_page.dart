@@ -400,7 +400,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 
   Future<void> _createNewConversation() async {
-    final assistantId = context.read<AssistantProvider>().currentAssistantId;
+    final ap = context.read<AssistantProvider>();
+    final settings = context.read<SettingsProvider>();
+    final assistantId = ap.currentAssistantId;
+    // If assistant has a default chat model, seed the global current model for this new conversation
+    final a = ap.currentAssistant;
+    if (a?.chatModelProvider != null && a?.chatModelId != null) {
+      await settings.setCurrentModel(a!.chatModelProvider!, a.chatModelId!);
+    }
     final conversation = await _chatService.createDraftConversation(title: '新对话', assistantId: assistantId);
     // Default-enable MCP: select all connected servers for this conversation
     // MCP defaults are now managed per assistant; no per-conversation enabling here
@@ -421,9 +428,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     if (_currentConversation == null) await _createNewConversation();
 
     final settings = context.read<SettingsProvider>();
+    // Use the user's currently selected model (seeded on new chat by assistant default if set)
+    final providerKey = settings.currentModelProvider;
+    final modelId = settings.currentModelId;
     final assistant = context.read<AssistantProvider>().currentAssistant;
-    final providerKey = assistant?.chatModelProvider ?? settings.currentModelProvider;
-    final modelId = assistant?.chatModelId ?? settings.currentModelId;
 
     if (providerKey == null || modelId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -554,7 +562,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
     // Limit context length according to assistant settings
     if ((assistant?.contextMessageSize ?? 0) > 0) {
-      final keep = (assistant!.contextMessageSize).clamp(1, 512);
+      final keep = assistant!.contextMessageSize.clamp(1, 512).toInt();
       // Always keep the first message if it's system
       int startIdx = 0;
       if (apiMessages.isNotEmpty && apiMessages.first['role'] == 'system') {
@@ -1606,14 +1614,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     }
                   },
                   onStop: _cancelStreaming,
-                  modelIcon: (settings.showModelIcon &&
-                          settings.currentModelProvider != null &&
-                          settings.currentModelId != null)
+                  modelIcon: (settings.showModelIcon && settings.currentModelProvider != null && settings.currentModelId != null)
                       ? _CurrentModelIcon(
-                    providerKey: settings.currentModelProvider,
-                    modelId: settings.currentModelId,
-                    size: 34,
-                  )
+                          providerKey: settings.currentModelProvider,
+                          modelId: settings.currentModelId,
+                          size: 34,
+                        )
                       : null,
                   focusNode: _inputFocus,
                   controller: _inputController,
