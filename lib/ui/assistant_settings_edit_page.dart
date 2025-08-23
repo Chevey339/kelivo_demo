@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:characters/characters.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 import '../icons/lucide_adapter.dart';
 import '../models/assistant.dart';
 import '../providers/assistant_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/mcp_provider.dart';
-import '../widgets/avatar_picker_sheet.dart';
 import 'model_select_sheet.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
@@ -390,19 +393,62 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
   }
 
   Future<void> _showAvatarPicker(BuildContext context, Assistant a) async {
-    final result = await showAvatarPicker(
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    await showModalBottomSheet(
       context: context,
-      showRemoveOption: (a.avatar ?? '').isNotEmpty,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text(zh ? '选择图片' : 'Choose Image'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await _pickLocalImage(context, a);
+                },
+              ),
+              ListTile(
+                title: Text(zh ? '选择表情' : 'Choose Emoji'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  final emoji = await _pickEmoji(context);
+                  if (emoji != null) {
+                    await context.read<AssistantProvider>().updateAssistant(a.copyWith(avatar: emoji));
+                  }
+                },
+              ),
+              ListTile(
+                title: Text(zh ? '输入链接' : 'Enter Link'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await _inputAvatarUrl(context, a);
+                },
+              ),
+              ListTile(
+                title: Text(zh ? 'QQ头像' : 'Import from QQ'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await _inputQQAvatar(context, a);
+                },
+              ),
+              ListTile(
+                title: Text(zh ? '重置' : 'Reset'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await context.read<AssistantProvider>().updateAssistant(a.copyWith(clearAvatar: true));
+                },
+              ),
+              const SizedBox(height: 4),
+            ],
+          ),
+        );
+      },
     );
-    
-    if (result != null) {
-      if (result.value.isEmpty) {
-        // Reset avatar
-        await context.read<AssistantProvider>().updateAssistant(a.copyWith(clearAvatar: true));
-      } else {
-        await context.read<AssistantProvider>().updateAssistant(a.copyWith(avatar: result.value));
-      }
-    }
   }
 
   Future<void> _pickBackground(BuildContext context, Assistant a) async {
@@ -415,6 +461,363 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
     } catch (_) {}
   }
 
+}
+
+extension _AssistantAvatarActions on _BasicSettingsTabState {
+  Future<String?> _pickEmoji(BuildContext context) async {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final controller = TextEditingController();
+    String value = '';
+    bool validGrapheme(String s) {
+      final trimmed = s.characters.take(1).toString().trim();
+      return trimmed.isNotEmpty && trimmed == s.trim();
+    }
+    final List<String> quick = const [
+      '😀','😁','😂','🤣','😃','😄','😅','😊','😍','😘','😗','😙','😚','🙂','🤗','🤩','🫶','🤝','👍','👎','👋','🙏','💪','🔥','✨','🌟','💡','🎉','🎊','🎈','🌈','☀️','🌙','⭐','⚡','☁️','❄️','🌧️','🍎','🍊','🍋','🍉','🍇','🍓','🍒','🍑','🥭','🍍','🥝','🍅','🥕','🌽','🍞','🧀','🍔','🍟','🍕','🌮','🌯','🍣','🍜','🍰','🍪','🍩','🍫','🍻','☕','🧋','🥤','⚽','🏀','🏈','🎾','🏐','🎮','🎧','🎸','🎹','🎺','📚','✏️','💼','💻','🖥️','📱','🛩️','✈️','🚗','🚕','🚙','🚌','🚀','🛰️','🧠','🫀','💊','🩺','🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵'
+    ];
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          final media = MediaQuery.of(ctx);
+          final avail = media.size.height - media.viewInsets.bottom;
+          final double gridHeight = (avail * 0.28).clamp(120.0, 220.0);
+          return AlertDialog(
+            scrollable: true,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: cs.surface,
+            title: Text(zh ? '选择表情' : 'Choose Emoji'),
+            content: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: cs.primary.withOpacity(0.08),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(value.isEmpty ? '🙂' : value.characters.take(1).toString(), style: const TextStyle(fontSize: 40)),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    onChanged: (v) => setLocal(() => value = v),
+                    onSubmitted: (_) {
+                      if (validGrapheme(value)) Navigator.of(ctx).pop(value.characters.take(1).toString());
+                    },
+                    decoration: InputDecoration(
+                      hintText: zh ? '输入或粘贴任意表情' : 'Type or paste any emoji',
+                      filled: true,
+                      fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.transparent),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.transparent),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: cs.primary.withOpacity(0.4)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: gridHeight,
+                    child: GridView.builder(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 8,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                      ),
+                      itemCount: quick.length,
+                      itemBuilder: (c, i) {
+                        final e = quick[i];
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => Navigator.of(ctx).pop(e),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: cs.primary.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(e, style: const TextStyle(fontSize: 20)),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(zh ? '取消' : 'Cancel'),
+              ),
+              TextButton(
+                onPressed: validGrapheme(value) ? () => Navigator.of(ctx).pop(value.characters.take(1).toString()) : null,
+                child: Text(
+                  zh ? '保存' : 'Save',
+                  style: TextStyle(
+                    color: validGrapheme(value) ? cs.primary : cs.onSurface.withOpacity(0.38),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          );
+        });
+      },
+    );
+  }
+
+  Future<void> _inputAvatarUrl(BuildContext context, Assistant a) async {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final controller = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        bool valid(String s) => s.trim().startsWith('http://') || s.trim().startsWith('https://');
+        String value = '';
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: cs.surface,
+            title: Text(zh ? '输入图片链接' : 'Enter Image URL'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: zh ? '例如: https://example.com/avatar.png' : 'e.g. https://example.com/avatar.png',
+                filled: true,
+                fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.transparent),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.transparent),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: cs.primary.withOpacity(0.4)),
+                ),
+              ),
+              onChanged: (v) => setLocal(() => value = v),
+              onSubmitted: (_) {
+                if (valid(value)) Navigator.of(ctx).pop(true);
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(zh ? '取消' : 'Cancel'),
+              ),
+              TextButton(
+                onPressed: valid(value) ? () => Navigator.of(ctx).pop(true) : null,
+                child: Text(
+                  zh ? '保存' : 'Save',
+                  style: TextStyle(
+                    color: valid(value) ? cs.primary : cs.onSurface.withOpacity(0.38),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          );
+        });
+      },
+    );
+    if (ok == true) {
+      final url = controller.text.trim();
+      if (url.isNotEmpty) {
+        await context.read<AssistantProvider>().updateAssistant(a.copyWith(avatar: url));
+      }
+    }
+  }
+
+  Future<void> _inputQQAvatar(BuildContext context, Assistant a) async {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final controller = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        String value = '';
+        bool valid(String s) => RegExp(r'^[0-9]{5,12}$').hasMatch(s.trim());
+        String randomQQ() {
+          final lengths = <int>[5, 6, 7, 8, 9, 10, 11];
+          final weights = <int>[1, 20, 80, 100, 240, 3000, 80];
+          final total = weights.fold<int>(0, (a, b) => a + b);
+          final rnd = math.Random();
+          int roll = rnd.nextInt(total) + 1;
+          int chosenLen = lengths.last;
+          int acc = 0;
+          for (int i = 0; i < lengths.length; i++) {
+            acc += weights[i];
+            if (roll <= acc) { chosenLen = lengths[i]; break; }
+          }
+          final sb = StringBuffer();
+          final firstGroups = <List<int>>[
+            [1, 2],
+            [3, 4],
+            [5, 6, 7, 8],
+            [9],
+          ];
+          final firstWeights = <int>[8, 4, 2, 1];
+          final firstTotal = firstWeights.fold<int>(0, (a, b) => a + b);
+          int r2 = rnd.nextInt(firstTotal) + 1;
+          int idx = 0;
+          int a2 = 0;
+          for (int i = 0; i < firstGroups.length; i++) {
+            a2 += firstWeights[i];
+            if (r2 <= a2) { idx = i; break; }
+          }
+          final group = firstGroups[idx];
+          sb.write(group[rnd.nextInt(group.length)]);
+          for (int i = 1; i < chosenLen; i++) { sb.write(rnd.nextInt(10)); }
+          return sb.toString();
+        }
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: cs.surface,
+            title: Text(zh ? '使用QQ头像' : 'Import from QQ'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                hintText: zh ? '输入QQ号码（5-12位）' : 'Enter QQ number (5-12 digits)',
+                filled: true,
+                fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.transparent),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.transparent),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: cs.primary.withOpacity(0.4)),
+                ),
+              ),
+              onChanged: (v) => setLocal(() => value = v),
+              onSubmitted: (_) { if (valid(value)) Navigator.of(ctx).pop(true); },
+            ),
+            actionsAlignment: MainAxisAlignment.spaceBetween,
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  const int maxTries = 20;
+                  bool applied = false;
+                  for (int i = 0; i < maxTries; i++) {
+                    final qq = randomQQ();
+                    final url = 'http://q2.qlogo.cn/headimg_dl?dst_uin=' + qq + '&spec=100';
+                    try {
+                      final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+                      if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
+                        await context.read<AssistantProvider>().updateAssistant(a.copyWith(avatar: url));
+                        applied = true;
+                        break;
+                      }
+                    } catch (_) {}
+                  }
+                  if (applied) {
+                    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop(false);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(zh ? '获取随机QQ头像失败，请重试' : 'Failed to fetch random QQ avatar. Please try again.')),
+                    );
+                  }
+                },
+                child: Text(zh ? '随机一个' : 'Random One'),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: Text(zh ? '取消' : 'Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: valid(value) ? () => Navigator.of(ctx).pop(true) : null,
+                    child: Text(
+                      zh ? '保存' : 'Save',
+                      style: TextStyle(
+                        color: valid(value) ? cs.primary : cs.onSurface.withOpacity(0.38),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        });
+      },
+    );
+    if (ok == true) {
+      final qq = controller.text.trim();
+      if (qq.isNotEmpty) {
+        final url = 'https://q2.qlogo.cn/headimg_dl?dst_uin=' + qq + '&spec=100';
+        await context.read<AssistantProvider>().updateAssistant(a.copyWith(avatar: url));
+      }
+    }
+  }
+
+  Future<void> _pickLocalImage(BuildContext context, Assistant a) async {
+    if (kIsWeb) {
+      await _inputAvatarUrl(context, a);
+      return;
+    }
+    try {
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        imageQuality: 90,
+      );
+      if (!mounted) return;
+      if (file != null) {
+        await context.read<AssistantProvider>().updateAssistant(a.copyWith(avatar: file.path));
+        return;
+      }
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      final zh = Localizations.localeOf(context).languageCode == 'zh';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(zh ? '无法打开相册，试试输入图片链接' : 'Unable to open gallery. Try entering an image URL.')),
+      );
+      await _inputAvatarUrl(context, a);
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      final zh = Localizations.localeOf(context).languageCode == 'zh';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(zh ? '发生错误，试试输入图片链接' : 'Something went wrong. Try entering an image URL.')),
+      );
+      await _inputAvatarUrl(context, a);
+      return;
+    }
+  }
 }
 
 class _PromptTab extends StatefulWidget {
