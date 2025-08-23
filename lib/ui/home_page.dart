@@ -1619,13 +1619,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   controller: _inputController,
                   mediaController: _mediaController,
                   onConfigureReasoning: () async {
-                    await showReasoningBudgetSheet(context);
-                    // Sync the updated thinking budget to the current assistant
                     final assistant = context.read<AssistantProvider>().currentAssistant;
                     if (assistant != null) {
-                      final global = context.read<SettingsProvider>().thinkingBudget;
+                      if (assistant.thinkingBudget != null) {
+                        context.read<SettingsProvider>().setThinkingBudget(assistant.thinkingBudget);
+                      }
+                      await showReasoningBudgetSheet(context);
+                      final chosen = context.read<SettingsProvider>().thinkingBudget;
                       await context.read<AssistantProvider>().updateAssistant(
-                        assistant.copyWith(thinkingBudget: global),
+                        assistant.copyWith(thinkingBudget: chosen),
                       );
                     }
                   },

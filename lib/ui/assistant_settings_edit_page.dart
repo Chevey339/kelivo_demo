@@ -8,16 +8,17 @@ import 'package:characters/characters.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import '../icons/lucide_adapter.dart';
+import '../theme/design_tokens.dart';
 import '../models/assistant.dart';
 import '../providers/assistant_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/mcp_provider.dart';
 import 'model_select_sheet.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 import '../widgets/chat_message_widget.dart';
 import '../models/chat_message.dart';
-import 'assistant_reasoning_sheet.dart';
 import 'reasoning_budget_sheet.dart';
 import 'dart:io' show File;
 
@@ -36,6 +37,9 @@ class _AssistantSettingsEditPageState extends State<AssistantSettingsEditPage> w
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -65,13 +69,21 @@ class _AssistantSettingsEditPageState extends State<AssistantSettingsEditPage> w
       appBar: AppBar(
         leading: IconButton(icon: Icon(Lucide.ArrowLeft, size: 22), onPressed: () => Navigator.of(context).maybePop()),
         title: Text(assistant.name.isNotEmpty ? assistant.name : (zh ? '助手' : 'Assistant')),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: [
-            Tab(text: zh ? '基础设定' : 'Basic'),
-            Tab(text: zh ? '提示词' : 'Prompts'),
-            const Tab(text: 'MCP'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(52),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _SegTabBar(
+                    controller: _tabController,
+                    tabs: [zh ? '基础设置' : 'Basic', zh ? '提示词' : 'Prompts', 'MCP'],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
       body: TabBarView(
@@ -136,6 +148,7 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     final ap = context.watch<AssistantProvider>();
     final a = ap.getById(widget.assistantId)!;
@@ -149,9 +162,10 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : cs.surface,
+              color: isDark ? Colors.white10 : cs.surface,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: cs.outlineVariant.withOpacity(0.25)),
+              boxShadow: isDark ? [] : AppShadows.soft,
             ),
             child: Padding(padding: const EdgeInsets.all(12), child: child),
           ),
@@ -168,50 +182,79 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
           ],
         );
 
-    Widget avatarWidget() {
-      final bg = cs.primary.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.12);
+    Widget avatarWidget({double size = 56}) {
+      final bg = cs.primary.withOpacity(isDark ? 0.18 : 0.12);
       Widget inner;
       final av = a.avatar?.trim();
       if (av != null && av.isNotEmpty) {
         if (av.startsWith('http')) {
-          inner = ClipOval(child: Image.network(av, width: 52, height: 52, fit: BoxFit.cover));
+          inner = ClipOval(child: Image.network(av, width: size, height: size, fit: BoxFit.cover));
         } else if (av.startsWith('/') || av.contains(':')) {
-          inner = ClipOval(child: Image.file(File(av), width: 52, height: 52, fit: BoxFit.cover));
+          inner = ClipOval(child: Image.file(File(av), width: size, height: size, fit: BoxFit.cover));
         } else {
-          inner = Text(av, style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700));
+          inner = Text(av, style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: size * 0.42));
         }
       } else {
-        inner = Text((a.name.trim().isNotEmpty ? String.fromCharCode(a.name.trim().runes.first).toUpperCase() : 'A'),
-            style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700));
+        inner = Text(
+          (a.name.trim().isNotEmpty ? String.fromCharCode(a.name.trim().runes.first).toUpperCase() : 'A'),
+          style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: size * 0.42),
+        );
       }
       return InkWell(
-        borderRadius: BorderRadius.circular(999),
+        customBorder: const CircleBorder(),
         onTap: () => _showAvatarPicker(context, a),
-        child: CircleAvatar(radius: 26, backgroundColor: bg, child: inner),
+        child: CircleAvatar(radius: size / 2, backgroundColor: bg, child: inner),
       );
     }
 
     return ListView(
       padding: const EdgeInsets.only(bottom: 16),
       children: [
-        // Top: avatar + name
+        // Identity card (avatar + name)
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Row(
-            children: [
-              avatarWidget(),
-              const SizedBox(width: 14),
-              Expanded(
-                child: TextField(
-                  controller: _nameCtrl,
-                  onChanged: (v) => context.read<AssistantProvider>().updateAssistant(a.copyWith(name: v)),
-                  decoration: InputDecoration(
-                    labelText: zh ? '助手名称' : 'Assistant Name',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          child: Container(
+            decoration: BoxDecoration(
+              color: cs.primaryContainer.withOpacity(isDark ? 0.22 : 0.30),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: cs.outlineVariant.withOpacity(0.25)),
+              boxShadow: isDark ? [] : AppShadows.soft,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Stack(
+                    children: [
+                      avatarWidget(size: 64),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: cs.primary,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: cs.surface, width: 2),
+                          ),
+                          alignment: Alignment.center,
+                          child: Icon(Lucide.Pencil, size: 12, color: cs.onPrimary),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: _InputRow(
+                      label: zh ? '助手名称' : 'Assistant Name',
+                      controller: _nameCtrl,
+                      onChanged: (v) => context.read<AssistantProvider>().updateAssistant(a.copyWith(name: v)),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
 
@@ -228,42 +271,22 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
           ),
         ),
 
-        // Chat model
-        card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              titleDesc(zh ? '聊天模型' : 'Chat Model', zh ? '设置助手的默认聊天模型，如果不设置，则使用全局默认聊天模型' : 'Default chat model for this assistant; fallback to global if unset'),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final sel = await showModelSelector(context);
-                      if (sel != null) {
-                        await context.read<AssistantProvider>().updateAssistant(a.copyWith(chatModelProvider: sel.providerKey, chatModelId: sel.modelId));
-                      }
-                    },
-                    icon: const Icon(Lucide.Bot, size: 18),
-                    label: Text(zh ? '选择模型' : 'Choose Model'),
-                  ),
-                  const SizedBox(width: 10),
-                  if (a.chatModelProvider != null)
-                    TextButton.icon(
-                      onPressed: () => context.read<AssistantProvider>().updateAssistant(a.copyWith(clearChatModel: true)),
-                      icon: Icon(Lucide.X, size: 16, color: cs.primary),
-                      label: Text(zh ? '清除' : 'Clear', style: TextStyle(color: cs.primary)),
-                    ),
-                  const Spacer(),
-                  Text(
-                    a.chatModelProvider != null && a.chatModelId != null
-                        ? '${a.chatModelProvider}::${a.chatModelId}'
-                        : (zh ? '使用全局默认' : 'Use global default'),
-                    style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7)),
-                  ),
-                ],
-              ),
-            ],
+        // Chat model card (styled like DefaultModelPage)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: _AssistantModelCard(
+            title: zh ? '聊天模型' : 'Chat Model',
+            subtitle: zh ? '为该助手设置默认聊天模型（未设置时使用全局默认）' : 'Default chat model for this assistant (fallback to global)',
+            providerKey: a.chatModelProvider,
+            modelId: a.chatModelId,
+            onPick: () async {
+              final sel = await showModelSelector(context);
+              if (sel != null) {
+                await context.read<AssistantProvider>().updateAssistant(
+                  a.copyWith(chatModelProvider: sel.providerKey, chatModelId: sel.modelId),
+                );
+              }
+            },
           ),
         ),
 
@@ -271,7 +294,7 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
         card(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             titleDesc('Temperature', zh ? '控制输出的随机性，建议保持在 0.6（平衡）' : 'Controls randomness; 0.6 is balanced'),
-            _SliderTile(
+            _SliderTileNew(
               value: a.temperature.clamp(0.0, 1.0),
               min: 0.0,
               max: 1.0,
@@ -287,7 +310,7 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
         card(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             titleDesc('Top P', zh ? '请不要修改此值，除非你知道自己在做什么' : 'Do not change unless you know what you are doing'),
-            _SliderTile(
+            _SliderTileNew(
               value: a.topP.clamp(0.0, 1.0),
               min: 0.0,
               max: 1.0,
@@ -302,7 +325,7 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
         card(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             titleDesc(zh ? '上下文消息数量' : 'Context Messages', zh ? '多少历史消息会被当作上下文发送给模型，超过数量会忽略，只保留最近 N 条' : 'How many recent messages to keep in context'),
-            _SliderTile(
+            _SliderTileNew(
               value: a.contextMessageSize.toDouble().clamp(0, 256),
               min: 0,
               max: 256,
@@ -324,20 +347,27 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
         // Thinking budget (card with icon and button)
         card(
           child: Row(children: [
-            const Icon(Lucide.Brain, size: 20),
-            const SizedBox(width: 10),
+            Padding(
+              padding: const EdgeInsets.only(left: 2, right: 8),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: SvgPicture.asset(
+                  'assets/icons/deepthink.svg',
+                  colorFilter: ColorFilter.mode(cs.primary, BlendMode.srcIn),
+                ),
+              ),
+            ),
             Expanded(child: Text(zh ? '思考预算' : 'Thinking Budget', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700))),
             TextButton(
               onPressed: () async {
-                // Set the current assistant's thinking budget to global settings before showing dialog
                 final currentBudget = a.thinkingBudget;
                 if (currentBudget != null) {
                   context.read<SettingsProvider>().setThinkingBudget(currentBudget);
                 }
                 await showReasoningBudgetSheet(context);
-                // Get the updated value from global settings after dialog closes
-                final global = context.read<SettingsProvider>().thinkingBudget;
-                await context.read<AssistantProvider>().updateAssistant(a.copyWith(thinkingBudget: global));
+                final chosen = context.read<SettingsProvider>().thinkingBudget;
+                await context.read<AssistantProvider>().updateAssistant(a.copyWith(thinkingBudget: chosen));
               },
               child: Text(zh ? '配置' : 'Configure'),
             ),
@@ -349,20 +379,16 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             titleDesc(zh ? '最大 Token 数' : 'Max Tokens', zh ? '留空表示无限制' : 'Leave empty for unlimited'),
             const SizedBox(height: 10),
-            SizedBox(
-              width: 180,
-              child: TextField(
-                controller: _maxTokensCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  hintText: zh ? '无限制' : 'Unlimited',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onChanged: (v) {
-                  final val = int.tryParse(v);
-                  context.read<AssistantProvider>().updateAssistant(a.copyWith(maxTokens: val, clearMaxTokens: v.trim().isEmpty));
-                },
-              ),
+            _InputRow(
+              label: zh ? '最大 Token 数' : 'Max Tokens',
+              hideLabel: true,
+              controller: _maxTokensCtrl,
+              hint: zh ? '无限制' : 'Unlimited',
+              keyboardType: TextInputType.number,
+              onChanged: (v) {
+                final val = int.tryParse(v.trim());
+                context.read<AssistantProvider>().updateAssistant(a.copyWith(maxTokens: val, clearMaxTokens: v.trim().isEmpty));
+              },
             ),
           ]),
         ),
@@ -373,18 +399,47 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
             titleDesc(zh ? '聊天背景' : 'Chat Background', zh ? '设置助手聊天页面的背景图片' : 'Set a background image for this assistant'),
             const SizedBox(height: 10),
             Row(children: [
-              ElevatedButton.icon(
-                onPressed: () => _pickBackground(context, a),
-                icon: const Icon(Lucide.Image, size: 18),
-                label: Text(zh ? '选择背景图片' : 'Choose Image'),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickBackground(context, a),
+                  icon: Icon(Lucide.Image, size: 18, color: cs.primary),
+                  label: Text(zh ? '选择背景图片' : 'Choose Image', style: TextStyle(color: cs.primary)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                    side: BorderSide(color: cs.primary.withOpacity(0.45)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                  ),
+                ),
               ),
               const SizedBox(width: 10),
               if ((a.background ?? '').isNotEmpty)
-                TextButton.icon(
-                  onPressed: () => context.read<AssistantProvider>().updateAssistant(a.copyWith(clearBackground: true)),
-                  icon: Icon(Lucide.X, size: 16, color: cs.primary),
-                  label: Text(zh ? '清除' : 'Clear', style: TextStyle(color: cs.primary)),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => context.read<AssistantProvider>().updateAssistant(a.copyWith(clearBackground: true)),
+                    icon: Icon(Lucide.X, size: 16, color: cs.primary),
+                    label: Text(zh ? '清除' : 'Clear', style: TextStyle(color: cs.primary)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                      side: BorderSide(color: cs.primary.withOpacity(0.45)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      backgroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                    ),
+                  ),
                 ),
+              if ((a.background ?? '').isNotEmpty) ...[
+                const SizedBox(width: 10),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 56,
+                    height: 36,
+                    child: (a.background!.startsWith('http'))
+                        ? Image.network(a.background!, fit: BoxFit.cover)
+                        : Image.file(File(a.background!), fit: BoxFit.cover),
+                  ),
+                ),
+              ],
             ]),
           ]),
         ),
@@ -461,6 +516,57 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
     } catch (_) {}
   }
 
+}
+
+class _SliderTileNew extends StatelessWidget {
+  const _SliderTileNew({
+    required this.value,
+    required this.min,
+    required this.max,
+    this.divisions,
+    required this.label,
+    required this.onChanged,
+  });
+
+  final double value;
+  final double min;
+  final double max;
+  final int? divisions;
+  final String label;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Slider(
+                value: value.clamp(min, max),
+                min: min,
+                max: max,
+                divisions: divisions,
+                label: label,
+                onChanged: onChanged,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: cs.primary.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(label, style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600, fontSize: 12)),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 extension _AssistantAvatarActions on _BasicSettingsTabState {
@@ -1117,43 +1223,110 @@ class _McpTab extends StatelessWidget {
     final servers = mcp.servers.toList();
 
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(6, 8, 6, 16),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
       itemCount: servers.length,
       itemBuilder: (context, index) {
         final s = servers[index];
         final checked = a.mcpServerIds.contains(s.id);
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+          padding: const EdgeInsets.only(bottom: 10),
           child: Material(
-            color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : cs.surface,
-            borderRadius: BorderRadius.circular(12),
-            child: CheckboxListTile(
-              value: checked,
-              onChanged: (v) {
-                final set = a.mcpServerIds.toList();
-                if (v == true) {
-                  if (!set.contains(s.id)) set.add(s.id);
-                } else {
-                  set.remove(s.id);
-                }
-                context.read<AssistantProvider>().updateAssistant(a.copyWith(mcpServerIds: set));
-              },
-              secondary: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                alignment: Alignment.center,
-                child: Icon(Lucide.Terminal, size: 18, color: cs.primary),
+            color: Colors.transparent,
+            child: Ink(
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : cs.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: cs.outlineVariant.withOpacity(0.25)),
+                boxShadow: Theme.of(context).brightness == Brightness.dark ? [] : AppShadows.soft,
               ),
-              title: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text(s.url, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onSurface.withOpacity(0.7))),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(Lucide.Terminal, size: 18, color: cs.primary),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 2),
+                          Text(s.url, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onSurface.withOpacity(0.7), fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: checked,
+                      onChanged: (v) {
+                        final set = a.mcpServerIds.toList();
+                        if (v == true) {
+                          if (!set.contains(s.id)) set.add(s.id);
+                        } else {
+                          set.remove(s.id);
+                        }
+                        context.read<AssistantProvider>().updateAssistant(a.copyWith(mcpServerIds: set));
+                      },
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+class _SegTabBar extends StatelessWidget {
+  const _SegTabBar({required this.controller, required this.tabs});
+  final TabController controller;
+  final List<String> tabs;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        itemCount: tabs.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final selected = controller.index == index;
+          return GestureDetector(
+            onTap: () => controller.animateTo(index),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: selected ? cs.primary.withOpacity(0.12) : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: selected ? cs.primary : cs.outlineVariant.withOpacity(0.3)),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                tabs[index],
+                style: TextStyle(
+                  color: selected ? cs.primary : cs.onSurface.withOpacity(0.8),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -1199,6 +1372,231 @@ class _SliderTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _InputRow extends StatelessWidget {
+  const _InputRow({required this.label, required this.controller, this.hint, this.onChanged, this.enabled = true, this.suffix, this.keyboardType, this.hideLabel = false});
+  final String label;
+  final TextEditingController controller;
+  final String? hint;
+  final ValueChanged<String>? onChanged;
+  final bool enabled;
+  final Widget? suffix;
+  final TextInputType? keyboardType;
+  final bool hideLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (!hideLabel) ...[
+          Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+        ],
+        Container(
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white10 : const Color(0xFFF7F7F9),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.outlineVariant.withOpacity(0.35)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  enabled: enabled,
+                  controller: controller,
+                  keyboardType: keyboardType,
+                  onChanged: onChanged,
+                  decoration: InputDecoration(
+                    hintText: hint,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  ),
+                ),
+              ),
+              if (suffix != null) ...[
+                const SizedBox(width: 4),
+                Padding(padding: const EdgeInsets.only(right: 6), child: suffix!),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AssistantModelCard extends StatelessWidget {
+  const _AssistantModelCard({
+    required this.title,
+    required this.subtitle,
+    required this.onPick,
+    this.providerKey,
+    this.modelId,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onPick;
+  final String? providerKey;
+  final String? modelId;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    String display = zh ? '使用全局默认' : 'Use global default';
+    String brandName = display;
+    if (providerKey != null && modelId != null) {
+      try {
+        final settings = context.read<SettingsProvider>();
+        final cfg = settings.getProviderConfig(providerKey!);
+        final ov = cfg.modelOverrides[modelId] as Map?;
+        brandName = cfg.name.isNotEmpty ? cfg.name : providerKey!;
+        final mdl = (ov != null && (ov['name'] as String?)?.isNotEmpty == true) ? (ov['name'] as String) : modelId!;
+        display = mdl;
+      } catch (_) {
+        brandName = providerKey ?? '';
+        display = modelId ?? '';
+      }
+    }
+    return Material(
+      color: cs.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: cs.outlineVariant.withOpacity(0.4)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const SizedBox(width: 4),
+                  Expanded(child: SizedBox()),
+                  // Clear button removed as requested
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(subtitle, style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7))),
+              const SizedBox(height: 10),
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: onPick,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      _BrandAvatarLike(name: (modelId ?? display), size: 24),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          display,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BrandAvatarLike extends StatelessWidget {
+  const _BrandAvatarLike({required this.name, this.size = 20});
+  final String name;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Map known names to brand assets used in default_model_page
+    String? asset;
+    final lower = name.toLowerCase();
+    final mapping = <RegExp, String>{
+      RegExp(r'openai|gpt|o\d'): 'openai.svg',
+      RegExp(r'gemini'): 'gemini-color.svg',
+      RegExp(r'google'): 'google-color.svg',
+      RegExp(r'claude|anthropic'): 'claude-color.svg',
+      RegExp(r'deepseek'): 'deepseek-color.svg',
+      RegExp(r'grok|xai'): 'xai.svg',
+      RegExp(r'qwen|qwq|qvq|aliyun|dashscope'): 'qwen-color.svg',
+      RegExp(r'doubao|ark|volc'): 'doubao-color.svg',
+      RegExp(r'openrouter'): 'openrouter.svg',
+      RegExp(r'zhipu|glm|智谱'): 'zhipu-color.svg',
+      RegExp(r'mistral'): 'mistral-color.svg',
+      RegExp(r'meta|llama|(?<!o)llama'): 'meta-color.svg',
+      RegExp(r'hunyuan|tencent'): 'hunyuan-color.svg',
+      RegExp(r'gemma'): 'gemma-color.svg',
+      RegExp(r'perplexity'): 'perplexity-color.svg',
+      RegExp(r'alibabacloud|阿里云|百炼'): 'alibabacloud-color.svg',
+      RegExp(r'cloudflare'): 'cloudflare-color.svg',
+      RegExp(r'minimax'): 'minimax-color.svg',
+      RegExp(r'juhenext'): 'juhenext.png',
+      RegExp(r'kimi'): 'kimi-color.svg',
+      RegExp(r'302'): '302ai-color.svg',
+      RegExp(r'stepfun|阶跃|step'): 'stepfun-color.svg',
+      RegExp(r'internlm|书生'): 'internlm-color.svg',
+      RegExp(r'cohere|command-.+'): 'cohere-color.svg',
+      RegExp(r'silicon|硅基'): 'siliconflow-color.svg',
+      RegExp(r'aihubmix'): 'aihubmix-color.svg',
+      RegExp(r'ollama'): 'ollama.svg',
+      RegExp(r'github'): 'github.svg',
+    };
+    for (final e in mapping.entries) {
+      if (e.key.hasMatch(lower)) { asset = 'assets/icons/${e.value}'; break; }
+    }
+    if (asset != null) {
+      if (asset!.endsWith('.svg')) {
+        final isColorful = asset!.contains('color');
+        final ColorFilter? tint = (isDark && !isColorful) ? const ColorFilter.mode(Colors.white, BlendMode.srcIn) : null;
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(color: isDark ? Colors.white10 : cs.primary.withOpacity(0.1), shape: BoxShape.circle),
+          alignment: Alignment.center,
+          child: SvgPicture.asset(asset!, width: size * 0.62, height: size * 0.62, colorFilter: tint),
+        );
+      } else {
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(color: isDark ? Colors.white10 : cs.primary.withOpacity(0.1), shape: BoxShape.circle),
+          alignment: Alignment.center,
+          child: Image.asset(asset!, width: size * 0.62, height: size * 0.62, fit: BoxFit.contain),
+        );
+      }
+    }
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: isDark ? Colors.white10 : cs.primary.withOpacity(0.1), shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: Text(name.isNotEmpty ? name.characters.first.toUpperCase() : '?', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: size * 0.42)),
     );
   }
 }

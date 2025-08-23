@@ -4,6 +4,9 @@ import '../theme/design_tokens.dart';
 import 'package:provider/provider.dart';
 import '../providers/assistant_provider.dart';
 import '../models/assistant.dart';
+import 'dart:io' show File;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:characters/characters.dart';
 import 'assistant_settings_edit_page.dart';
 
 class AssistantSettingsPage extends StatelessWidget {
@@ -86,17 +89,7 @@ class _AssistantCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundColor: cs.primary.withOpacity(isDark ? 0.18 : 0.12),
-                      child: Text(
-                        _initials(item.name),
-                        style: TextStyle(
-                          color: cs.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
+                    _AssistantAvatar(item: item, size: 44),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -172,6 +165,77 @@ class _AssistantCard extends StatelessWidget {
     if (trimmed.isEmpty) return '?';
     final first = String.fromCharCode(trimmed.runes.first);
     return first.toUpperCase();
+  }
+}
+
+class _AssistantAvatar extends StatelessWidget {
+  const _AssistantAvatar({required this.item, this.size = 40});
+  final Assistant item;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final av = (item.avatar ?? '').trim();
+    if (av.isNotEmpty) {
+      if (av.startsWith('http')) {
+        return ClipOval(
+          child: Image.network(
+            av,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (c, e, s) => _initial(cs),
+          ),
+        );
+      } else if (!kIsWeb && (av.startsWith('/') || av.contains(':'))) {
+        return ClipOval(
+          child: Image(
+            image: FileImage(File(av)),
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+          ),
+        );
+      } else {
+        return _emoji(cs, av);
+      }
+    }
+    return _initial(cs);
+  }
+
+  Widget _initial(ColorScheme cs) {
+    final letter = item.name.isNotEmpty ? item.name.characters.first : '?';
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: cs.primary.withOpacity(0.15),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        letter,
+        style: TextStyle(
+          color: cs.primary,
+          fontWeight: FontWeight.w700,
+          fontSize: size * 0.42,
+        ),
+      ),
+    );
+  }
+
+  Widget _emoji(ColorScheme cs, String emoji) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: cs.primary.withOpacity(0.15),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(emoji.characters.take(1).toString(), style: TextStyle(fontSize: size * 0.5)),
+    );
   }
 }
 

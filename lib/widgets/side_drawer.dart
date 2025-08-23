@@ -11,6 +11,7 @@ import '../models/chat_item.dart';
 import '../providers/user_provider.dart';
 import '../ui/settings_page.dart';
 import '../providers/assistant_provider.dart';
+import '../models/assistant.dart';
 import '../ui/assistant_settings_edit_page.dart';
 import '../ui/chat_history_page.dart';
 import 'package:flutter/services.dart';
@@ -39,6 +40,72 @@ class SideDrawer extends StatefulWidget {
 class _SideDrawerState extends State<SideDrawer> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
+
+  // Assistant avatar renderer shared across drawer views
+  Widget _assistantAvatar(BuildContext context, Assistant? a, {double size = 28}) {
+    final cs = Theme.of(context).colorScheme;
+    final av = a?.avatar?.trim() ?? '';
+    final name = a?.name ?? '';
+    if (av.isNotEmpty) {
+      if (av.startsWith('http')) {
+        return ClipOval(
+          child: Image.network(
+            av,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (c, e, s) => _assistantInitialAvatar(cs, name, size),
+          ),
+        );
+      } else if (!kIsWeb && (av.startsWith('/') || av.contains(':'))) {
+        return ClipOval(
+          child: Image(
+            image: FileImage(File(av)),
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+          ),
+        );
+      } else {
+        return _assistantEmojiAvatar(cs, av, size);
+      }
+    }
+    return _assistantInitialAvatar(cs, name, size);
+  }
+
+  Widget _assistantInitialAvatar(ColorScheme cs, String name, double size) {
+    final letter = name.isNotEmpty ? name.characters.first : '?';
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: cs.primary.withOpacity(0.15),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        letter,
+        style: TextStyle(
+          color: cs.primary,
+          fontSize: size * 0.42,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _assistantEmojiAvatar(ColorScheme cs, String emoji, double size) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: cs.primary.withOpacity(0.15),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(emoji.characters.take(1).toString(), style: TextStyle(fontSize: size * 0.5)),
+    );
+  }
 
   @override
   void initState() {
@@ -343,27 +410,6 @@ class _SideDrawerState extends State<SideDrawer> {
       );
     }
 
-    Widget assistantAvatar(String name, {double size = 28}) {
-      final letter = name.isNotEmpty ? name.characters.first : '?';
-      return Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: cs.primary.withOpacity(0.15),
-          shape: BoxShape.circle,
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          letter,
-          style: TextStyle(
-            color: cs.primary,
-            fontSize: size * 0.42,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-    }
-
     return Drawer(
       backgroundColor: cs.surface,
       child: SafeArea(
@@ -552,11 +598,11 @@ class _SideDrawerState extends State<SideDrawer> {
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               child: Row(
                                 children: [
-                                  assistantAvatar(widget.assistantName, size: 28),
+                                  _assistantAvatar(context, ap.currentAssistant, size: 28),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
-                                      widget.assistantName,
+                                      (ap.currentAssistant?.name ?? widget.assistantName),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(fontSize: 14, fontWeight: FontWeight.w400, color: textBase),
@@ -677,14 +723,7 @@ class _SideDrawerState extends State<SideDrawer> {
               ),
               for (final a in list)
                 ListTile(
-                  leading: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: cs.primary.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.12),
-                    child: Text(
-                      (a.name.trim().isNotEmpty ? String.fromCharCode(a.name.trim().runes.first).toUpperCase() : 'A'),
-                      style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700),
-                    ),
-                  ),
+                  leading: _assistantAvatar(context, a, size: 36),
                   title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                   trailing: (a.id == currentId) ? Icon(Lucide.Check, size: 18, color: cs.primary) : null,
                   onTap: () async {
