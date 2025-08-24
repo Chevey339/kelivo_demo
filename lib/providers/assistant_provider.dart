@@ -27,9 +27,17 @@ class AssistantProvider extends ChangeNotifier {
         ..clear()
         ..addAll(Assistant.decodeList(raw));
     }
-    // Ensure at least one default assistant exists
+    // Ensure default assistants exist
     if (_assistants.isEmpty) {
+      // 1) 默认助手
       _assistants.add(_defaultAssistant());
+      // 2) 示例助手（带提示词）
+      _assistants.add(Assistant(
+        id: const Uuid().v4(),
+        name: '示例助手',
+        systemPrompt: '你是{model_name}, 一个人工智能助手，乐意为用户提供准确，有益的帮助。现在时间是{cur_datetime}，用户设备语言为"{locale}"，时区为{timezone}，用户正在使用{device_info}，版本{system_version}。如果用户没有明确说明，请使用用户设备语言和用户对话。',
+        deletable: false,
+      ));
       await _persist();
     }
     _currentAssistantId = prefs.getString(_currentAssistantKey) ?? _assistants.first.id;
@@ -38,7 +46,7 @@ class AssistantProvider extends ChangeNotifier {
 
   Assistant _defaultAssistant() => Assistant(
         id: const Uuid().v4(),
-        name: 'Kelivo',
+        name: '默认助手',
         systemPrompt: '',
         deletable: false,
         thinkingBudget: null,
