@@ -415,10 +415,11 @@ class _SideDrawerState extends State<SideDrawer> {
       child: SafeArea(
         child: Column(
           children: [
-            // Scrollable content
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            // Fixed header + search
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   // 1. 用户信息区（点击昵称可修改）
                   Row(
@@ -458,7 +459,7 @@ class _SideDrawerState extends State<SideDrawer> {
                   ),
                   const SizedBox(height: 16),
 
-                  // 2. 搜索框（圆角50的胶囊，使用主题默认容器色，仅隐藏指示线）
+                  // 2. 搜索框（固定头部下方）
                   TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
@@ -484,8 +485,16 @@ class _SideDrawerState extends State<SideDrawer> {
                     style: TextStyle(color: textBase, fontSize: 14), // 黑色（白天）
                   ),
 
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
 
+            // Scrollable conversation list below fixed header
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                children: [
                   // 3. 聊天记录区（按日期分组，最近在前；垂直列表）
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 260),
