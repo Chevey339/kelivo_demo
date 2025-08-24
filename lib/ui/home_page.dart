@@ -56,6 +56,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   final TextEditingController _inputController = TextEditingController();
   final ChatInputBarController _mediaController = ChatInputBarController();
   final ScrollController _scrollController = ScrollController();
+  late final AnimationController _convoFadeController;
+  late final Animation<double> _convoFade;
 
   late ChatService _chatService;
   Conversation? _currentConversation;
@@ -208,6 +210,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
+    _convoFadeController = AnimationController(vsync: this, duration: const Duration(milliseconds: 180));
+    _convoFade = CurvedAnimation(parent: _convoFadeController, curve: Curves.easeOutCubic);
+    _convoFadeController.value = 1.0;
     // Use the provided ChatService instance
     _chatService = context.read<ChatService>();
     _initChat();
@@ -1148,22 +1153,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 
   void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: _scrollAnimateDuration,
-        curve: Curves.easeOut,
-      );
+    try {
+      if (!_scrollController.hasClients) return;
+      // Prevent using controller while it is still attached to old/new list simultaneously
+      if (_scrollController.positions.length != 1) {
+        // Try again after microtask when the previous list detaches
+        Future.microtask(_scrollToBottom);
+        return;
+      }
+      final max = _scrollController.position.maxScrollExtent;
+      _scrollController.jumpTo(max);
+    } catch (_) {
+      // Ignore transient attachment errors
     }
   }
 
   // Ensure scroll reaches bottom even after widget tree transitions
   void _scrollToBottomSoon() {
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
-    // Also scroll after list fade transition completes
-    Future.delayed(_postSwitchScrollDelay, () {
-      _scrollToBottom();
-    });
+    Future.delayed(const Duration(milliseconds: 120), _scrollToBottom);
   }
 
   // Translate message functionality
@@ -1306,9 +1314,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           statusBarBrightness: Brightness.light,
         ),
         leading: IconButton(
-          tooltip: Localizations.localeOf(context).languageCode == 'zh'
-              ? '菜单'
-              : 'Menu',
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           icon: const Icon(Lucide.ListTree, size: 22),
         ),
@@ -1351,16 +1356,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         ),
         actions: [
           IconButton(
-            tooltip: Localizations.localeOf(context).languageCode == 'zh'
-                ? '更多'
-                : 'Menu',
             onPressed: () {},
             icon: const Icon(Lucide.Menu, size: 22),
           ),
           IconButton(
-            tooltip: Localizations.localeOf(context).languageCode == 'zh'
-                ? '新建话题'
-                : 'New Topic',
             onPressed: () async {
               await _createNewConversation();
               if (mounted) {
@@ -1433,6 +1432,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               }
             });
             // MCP selection is now per-assistant; no per-conversation defaults here
+            _triggerConversationFade();
             _scrollToBottomSoon();
           }
           // Close the drawer when a conversation is picked
@@ -1441,6 +1441,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         onNewConversation: () async {
           await _createNewConversation();
           if (mounted) {
+            _triggerConversationFade();
             _scrollToBottom();
             Navigator.of(context).maybePop();
           }
@@ -1475,11 +1476,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             children: [
               // Chat messages list (animate when switching topic)
               Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeOutCubic,
-                  transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+                child: FadeTransition(
+                  opacity: _convoFade,
                   child: KeyedSubtree(
                     key: ValueKey<String>(_currentConversation?.id ?? 'none'),
                     child: (() {
@@ -1488,13 +1486,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       return ListView.builder(
                         controller: _scrollController,
                         padding: const EdgeInsets.only(bottom: 16, top: 8),
-                        itemCount: messages.length,
-                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                        itemBuilder: (context, index) {
-                          if (index < 0 || index >= messages.length) {
-                            return const SizedBox.shrink();
-                          }
-                          final message = messages[index];
+                      itemCount: messages.length,
+                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                      itemBuilder: (context, index) {
+                        if (index < 0 || index >= messages.length) {
+                          return const SizedBox.shrink();
+                        }
+                        final message = messages[index];
                           final r = _reasoning[message.id];
                           final t = _translations[message.id];
                           final chatScale = context.watch<SettingsProvider>().chatFontScale;
@@ -1609,9 +1607,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                   : null,
                             ),
                           );
-                        },
-                      );
-                    })(),
+                      },
+                    );
+                  })(),
                   ),
                 ),
               ),
@@ -1734,6 +1732,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
+    _convoFadeController.dispose();
     _mcpProvider?.removeListener(_onMcpChanged);
     _inputFocus.dispose();
     _inputController.dispose();
@@ -1741,6 +1740,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _messageStreamSubscription?.cancel();
     routeObserver.unsubscribe(this);
     super.dispose();
+  }
+
+  void _triggerConversationFade() {
+    try {
+      _convoFadeController.stop();
+      _convoFadeController.value = 0;
+      _convoFadeController.forward();
+    } catch (_) {}
   }
 
   @override

@@ -24,7 +24,6 @@ class AssistantSettingsPage extends StatelessWidget {
         leading: IconButton(
           icon: Icon(Lucide.ArrowLeft, size: 22),
           onPressed: () => Navigator.of(context).maybePop(),
-          tooltip: zh ? '返回' : 'Back',
         ),
         title: Text(zh ? '助手设置' : 'Assistant Settings'),
         actions: [
@@ -39,7 +38,6 @@ class AssistantSettingsPage extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => AssistantSettingsEditPage(assistantId: id)),
               );
             },
-            tooltip: zh ? '添加助手' : 'Add Assistant',
           ),
         ],
       ),

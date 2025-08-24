@@ -414,7 +414,8 @@ class _CircleIconButton extends StatelessWidget {
       ),
     );
 
-    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
+    // Avoid Material Tooltip's ticker conflicts on some platforms; use semantics-only tooltip
+    return tooltip == null ? button : Semantics(tooltip: tooltip!, child: button);
   }
 }
 
