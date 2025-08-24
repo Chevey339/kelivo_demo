@@ -483,10 +483,10 @@ class ModernBlockQuote extends InlineMd {
 
   @override
   RegExp get exp => RegExp(
-        r"(?:(?:^)\ *>[^\n]+)(?:(?:\n)\ *>[^\n]+)*",
-        dotAll: true,
-        multiLine: true,
-      );
+    r"(?:(?:^)\ *>[^\n]+)(?:(?:\n)\ *>[^\n]+)*",
+    dotAll: true,
+    multiLine: true,
+  );
 
   @override
   InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
@@ -628,15 +628,15 @@ class ModernRadioMd extends BlockMd {
               ),
               child: selected
                   ? Center(
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: cs.primary,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    )
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: cs.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              )
                   : null,
             ),
           ),

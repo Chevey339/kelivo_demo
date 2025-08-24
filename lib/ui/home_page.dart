@@ -80,20 +80,20 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     }).toList();
     return jsonEncode(list);
   }
-  
+
   List<_ReasoningSegmentData> _deserializeReasoningSegments(String? json) {
     if (json == null || json.isEmpty) return [];
     try {
       final list = jsonDecode(json) as List;
       return list.map((item) {
-      final s = _ReasoningSegmentData();
-      s.text = item['text'] ?? '';
-      s.startAt = item['startAt'] != null ? DateTime.parse(item['startAt']) : null;
-      s.finishedAt = item['finishedAt'] != null ? DateTime.parse(item['finishedAt']) : null;
-      s.expanded = item['expanded'] ?? false;
-      s.toolStartIndex = (item['toolStartIndex'] as int?) ?? 0;
-      return s;
-    }).toList();
+        final s = _ReasoningSegmentData();
+        s.text = item['text'] ?? '';
+        s.startAt = item['startAt'] != null ? DateTime.parse(item['startAt']) : null;
+        s.finishedAt = item['finishedAt'] != null ? DateTime.parse(item['finishedAt']) : null;
+        s.expanded = item['expanded'] ?? false;
+        s.toolStartIndex = (item['toolStartIndex'] as int?) ?? 0;
+        return s;
+      }).toList();
     } catch (_) {
       return [];
     }
@@ -267,12 +267,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               if (events.isNotEmpty) {
                 _toolParts[m.id] = events
                     .map((e) => ToolUIPart(
-                          id: (e['id'] ?? '').toString(),
-                          toolName: (e['name'] ?? '').toString(),
-                          arguments: (e['arguments'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
-                          content: (e['content']?.toString().isNotEmpty == true) ? e['content'].toString() : null,
-                          loading: !(e['content']?.toString().isNotEmpty == true),
-                        ))
+                  id: (e['id'] ?? '').toString(),
+                  toolName: (e['name'] ?? '').toString(),
+                  arguments: (e['arguments'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
+                  content: (e['content']?.toString().isNotEmpty == true) ? e['content'].toString() : null,
+                  loading: !(e['content']?.toString().isNotEmpty == true),
+                ))
                     .toList();
               }
               // Restore reasoning segments
@@ -499,9 +499,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     final apiMessages = _messages
         .where((m) => m.content.isNotEmpty)
         .map((m) => {
-              'role': m.role == 'assistant' ? 'assistant' : 'user',
-              'content': m.content,
-            })
+      'role': m.role == 'assistant' ? 'assistant' : 'user',
+      'content': m.content,
+    })
         .toList();
 
     // Build document prompts and clean markers in last user message
@@ -594,23 +594,23 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       final tools = toolSvc.listAvailableToolsForAssistant(mcp, context.read<AssistantProvider>(), assistant?.id);
       if (tools.isNotEmpty) {
         toolDefs = tools.map((t) {
-            final props = <String, dynamic>{
-              for (final p in t.params) p.name: {'type': 'string'},
-            };
-            final required = [for (final p in t.params.where((e) => e.required)) p.name];
-            return {
-              'type': 'function',
-              'function': {
-                'name': t.name,
-                if ((t.description ?? '').isNotEmpty) 'description': t.description,
-                'parameters': {
-                  'type': 'object',
-                  'properties': props,
-                  'required': required,
-                },
-              }
-            };
-          }).toList();
+          final props = <String, dynamic>{
+            for (final p in t.params) p.name: {'type': 'string'},
+          };
+          final required = [for (final p in t.params.where((e) => e.required)) p.name];
+          return {
+            'type': 'function',
+            'function': {
+              'name': t.name,
+              if ((t.description ?? '').isNotEmpty) 'description': t.description,
+              'parameters': {
+                'type': 'object',
+                'properties': props,
+                'required': required,
+              },
+            }
+          };
+        }).toList();
         onToolCall = (name, args) async {
           final text = await toolSvc.callToolTextForAssistant(
             mcp,
@@ -667,7 +667,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           _reasoning[assistantMessage.id] = r;
           if (mounted) setState(() {});
         }
-        
+
         // Also finish any unfinished reasoning segments
         final segments = _reasoningSegments[assistantMessage.id];
         if (segments != null && segments.isNotEmpty && segments.last.finishedAt == null) {
@@ -679,7 +679,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           _reasoningSegments[assistantMessage.id] = segments;
           if (mounted) setState(() {});
         }
-        
+
         // Save reasoning segments to database
         if (segments != null && segments.isNotEmpty) {
           await _chatService.updateMessage(
@@ -694,7 +694,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
       _messageStreamSubscription?.cancel();
       _messageStreamSubscription = stream.listen(
-        (chunk) async {
+            (chunk) async {
           // Capture reasoning deltas only when reasoning is enabled
           if ((chunk.reasoning ?? '').isNotEmpty && _isReasoningEnabled((assistant?.thinkingBudget) ?? settings.thinkingBudget)) {
             final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
@@ -703,10 +703,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             r.finishedAt = null;
             r.expanded = true; // auto expand while generating
             _reasoning[assistantMessage.id] = r;
-            
+
             // Add to reasoning segments for mixed display
             final segments = _reasoningSegments[assistantMessage.id] ?? <_ReasoningSegmentData>[];
-            
+
             if (segments.isEmpty) {
               // First reasoning segment
               final newSegment = _ReasoningSegmentData();
@@ -719,7 +719,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               // Check if we should start a new segment (after tool calls)
               final hasToolsAfterLastSegment = (_toolParts[assistantMessage.id]?.isNotEmpty ?? false);
               final lastSegment = segments.last;
-              
+
               if (hasToolsAfterLastSegment && lastSegment.finishedAt != null) {
                 // Start a new segment after tools
                 final newSegment = _ReasoningSegmentData();
@@ -735,13 +735,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               }
             }
             _reasoningSegments[assistantMessage.id] = segments;
-            
+
             // Save segments to database periodically
             await _chatService.updateMessage(
               assistantMessage.id,
               reasoningSegmentsJson: _serializeReasoningSegments(segments),
             );
-            
+
             if (mounted) setState(() {});
             await _chatService.updateMessage(
               assistantMessage.id,
@@ -769,7 +769,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 reasoningSegmentsJson: _serializeReasoningSegments(segments),
               );
             }
-            
+
             // Simply append new tool calls instead of merging by ID/name
             // This allows multiple calls to the same tool
             final existing = List<ToolUIPart>.of(_toolParts[assistantMessage.id] ?? const []);
@@ -779,7 +779,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             setState(() {
               _toolParts[assistantMessage.id] = existing;
             });
-            
+
             // Persist placeholders - append new events
             try {
               final prev = _chatService.getToolEvents(assistantMessage.id);
@@ -810,7 +810,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   break;
                 }
               }
-              
+
               if (idx >= 0) {
                 parts[idx] = ToolUIPart(
                   id: parts[idx].id,
@@ -900,7 +900,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 );
                 if (mounted) setState(() {});
               }
-              
+
               // Also finish the current reasoning segment
               final segments = _reasoningSegments[assistantMessage.id];
               if (segments != null && segments.isNotEmpty && segments.last.finishedAt == null) {
@@ -984,7 +984,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             }
             _reasoning[assistantMessage.id] = r;
           }
-          
+
           // Also finish any unfinished reasoning segments on error
           final segments = _reasoningSegments[assistantMessage.id];
           if (segments != null && segments.isNotEmpty && segments.last.finishedAt == null) {
@@ -1053,7 +1053,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           reasoningFinishedAt: r.finishedAt,
         );
       }
-      
+
       // Also finish any unfinished reasoning segments on error
       final segments = _reasoningSegments[assistantMessage.id];
       if (segments != null && segments.isNotEmpty && segments.last.finishedAt == null) {
@@ -1189,11 +1189,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     }
 
     final settings = context.read<SettingsProvider>();
-    
+
     // Check if translation model is set
     final translateProvider = settings.translateModelProvider ?? settings.currentModelProvider;
     final translateModelId = settings.translateModelId ?? settings.currentModelId;
-    
+
     if (translateProvider == null || translateModelId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('请先设置翻译模型')),
@@ -1203,7 +1203,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
     // Extract text content from message (removing reasoning text if present)
     String textToTranslate = message.content;
-    
+
     // Set loading state and initialize translation data
     final loadingMessage = message.copyWith(translation: '翻译中...');
     setState(() {
@@ -1223,7 +1223,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
       // Create translation request
       final provider = settings.getProviderConfig(translateProvider);
-      
+
       final translationStream = ChatApiService.sendMessageStream(
         config: provider,
         modelId: translateModelId,
@@ -1233,10 +1233,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       );
 
       final buffer = StringBuffer();
-      
+
       await for (final chunk in translationStream) {
         buffer.write(chunk.content);
-        
+
         // Update translation in real-time
         final updatingMessage = message.copyWith(translation: buffer.toString());
         setState(() {
@@ -1246,10 +1246,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           }
         });
       }
-      
+
       // Save final translation
       await _chatService.updateMessage(message.id, translation: buffer.toString());
-      
+
     } catch (e) {
       // Clear translation on error (empty to hide immediately)
       final errorMessage = message.copyWith(translation: '');
@@ -1261,9 +1261,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         // Remove translation state on error
         _translations.remove(message.id);
       });
-      
+
       await _chatService.updateMessage(message.id, translation: '');
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('翻译失败: $e')),
       );
@@ -1296,15 +1296,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       appBar: AppBar(
         systemOverlayStyle: (Theme.of(context).brightness == Brightness.dark)
             ? const SystemUiOverlayStyle(
-                statusBarColor: Colors.transparent,
-                statusBarIconBrightness: Brightness.light, // Android icons
-                statusBarBrightness: Brightness.dark, // iOS text
-              )
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light, // Android icons
+          statusBarBrightness: Brightness.dark, // iOS text
+        )
             : const SystemUiOverlayStyle(
-                statusBarColor: Colors.transparent,
-                statusBarIconBrightness: Brightness.dark,
-                statusBarBrightness: Brightness.light,
-              ),
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+        ),
         leading: IconButton(
           tooltip: Localizations.localeOf(context).languageCode == 'zh'
               ? '菜单'
@@ -1410,12 +1410,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   if (events.isNotEmpty) {
                     _toolParts[m.id] = events
                         .map((e) => ToolUIPart(
-                              id: (e['id'] ?? '').toString(),
-                              toolName: (e['name'] ?? '').toString(),
-                              arguments: (e['arguments'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
-                              content: (e['content']?.toString().isNotEmpty == true) ? e['content'].toString() : null,
-                              loading: !(e['content']?.toString().isNotEmpty == true),
-                            ))
+                      id: (e['id'] ?? '').toString(),
+                      toolName: (e['name'] ?? '').toString(),
+                      arguments: (e['arguments'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
+                      content: (e['content']?.toString().isNotEmpty == true) ? e['content'].toString() : null,
+                      loading: !(e['content']?.toString().isNotEmpty == true),
+                    ))
                         .toList();
                   }
                   // Restore reasoning segments
@@ -1482,119 +1482,136 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
                   child: KeyedSubtree(
                     key: ValueKey<String>(_currentConversation?.id ?? 'none'),
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.only(bottom: 16, top: 8),
-                      itemCount: _messages.length,
-                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                      itemBuilder: (context, index) {
-                        final message = _messages[index];
-                        final r = _reasoning[message.id];
-                        final t = _translations[message.id];
-                        final chatScale = context.watch<SettingsProvider>().chatFontScale;
-                        final assistant = context.watch<AssistantProvider>().currentAssistant;
-                        final useAssist = assistant?.useAssistantAvatar == true;
-                        return MediaQuery(
-                          data: MediaQuery.of(context).copyWith(
-                            textScaleFactor: MediaQuery.of(context).textScaleFactor * chatScale,
-                          ),
-                          child: ChatMessageWidget(
-                          message: message,
-                          modelIcon: (!useAssist && message.role == 'assistant' && message.providerId != null && message.modelId != null)
-                              ? _CurrentModelIcon(providerKey: message.providerId, modelId: message.modelId)
-                              : null,
-                          showModelIcon: useAssist ? false : context.watch<SettingsProvider>().showModelIcon,
-                          useAssistantAvatar: useAssist && message.role == 'assistant',
-                          assistantName: useAssist ? (assistant?.name ?? 'Assistant') : null,
-                          assistantAvatar: useAssist ? (assistant?.avatar ?? '') : null,
-                          showUserAvatar: context.watch<SettingsProvider>().showUserAvatar,
-                          showTokenStats: context.watch<SettingsProvider>().showTokenStats,
-                          reasoningText: (message.role == 'assistant') ? (r?.text ?? '') : null,
-                          reasoningExpanded: (message.role == 'assistant') ? (r?.expanded ?? false) : false,
-                          reasoningLoading: (message.role == 'assistant') ? (r?.finishedAt == null && (r?.text.isNotEmpty == true)) : false,
-                          reasoningStartAt: (message.role == 'assistant') ? r?.startAt : null,
-                          reasoningFinishedAt: (message.role == 'assistant') ? r?.finishedAt : null,
-                          onToggleReasoning: (message.role == 'assistant' && r != null)
-                              ? () {
-                                  setState(() {
-                                    r.expanded = !r.expanded;
-                                  });
-                                }
-                              : null,
-                          translationExpanded: t?.expanded ?? true,
-                          onToggleTranslation: (message.translation != null && message.translation!.isNotEmpty && t != null)
-                              ? () {
-                                  setState(() {
-                                    t.expanded = !t.expanded;
-                                  });
-                                }
-                              : null,
-                          onRegenerate: message.role == 'assistant' ? () {
-                            // TODO: Implement regenerate
-                          } : null,
-                          onResend: message.role == 'user' ? () {
-                            _sendMessage(_parseInputFromRaw(message.content));
-                          } : null,
-                          onTranslate: message.role == 'assistant' ? () {
-                            _translateMessage(message);
-                          } : null,
-                          onMore: () async {
-                            final action = await showMessageMoreSheet(context, message);
-                            if (!mounted) return;
-                            if (action == MessageMoreAction.delete) {
-                              final zh = Localizations.localeOf(context).languageCode == 'zh';
-                              final confirm = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  title: Text(zh ? '删除消息' : 'Delete Message'),
-                                  content: Text(zh ? '确定要删除这条消息吗？此操作不可撤销。' : 'Are you sure you want to delete this message? This cannot be undone.'),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.of(ctx).pop(false),
-                                      child: Text(zh ? '取消' : 'Cancel'),
+                    child: (() {
+                      // Stable snapshot for this build
+                      final messages = List.of(_messages);
+                      return ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.only(bottom: 16, top: 8),
+                        itemCount: messages.length,
+                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                        itemBuilder: (context, index) {
+                          if (index < 0 || index >= messages.length) {
+                            return const SizedBox.shrink();
+                          }
+                          final message = messages[index];
+                          final r = _reasoning[message.id];
+                          final t = _translations[message.id];
+                          final chatScale = context.watch<SettingsProvider>().chatFontScale;
+                          final assistant = context.watch<AssistantProvider>().currentAssistant;
+                          final useAssist = assistant?.useAssistantAvatar == true;
+                          return MediaQuery(
+                            data: MediaQuery.of(context).copyWith(
+                              textScaleFactor: MediaQuery.of(context).textScaleFactor * chatScale,
+                            ),
+                            child: ChatMessageWidget(
+                              message: message,
+                              modelIcon: (!useAssist && message.role == 'assistant' && message.providerId != null && message.modelId != null)
+                                  ? _CurrentModelIcon(providerKey: message.providerId, modelId: message.modelId)
+                                  : null,
+                              showModelIcon: useAssist ? false : context.watch<SettingsProvider>().showModelIcon,
+                              useAssistantAvatar: useAssist && message.role == 'assistant',
+                              assistantName: useAssist ? (assistant?.name ?? 'Assistant') : null,
+                              assistantAvatar: useAssist ? (assistant?.avatar ?? '') : null,
+                              showUserAvatar: context.watch<SettingsProvider>().showUserAvatar,
+                              showTokenStats: context.watch<SettingsProvider>().showTokenStats,
+                              reasoningText: (message.role == 'assistant') ? (r?.text ?? '') : null,
+                              reasoningExpanded: (message.role == 'assistant') ? (r?.expanded ?? false) : false,
+                              reasoningLoading: (message.role == 'assistant') ? (r?.finishedAt == null && (r?.text.isNotEmpty == true)) : false,
+                              reasoningStartAt: (message.role == 'assistant') ? r?.startAt : null,
+                              reasoningFinishedAt: (message.role == 'assistant') ? r?.finishedAt : null,
+                              onToggleReasoning: (message.role == 'assistant' && r != null)
+                                  ? () {
+                                      setState(() {
+                                        r.expanded = !r.expanded;
+                                      });
+                                    }
+                                  : null,
+                              translationExpanded: t?.expanded ?? true,
+                              onToggleTranslation: (message.translation != null && message.translation!.isNotEmpty && t != null)
+                                  ? () {
+                                      setState(() {
+                                        t.expanded = !t.expanded;
+                                      });
+                                    }
+                                  : null,
+                              onRegenerate: message.role == 'assistant'
+                                  ? () {
+                                      // TODO: Implement regenerate
+                                    }
+                                  : null,
+                              onResend: message.role == 'user'
+                                  ? () {
+                                      _sendMessage(_parseInputFromRaw(message.content));
+                                    }
+                                  : null,
+                              onTranslate: message.role == 'assistant'
+                                  ? () {
+                                      _translateMessage(message);
+                                    }
+                                  : null,
+                              onMore: () async {
+                                final action = await showMessageMoreSheet(context, message);
+                                if (!mounted) return;
+                                if (action == MessageMoreAction.delete) {
+                                  final zh = Localizations.localeOf(context).languageCode == 'zh';
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: Text(zh ? '删除消息' : 'Delete Message'),
+                                      content: Text(zh ? '确定要删除这条消息吗？此操作不可撤销。' : 'Are you sure you want to delete this message? This cannot be undone.'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.of(ctx).pop(false),
+                                          child: Text(zh ? '取消' : 'Cancel'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () => Navigator.of(ctx).pop(true),
+                                          child: Text(zh ? '删除' : 'Delete', style: const TextStyle(color: Colors.red)),
+                                        ),
+                                      ],
                                     ),
-                                    TextButton(
-                                      onPressed: () => Navigator.of(ctx).pop(true),
-                                      child: Text(zh ? '删除' : 'Delete', style: const TextStyle(color: Colors.red)),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirm == true) {
-                                final id = message.id;
-                                setState(() {
-                                  _messages.removeWhere((m) => m.id == id);
-                                  _reasoning.remove(id);
-                                  _translations.remove(id);
-                                  _toolParts.remove(id);
-                                  _reasoningSegments.remove(id);
-                                });
-                                await _chatService.deleteMessage(id);
-                              }
-                            }
-                          },
-                          toolParts: message.role == 'assistant' ? _toolParts[message.id] : null,
-                          reasoningSegments: message.role == 'assistant' ? (() {
-                            final segments = _reasoningSegments[message.id];
-                            if (segments == null || segments.isEmpty) return null;
-                            return segments.map((s) => ReasoningSegment(
-                              text: s.text,
-                              expanded: s.expanded,
-                              loading: s.finishedAt == null && s.text.isNotEmpty,
-                              startAt: s.startAt,
-                              finishedAt: s.finishedAt,
-                              onToggle: () {
-                                setState(() {
-                                  s.expanded = !s.expanded;
-                                });
+                                  );
+                                  if (confirm == true) {
+                                    final id = message.id;
+                                    setState(() {
+                                      _messages.removeWhere((m) => m.id == id);
+                                      _reasoning.remove(id);
+                                      _translations.remove(id);
+                                      _toolParts.remove(id);
+                                      _reasoningSegments.remove(id);
+                                    });
+                                    await _chatService.deleteMessage(id);
+                                  }
+                                }
                               },
-                              toolStartIndex: s.toolStartIndex,
-                            )).toList();
-                          })() : null,
-                          ),
-                        );
-                      },
-                    ),
+                              toolParts: message.role == 'assistant' ? _toolParts[message.id] : null,
+                              reasoningSegments: message.role == 'assistant'
+                                  ? (() {
+                                      final segments = _reasoningSegments[message.id];
+                                      if (segments == null || segments.isEmpty) return null;
+                                      return segments
+                                          .map((s) => ReasoningSegment(
+                                                text: s.text,
+                                                expanded: s.expanded,
+                                                loading: s.finishedAt == null && s.text.isNotEmpty,
+                                                startAt: s.startAt,
+                                                finishedAt: s.finishedAt,
+                                                onToggle: () {
+                                                  setState(() {
+                                                    s.expanded = !s.expanded;
+                                                  });
+                                                },
+                                                toolStartIndex: s.toolStartIndex,
+                                              ))
+                                          .toList();
+                                    })()
+                                  : null,
+                            ),
+                          );
+                        },
+                      );
+                    })(),
                   ),
                 ),
               ),
@@ -1616,10 +1633,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   onStop: _cancelStreaming,
                   modelIcon: (settings.showModelIcon && settings.currentModelProvider != null && settings.currentModelId != null)
                       ? _CurrentModelIcon(
-                          providerKey: settings.currentModelProvider,
-                          modelId: settings.currentModelId,
-                          size: 34,
-                        )
+                    providerKey: settings.currentModelProvider,
+                    modelId: settings.currentModelId,
+                    size: 34,
+                  )
                       : null,
                   focusNode: _inputFocus,
                   controller: _inputController,
@@ -1695,7 +1712,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         onCamera: _onPickCamera,
                         onUpload: _onPickFiles,
                       ),
-                      ),
+                    ),
                   ),
                 ),
               ),

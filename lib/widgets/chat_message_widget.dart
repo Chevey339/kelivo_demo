@@ -120,7 +120,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
 
   Widget _buildUserAvatar(UserProvider userProvider, ColorScheme cs) {
     Widget avatarContent;
-    
+
     if (userProvider.avatarType == 'emoji' && userProvider.avatarValue != null) {
       avatarContent = Center(
         child: Text(
@@ -163,7 +163,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
         color: cs.primary,
       );
     }
-    
+
     return Container(
       width: 32,
       height: 32,
@@ -206,7 +206,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final userProvider = context.watch<UserProvider>();
     final parsed = _parseUserContent(widget.message.content);
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
@@ -252,7 +252,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
             ),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isDark 
+              color: isDark
                   ? cs.primary.withOpacity(0.15)
                   : cs.primary.withOpacity(0.08),
               borderRadius: BorderRadius.circular(16),
@@ -341,31 +341,31 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(10),
                           overlayColor: MaterialStateProperty.resolveWith(
-                            (states) => cs.primary.withOpacity(states.contains(MaterialState.pressed) ? 0.14 : 0.08),
+                                (states) => cs.primary.withOpacity(states.contains(MaterialState.pressed) ? 0.14 : 0.08),
                           ),
                           splashColor: cs.primary.withOpacity(0.18),
                           onTap: () async {
-                              try {
-                                final fixed = SandboxPathResolver.fix(d.path);
-                                final f = File(fixed);
-                                if (!(await f.exists())) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('文件不存在: ${d.fileName}')),
-                                  );
-                                  return;
-                                }
-                                final res = await OpenFilex.open(fixed, type: d.mime);
-                                if (res.type != ResultType.done) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('无法打开文件: ${res.message ?? res.type.toString()}')),
-                                  );
-                                }
-                              } catch (e) {
+                            try {
+                              final fixed = SandboxPathResolver.fix(d.path);
+                              final f = File(fixed);
+                              if (!(await f.exists())) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('打开文件失败: $e')),
+                                  SnackBar(content: Text('文件不存在: ${d.fileName}')),
+                                );
+                                return;
+                              }
+                              final res = await OpenFilex.open(fixed, type: d.mime);
+                              if (res.type != ResultType.done) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('无法打开文件: ${res.message ?? res.type.toString()}')),
                                 );
                               }
-                            },
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('打开文件失败: $e')),
+                              );
+                            }
+                          },
                           child: Ink(
                             decoration: BoxDecoration(
                               color: isDark ? Colors.white12 : cs.surface,
@@ -463,7 +463,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
 
   Widget _buildAssistantMessage() {
     final cs = Theme.of(context).colorScheme;
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
@@ -597,9 +597,9 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: widget.toolParts!
                     .map((p) => Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: _ToolCallItem(part: p),
-                        ))
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _ToolCallItem(part: p),
+                ))
                     .toList(),
               ),
               const SizedBox(height: 8),
@@ -610,117 +610,117 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
             width: double.infinity,
             child: widget.message.isStreaming && widget.message.content.isEmpty
                 ? Row(
-                    children: [
-                      _LoadingIndicator(),
-                      const SizedBox(width: 8),
-                      Text(
-                        '正在思考...',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: cs.onSurface.withOpacity(0.5),
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ],
-                  )
+              children: [
+                _LoadingIndicator(),
+                const SizedBox(width: 8),
+                Text(
+                  '正在思考...',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: cs.onSurface.withOpacity(0.5),
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            )
                 : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      MarkdownWithCodeHighlight(
-                        text: widget.message.content,
-                      ),
-                      if (widget.message.isStreaming)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: _LoadingIndicator(),
-                        ),
-                      // Translation section (collapsible)
-                      if (widget.message.translation != null && widget.message.translation!.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          decoration: BoxDecoration(
-                            // Match reasoning section background; no border
-                            color: Theme.of(context).colorScheme.primaryContainer
-                                .withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.25 : 0.30),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: AnimatedSize(
-                            duration: const Duration(milliseconds: 300),
-                            curve: const Cubic(0.2, 0.8, 0.2, 1),
-                            alignment: Alignment.topCenter,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                              InkWell(
-                                onTap: widget.onToggleTranslation,
-                                borderRadius: BorderRadius.circular(12),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Lucide.Languages,
-                                        size: 16,
-                                        color: cs.secondary,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        '翻译',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          color: cs.secondary,
-                                        ),
-                                      ),
-                                      const Spacer(),
-                                      Icon(
-                                        widget.translationExpanded
-                                            ? Lucide.ChevronDown
-                                            : Lucide.ChevronRight,
-                                        size: 18,
-                                        color: cs.secondary,
-                                      ),
-                                    ],
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                MarkdownWithCodeHighlight(
+                  text: widget.message.content,
+                ),
+                if (widget.message.isStreaming)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: _LoadingIndicator(),
+                  ),
+                // Translation section (collapsible)
+                if (widget.message.translation != null && widget.message.translation!.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      // Match reasoning section background; no border
+                      color: Theme.of(context).colorScheme.primaryContainer
+                          .withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.25 : 0.30),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: AnimatedSize(
+                      duration: const Duration(milliseconds: 300),
+                      curve: const Cubic(0.2, 0.8, 0.2, 1),
+                      alignment: Alignment.topCenter,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          InkWell(
+                            onTap: widget.onToggleTranslation,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Lucide.Languages,
+                                    size: 16,
+                                    color: cs.secondary,
                                   ),
-                                ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '翻译',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: cs.secondary,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Icon(
+                                    widget.translationExpanded
+                                        ? Lucide.ChevronDown
+                                        : Lucide.ChevronRight,
+                                    size: 18,
+                                    color: cs.secondary,
+                                  ),
+                                ],
                               ),
-                              if (widget.translationExpanded) ...[
-                                const SizedBox(height: 8),
-                                if (widget.message.translation == '翻译中...')
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
-                                    child: Row(
-                                      children: [
-                                        _LoadingIndicator(),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          '翻译中...',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: cs.onSurface.withOpacity(0.5),
-                                            fontStyle: FontStyle.italic,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                else
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
-                                    child: MarkdownWithCodeHighlight(
-                                      text: widget.message.translation!,
-                                    ),
-                                  ),
-                              ],
-                              ],
                             ),
                           ),
-                        ),
-                      ],
-                    ],
+                          if (widget.translationExpanded) ...[
+                            const SizedBox(height: 8),
+                            if (widget.message.translation == '翻译中...')
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+                                child: Row(
+                                  children: [
+                                    _LoadingIndicator(),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '翻译中...',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: cs.onSurface.withOpacity(0.5),
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+                                child: MarkdownWithCodeHighlight(
+                                  text: widget.message.translation!,
+                                ),
+                              ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
+                ],
+              ],
+            ),
           ),
           // Action buttons
           const SizedBox(height: 8),
@@ -925,7 +925,7 @@ class ReasoningSegment {
   final VoidCallback? onToggle;
   // Index of the first tool call that occurs after this segment starts.
   final int toolStartIndex;
-  
+
   const ReasoningSegment({
     required this.text,
     required this.expanded,
@@ -998,13 +998,13 @@ class _ToolCallItem extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 2),
                 child: part.loading
                     ? SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
-                        ),
-                      )
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
+                  ),
+                )
                     : Icon(_iconFor(part.toolName), size: 18, color: cs.secondary),
               ),
               const SizedBox(width: 10),
@@ -1490,39 +1490,39 @@ class _MarqueeState extends State<_Marquee> with SingleTickerProviderStateMixin 
       child: ClipRect(
         child: needScroll
             ? AnimatedBuilder(
-                animation: _c,
-                builder: (context, _) {
-                  final t = Curves.linear.transform(_c.value);
-                  final dx = -loopWidth * t;
-                  return ShaderMask(
-                    shaderCallback: (rect) {
-                      return const LinearGradient(
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                        colors: [
-                          Color(0x00FFFFFF),
-                          Color(0xFFFFFFFF),
-                          Color(0xFFFFFFFF),
-                          Color(0x00FFFFFF),
-                        ],
-                        stops: [0.0, 0.07, 0.93, 1.0],
-                      ).createShader(rect);
-                    },
-                    blendMode: BlendMode.dstIn,
-                    child: Transform.translate(
-                      offset: Offset(dx, 0),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
-                          SizedBox(width: gap),
-                          Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              )
+          animation: _c,
+          builder: (context, _) {
+            final t = Curves.linear.transform(_c.value);
+            final dx = -loopWidth * t;
+            return ShaderMask(
+              shaderCallback: (rect) {
+                return const LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Color(0x00FFFFFF),
+                    Color(0xFFFFFFFF),
+                    Color(0xFFFFFFFF),
+                    Color(0x00FFFFFF),
+                  ],
+                  stops: [0.0, 0.07, 0.93, 1.0],
+                ).createShader(rect);
+              },
+              blendMode: BlendMode.dstIn,
+              child: Transform.translate(
+                offset: Offset(dx, 0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
+                    SizedBox(width: gap),
+                    Text(widget.text, style: widget.style, maxLines: 1, softWrap: false),
+                  ],
+                ),
+              ),
+            );
+          },
+        )
             : Align(alignment: Alignment.centerLeft, child: Text(widget.text, style: widget.style, maxLines: 1, softWrap: false)),
       ),
     );
