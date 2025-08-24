@@ -1633,7 +1633,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       ? _CurrentModelIcon(
                     providerKey: settings.currentModelProvider,
                     modelId: settings.currentModelId,
-                    size: 34,
+                    size: 40,
                   )
                       : null,
                   focusNode: _inputFocus,

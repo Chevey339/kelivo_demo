@@ -287,6 +287,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                           : 'Select Model',
                       icon: Lucide.Boxes,
                       child: widget.modelIcon,
+                      padding: widget.modelIcon != null ? 1 : 10,
                       onTap: widget.onSelectModel,
                     ),
                     const SizedBox(width: AppSpacing.xs),
@@ -386,6 +387,7 @@ class _CircleIconButton extends StatelessWidget {
     this.tooltip,
     this.active = false,
     this.child,
+    this.padding,
   });
 
   final IconData icon;
@@ -393,6 +395,7 @@ class _CircleIconButton extends StatelessWidget {
   final String? tooltip;
   final bool active;
   final Widget? child;
+  final double? padding;
 
   @override
   Widget build(BuildContext context) {
@@ -408,7 +411,7 @@ class _CircleIconButton extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(10),
+          padding: EdgeInsets.all(padding ?? 10),
           child: child ?? Icon(icon, size: 22, color: fgColor),
         ),
       ),
