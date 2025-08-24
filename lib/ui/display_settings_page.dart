@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../icons/lucide_adapter.dart';
+import 'package:syncfusion_flutter_sliders/sliders.dart';
+import 'package:syncfusion_flutter_core/theme.dart';
 import '../providers/settings_provider.dart';
 
 class DisplaySettingsPage extends StatefulWidget {
@@ -130,22 +132,63 @@ class _DisplaySettingsPageState extends State<DisplaySettingsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Text('80%', style: TextStyle(color: cs.onSurface.withOpacity(0.7), fontSize: 12)),
-                        Expanded(
-                          child: Slider(
-                            value: context.watch<SettingsProvider>().chatFontScale,
-                            min: 0.8,
-                            max: 1.5,
-                            divisions: 14,
-                            label: '${(context.watch<SettingsProvider>().chatFontScale * 100).round()}%',
-                            onChanged: (v) => context.read<SettingsProvider>().setChatFontScale(v),
+                    Builder(builder: (context) {
+                      final theme = Theme.of(context);
+                      final cs = theme.colorScheme;
+                      final isDark = theme.brightness == Brightness.dark;
+                      final scale = context.watch<SettingsProvider>().chatFontScale;
+                      return Row(
+                        children: [
+                          Text('80%', style: TextStyle(color: cs.onSurface.withOpacity(0.7), fontSize: 12)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: SfSliderTheme(
+                              data: SfSliderThemeData(
+                                activeTrackHeight: 8,
+                                inactiveTrackHeight: 8,
+                                overlayRadius: 14,
+                                activeTrackColor: cs.primary,
+                                inactiveTrackColor: cs.onSurface.withOpacity(isDark ? 0.25 : 0.20),
+                                tooltipBackgroundColor: cs.primary,
+                                tooltipTextStyle: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w600),
+                                activeTickColor: cs.onSurface.withOpacity(isDark ? 0.45 : 0.35),
+                                inactiveTickColor: cs.onSurface.withOpacity(isDark ? 0.30 : 0.25),
+                                activeMinorTickColor: cs.onSurface.withOpacity(isDark ? 0.34 : 0.28),
+                                inactiveMinorTickColor: cs.onSurface.withOpacity(isDark ? 0.24 : 0.20),
+                              ),
+                              child: SfSlider(
+                                value: scale,
+                                min: 0.8,
+                                max: 1.5,
+                                stepSize: 0.05,
+                                showTicks: true,
+                                showLabels: true,
+                                interval: 0.1,
+                                minorTicksPerInterval: 1,
+                                enableTooltip: true,
+                                shouldAlwaysShowTooltip: false,
+                                tooltipShape: const SfPaddleTooltipShape(),
+                                labelFormatterCallback: (value, text) => (value as double).toStringAsFixed(1),
+                                thumbIcon: Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    color: cs.primary,
+                                    shape: BoxShape.circle,
+                                    boxShadow: isDark ? [] : [
+                                      BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: Offset(0, 2)),
+                                    ],
+                                  ),
+                                ),
+                                onChanged: (v) => context.read<SettingsProvider>().setChatFontScale((v as double).clamp(0.8, 1.5)),
+                              ),
+                            ),
                           ),
-                        ),
-                        Text('${(context.watch<SettingsProvider>().chatFontScale * 100).round()}%', style: TextStyle(color: cs.onSurface, fontSize: 12)),
-                      ],
-                    ),
+                          const SizedBox(width: 8),
+                          Text('${(scale * 100).round()}%', style: TextStyle(color: cs.onSurface, fontSize: 12)),
+                        ],
+                      );
+                    }),
                     const SizedBox(height: 8),
                     Container(
                       width: double.infinity,
