@@ -1486,13 +1486,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       return ListView.builder(
                         controller: _scrollController,
                         padding: const EdgeInsets.only(bottom: 16, top: 8),
-                      itemCount: messages.length,
-                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                      itemBuilder: (context, index) {
-                        if (index < 0 || index >= messages.length) {
-                          return const SizedBox.shrink();
-                        }
-                        final message = messages[index];
+                        itemCount: messages.length,
+                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                        itemBuilder: (context, index) {
+                          if (index < 0 || index >= messages.length) {
+                            return const SizedBox.shrink();
+                          }
+                          final message = messages[index];
                           final r = _reasoning[message.id];
                           final t = _translations[message.id];
                           final chatScale = context.watch<SettingsProvider>().chatFontScale;
@@ -1520,33 +1520,33 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               reasoningFinishedAt: (message.role == 'assistant') ? r?.finishedAt : null,
                               onToggleReasoning: (message.role == 'assistant' && r != null)
                                   ? () {
-                                      setState(() {
-                                        r.expanded = !r.expanded;
-                                      });
-                                    }
+                                setState(() {
+                                  r.expanded = !r.expanded;
+                                });
+                              }
                                   : null,
                               translationExpanded: t?.expanded ?? true,
                               onToggleTranslation: (message.translation != null && message.translation!.isNotEmpty && t != null)
                                   ? () {
-                                      setState(() {
-                                        t.expanded = !t.expanded;
-                                      });
-                                    }
+                                setState(() {
+                                  t.expanded = !t.expanded;
+                                });
+                              }
                                   : null,
                               onRegenerate: message.role == 'assistant'
                                   ? () {
-                                      // TODO: Implement regenerate
-                                    }
+                                // TODO: Implement regenerate
+                              }
                                   : null,
                               onResend: message.role == 'user'
                                   ? () {
-                                      _sendMessage(_parseInputFromRaw(message.content));
-                                    }
+                                _sendMessage(_parseInputFromRaw(message.content));
+                              }
                                   : null,
                               onTranslate: message.role == 'assistant'
                                   ? () {
-                                      _translateMessage(message);
-                                    }
+                                _translateMessage(message);
+                              }
                                   : null,
                               onMore: () async {
                                 final action = await showMessageMoreSheet(context, message);
@@ -1586,30 +1586,30 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               toolParts: message.role == 'assistant' ? _toolParts[message.id] : null,
                               reasoningSegments: message.role == 'assistant'
                                   ? (() {
-                                      final segments = _reasoningSegments[message.id];
-                                      if (segments == null || segments.isEmpty) return null;
-                                      return segments
-                                          .map((s) => ReasoningSegment(
-                                                text: s.text,
-                                                expanded: s.expanded,
-                                                loading: s.finishedAt == null && s.text.isNotEmpty,
-                                                startAt: s.startAt,
-                                                finishedAt: s.finishedAt,
-                                                onToggle: () {
-                                                  setState(() {
-                                                    s.expanded = !s.expanded;
-                                                  });
-                                                },
-                                                toolStartIndex: s.toolStartIndex,
-                                              ))
-                                          .toList();
-                                    })()
+                                final segments = _reasoningSegments[message.id];
+                                if (segments == null || segments.isEmpty) return null;
+                                return segments
+                                    .map((s) => ReasoningSegment(
+                                  text: s.text,
+                                  expanded: s.expanded,
+                                  loading: s.finishedAt == null && s.text.isNotEmpty,
+                                  startAt: s.startAt,
+                                  finishedAt: s.finishedAt,
+                                  onToggle: () {
+                                    setState(() {
+                                      s.expanded = !s.expanded;
+                                    });
+                                  },
+                                  toolStartIndex: s.toolStartIndex,
+                                ))
+                                    .toList();
+                              })()
                                   : null,
                             ),
                           );
-                      },
-                    );
-                  })(),
+                        },
+                      );
+                    })(),
                   ),
                 ),
               ),
