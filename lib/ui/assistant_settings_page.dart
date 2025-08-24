@@ -31,7 +31,9 @@ class AssistantSettingsPage extends StatelessWidget {
           IconButton(
             icon: Icon(Lucide.Plus, size: 22, color: cs.onSurface),
             onPressed: () async {
-              final id = await context.read<AssistantProvider>().addAssistant();
+              final name = await _showAddAssistantSheet(context);
+              if (name == null) return;
+              final id = await context.read<AssistantProvider>().addAssistant(name: name.trim());
               if (!context.mounted) return;
               await Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => AssistantSettingsEditPage(assistantId: id)),
@@ -127,7 +129,12 @@ class _AssistantCard extends StatelessWidget {
                     const Spacer(),
                     TextButton.icon(
                       onPressed: item.deletable
-                          ? () => context.read<AssistantProvider>().deleteAssistant(item.id)
+                          ? () async {
+                              final ok = await _confirmDelete(context, zh);
+                              if (ok == true) {
+                                await context.read<AssistantProvider>().deleteAssistant(item.id);
+                              }
+                            }
                           : null,
                       style: TextButton.styleFrom(foregroundColor: cs.error),
                       icon: Icon(Lucide.Trash2, size: 16),
@@ -147,7 +154,7 @@ class _AssistantCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      icon: const Icon(Lucide.Edit, size: 16),
+                      icon: const Icon(Lucide.Pencil, size: 16),
                       label: Text(zh ? '编辑' : 'Edit'),
                     ),
                   ],
@@ -166,6 +173,106 @@ class _AssistantCard extends StatelessWidget {
     final first = String.fromCharCode(trimmed.runes.first);
     return first.toUpperCase();
   }
+}
+
+Future<String?> _showAddAssistantSheet(BuildContext context) async {
+  final zh = Localizations.localeOf(context).languageCode == 'zh';
+  final controller = TextEditingController();
+  String? result;
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Theme.of(context).colorScheme.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (ctx) {
+      final cs = Theme.of(ctx).colorScheme;
+      final viewInsets = MediaQuery.of(ctx).viewInsets;
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: viewInsets.bottom),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(zh ? '助手名称' : 'Assistant Name', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: zh ? '输入助手名称' : 'Enter a name',
+                    filled: true,
+                    fillColor: Theme.of(ctx).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF2F3F5),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.transparent),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.transparent),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: cs.primary.withOpacity(0.45)),
+                    ),
+                  ),
+                  onSubmitted: (_) => Navigator.of(ctx).pop(controller.text.trim()),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: Text(zh ? '取消' : 'Cancel'),
+                    ),
+                    const Spacer(),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: cs.primary,
+                        foregroundColor: cs.onPrimary,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: Text(zh ? '保存' : 'Save'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  ).then((val) => result = val as String?);
+  final trimmed = (result ?? '').trim();
+  if (trimmed.isEmpty) return null;
+  return trimmed;
+}
+
+Future<bool?> _confirmDelete(BuildContext context, bool zh) async {
+  return showDialog<bool>(
+    context: context,
+    builder: (ctx) {
+      final cs = Theme.of(ctx).colorScheme;
+      return AlertDialog(
+        title: Text(zh ? '删除助手' : 'Delete Assistant'),
+        content: Text(zh ? '确定要删除该助手吗？此操作不可撤销。' : 'Are you sure you want to delete this assistant? This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(zh ? '取消' : 'Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(zh ? '删除' : 'Delete', style: TextStyle(color: cs.error)),
+          ),
+        ],
+      );
+    },
+  );
 }
 
 class _AssistantAvatar extends StatelessWidget {
