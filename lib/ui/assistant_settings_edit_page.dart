@@ -275,7 +275,7 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
         // Temperature
         card(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            titleDesc('Temperature', zh ? '控制输出的随机性，范围 0–2（默认 1）' : 'Controls randomness, range 0–2 (default 1)'),
+            titleDesc('Temperature', zh ? '控制输出的随机性，范围 0–2' : 'Controls randomness, range 0–2'),
             _SliderTileNew(
               value: a.temperature.clamp(0.0, 2.0),
               min: 0.0,
