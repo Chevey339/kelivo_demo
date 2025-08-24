@@ -743,12 +743,12 @@ class _SideDrawerState extends State<SideDrawer> {
                     if ((a.chatModelProvider ?? '').isNotEmpty && (a.chatModelId ?? '').isNotEmpty) {
                       await settings.setCurrentModel(a.chatModelProvider!, a.chatModelId!);
                     }
-                    // Start a new conversation for this assistant
-                    final chat = context.read<ChatService>();
-                    await chat.createDraftConversation(title: zh ? '新对话' : 'New Chat', assistantId: a.id);
+                    // Close the picker sheet
                     if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
-                    final msg = zh ? '已切换到助手：${a.name}' : 'Switched to ${a.name}';
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+                    // Trigger host's new-chat flow instead of creating here
+                    widget.onNewConversation?.call();
+                    // Close the drawer without extra snackbars
+                    Navigator.of(context).maybePop();
                   },
                   onLongPress: () {
                     // Long press opens settings quickly
