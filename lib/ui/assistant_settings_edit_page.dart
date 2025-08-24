@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:syncfusion_flutter_sliders/sliders.dart';
+import 'package:syncfusion_flutter_core/theme.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -253,8 +255,7 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
         ),
 
         // Chat model card (styled like DefaultModelPage)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        card(
           child: _AssistantModelCard(
             title: zh ? '聊天模型' : 'Chat Model',
             subtitle: zh ? '为该助手设置默认聊天模型（未设置时使用全局默认）' : 'Default chat model for this assistant (fallback to global)',
@@ -274,16 +275,15 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
         // Temperature
         card(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            titleDesc('Temperature', zh ? '控制输出的随机性，建议保持在 0.6（平衡）' : 'Controls randomness; 0.6 is balanced'),
+            titleDesc('Temperature', zh ? '控制输出的随机性，范围 0–2（默认 1）' : 'Controls randomness, range 0–2 (default 1)'),
             _SliderTileNew(
-              value: a.temperature.clamp(0.0, 1.0),
+              value: a.temperature.clamp(0.0, 2.0),
               min: 0.0,
-              max: 1.0,
+              max: 2.0,
               divisions: 20,
               label: a.temperature.toStringAsFixed(2),
               onChanged: (v) => context.read<AssistantProvider>().updateAssistant(a.copyWith(temperature: v)),
             ),
-            Text(zh ? '平衡' : 'Balanced', style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7))),
           ]),
         ),
 
@@ -310,7 +310,7 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
               value: a.contextMessageSize.toDouble().clamp(0, 256),
               min: 0,
               max: 256,
-              divisions: 256,
+              divisions: 64, // step=4: every 4 messages per tick
               label: a.contextMessageSize.toString(),
               onChanged: (v) => context.read<AssistantProvider>().updateAssistant(a.copyWith(contextMessageSize: v.round())),
             ),
@@ -518,34 +518,129 @@ class _SliderTileNew extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final active = cs.primary;
+    final inactive = cs.onSurface.withOpacity(isDark ? 0.25 : 0.20);
+    final double clamped = value.clamp(min, max);
+    final double? step = (divisions != null && divisions! > 0) ? (max - min) / divisions! : null;
+    // Compute a readable major interval and minor tick count
+    final total = (max - min).abs();
+    double interval;
+    if (total <= 0) {
+      interval = 1;
+    } else if ((divisions ?? 0) <= 20) {
+      interval = total / 4; // up to 5 major ticks inc endpoints
+    } else if ((divisions ?? 0) <= 50) {
+      interval = total / 5;
+    } else {
+      interval = total / 8;
+    }
+    if (interval <= 0) interval = 1;
+    final int majorCount = (total / interval).round().clamp(1, 10);
+    int minor = 0;
+    if (step != null && step > 0) {
+      // Ensure minor ticks align with the chosen step size
+      minor = ((interval / step) - 1).round();
+      if (minor < 0) minor = 0;
+      if (minor > 8) minor = 8;
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Expanded(
-              child: Slider(
-                value: value.clamp(min, max),
-                min: min,
-                max: max,
-                divisions: divisions,
-                label: label,
-                onChanged: onChanged,
+              child: SfSliderTheme(
+                data: SfSliderThemeData(
+                  activeTrackHeight: 8,
+                  inactiveTrackHeight: 8,
+                  overlayRadius: 14,
+                  activeTrackColor: active,
+                  inactiveTrackColor: inactive,
+                  // Waterdrop tooltip uses theme primary background with onPrimary text
+                  tooltipBackgroundColor: cs.primary,
+                  tooltipTextStyle: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w600),
+                  thumbStrokeColor: Colors.transparent,
+                  thumbStrokeWidth: 0,
+                  activeTickColor: cs.onSurface.withOpacity(isDark ? 0.45 : 0.35),
+                  inactiveTickColor: cs.onSurface.withOpacity(isDark ? 0.30 : 0.25),
+                  activeMinorTickColor: cs.onSurface.withOpacity(isDark ? 0.34 : 0.28),
+                  inactiveMinorTickColor: cs.onSurface.withOpacity(isDark ? 0.24 : 0.20),
+                ),
+                child: SfSlider(
+                  value: clamped,
+                  min: min,
+                  max: max,
+                  stepSize: step,
+                  enableTooltip: true,
+                  // Show the paddle tooltip only while interacting
+                  shouldAlwaysShowTooltip: false,
+                  showTicks: true,
+                  showLabels: true,
+                  interval: interval,
+                  minorTicksPerInterval: minor,
+                  activeColor: active,
+                  inactiveColor: inactive,
+                  tooltipTextFormatterCallback: (actual, text) => label,
+                  tooltipShape: const SfPaddleTooltipShape(),
+                  labelFormatterCallback: (actual, formattedText) {
+                    // Prefer integers for wide ranges, keep 2 decimals for 0..1
+                    if (total <= 2.0) return actual.toStringAsFixed(2);
+                    if (actual == actual.roundToDouble()) return actual.toStringAsFixed(0);
+                    return actual.toStringAsFixed(1);
+                  },
+                  thumbIcon: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: cs.primary,
+                      shape: BoxShape.circle,
+                      boxShadow: isDark
+                          ? []
+                          : [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.08),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              )
+                            ],
+                    ),
+                  ),
+                  onChanged: (v) => onChanged(v is num ? v.toDouble() : (v as double)),
+                ),
               ),
             ),
             const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: cs.primary.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(label, style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600, fontSize: 12)),
-            ),
+            _ValuePill(text: label),
           ],
         ),
+        // Remove explicit min/max captions since ticks already indicate range
       ],
+    );
+  }
+}
+
+class _ValuePill extends StatelessWidget {
+  const _ValuePill({required this.text});
+  final String text;
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : cs.primary.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: cs.primary.withOpacity(isDark ? 0.28 : 0.22)),
+        boxShadow: isDark ? [] : AppShadows.soft,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: Text(text, style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: 12)),
+      ),
     );
   }
 }
@@ -1447,61 +1542,47 @@ class _AssistantModelCard extends StatelessWidget {
         display = modelId ?? '';
       }
     }
-    return Material(
-      color: cs.surface,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: cs.outlineVariant.withOpacity(0.4)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Text(subtitle, style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7))),
+        const SizedBox(height: 10),
+        Material(
+          color: isDark ? Colors.white10 : cs.surface,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onPick,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white10 : cs.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: cs.outlineVariant.withOpacity(0.25)),
+                boxShadow: isDark ? [] : AppShadows.soft,
+              ),
+              child: Row(
                 children: [
-                  const SizedBox(width: 4),
-                  Expanded(child: SizedBox()),
-                  // Clear button removed as requested
+                  _BrandAvatarLike(name: (modelId ?? display), size: 24),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      display,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(Lucide.ChevronRight, size: 18, color: cs.onSurface.withOpacity(0.5)),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 4),
-              Text(subtitle, style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7))),
-              const SizedBox(height: 10),
-              InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: onPick,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      _BrandAvatarLike(name: (modelId ?? display), size: 24),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          display,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 }
