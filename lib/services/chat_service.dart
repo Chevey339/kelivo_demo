@@ -281,6 +281,7 @@ class ChatService extends ChangeNotifier {
       messageIds: ids,
       isPinned: conversation.isPinned,
       mcpServerIds: List.of(conversation.mcpServerIds),
+      truncateIndex: conversation.truncateIndex,
     );
     await _conversationsBox.put(restored.id, restored);
 
@@ -514,6 +515,32 @@ class ChatService extends ChangeNotifier {
     }
     await _toolEventsBox.put(assistantMessageId, list);
     notifyListeners();
+  }
+
+  Future<Conversation?> toggleTruncateAtTail(String conversationId, {String? defaultTitle}) async {
+    if (!_initialized) await init();
+    // Draft case
+    if (_draftConversations.containsKey(conversationId)) {
+      final draft = _draftConversations[conversationId]!;
+      final lastIndexPlusOne = draft.messageIds.length; // last index + 1
+      final newValue = (draft.truncateIndex == lastIndexPlusOne) ? -1 : lastIndexPlusOne;
+      draft.truncateIndex = newValue;
+      if ((defaultTitle ?? '').isNotEmpty) draft.title = defaultTitle!;
+      draft.updatedAt = DateTime.now();
+      notifyListeners();
+      return draft;
+    }
+    // Persisted case
+    final c = _conversationsBox.get(conversationId);
+    if (c == null) return null;
+    final lastIndexPlusOne = c.messageIds.length;
+    final newValue = (c.truncateIndex == lastIndexPlusOne) ? -1 : lastIndexPlusOne;
+    c.truncateIndex = newValue;
+    if ((defaultTitle ?? '').isNotEmpty) c.title = defaultTitle!;
+    c.updatedAt = DateTime.now();
+    await c.save();
+    notifyListeners();
+    return c;
   }
 
   Future<void> deleteMessage(String messageId) async {

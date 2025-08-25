@@ -3,12 +3,13 @@ import 'package:flutter/services.dart';
 import '../icons/lucide_adapter.dart';
 
 class BottomToolsSheet extends StatelessWidget {
-  const BottomToolsSheet({super.key, this.onCamera, this.onPhotos, this.onUpload, this.onClear});
+  const BottomToolsSheet({super.key, this.onCamera, this.onPhotos, this.onUpload, this.onClear, this.clearLabel});
 
   final VoidCallback? onCamera;
   final VoidCallback? onPhotos;
   final VoidCallback? onUpload;
   final VoidCallback? onClear;
+  final String? clearLabel;
 
   String _t(BuildContext context, String zh, String en) {
     return Localizations.localeOf(context).languageCode == 'zh' ? zh : en;
@@ -112,10 +113,7 @@ class BottomToolsSheet extends StatelessWidget {
                   onClear?.call();
                 },
                 child: Center(
-                  child: Text(
-                    _t(context, '清空上下文', 'Clear Context'),
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-                  ),
+                  child: Text(clearLabel ?? _t(context, '清空上下文', 'Clear Context'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
                 ),
               ),
             ),

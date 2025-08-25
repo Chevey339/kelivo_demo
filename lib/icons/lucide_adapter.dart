@@ -76,4 +76,5 @@ class Lucide {
   static const IconData Code = lucide.LucideIcons.code;
   static const IconData Hash = lucide.LucideIcons.hash;
   static const IconData Link = lucide.LucideIcons.link;
+  static const IconData Eraser = lucide.LucideIcons.eraser;
 }

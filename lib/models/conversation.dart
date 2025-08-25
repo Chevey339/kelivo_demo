@@ -31,6 +31,10 @@ class Conversation extends HiveObject {
   @HiveField(7)
   String? assistantId;
 
+  // Truncate context starting at this index (-1 means no truncation)
+  @HiveField(8)
+  int truncateIndex;
+
   Conversation({
     String? id,
     required this.title,
@@ -40,12 +44,14 @@ class Conversation extends HiveObject {
     this.isPinned = false,
     List<String>? mcpServerIds,
     String? assistantId,
+    int? truncateIndex,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
         messageIds = messageIds ?? [],
         mcpServerIds = mcpServerIds ?? [],
-        assistantId = assistantId;
+        assistantId = assistantId,
+        truncateIndex = truncateIndex ?? -1;
 
   Conversation copyWith({
     String? id,
@@ -56,6 +62,7 @@ class Conversation extends HiveObject {
     bool? isPinned,
     List<String>? mcpServerIds,
     String? assistantId,
+    int? truncateIndex,
   }) {
     return Conversation(
       id: id ?? this.id,
@@ -66,6 +73,7 @@ class Conversation extends HiveObject {
       isPinned: isPinned ?? this.isPinned,
       mcpServerIds: mcpServerIds ?? this.mcpServerIds,
       assistantId: assistantId ?? this.assistantId,
+      truncateIndex: truncateIndex ?? this.truncateIndex,
     );
   }
 
@@ -79,6 +87,7 @@ class Conversation extends HiveObject {
       'isPinned': isPinned,
       'mcpServerIds': mcpServerIds,
       'assistantId': assistantId,
+      'truncateIndex': truncateIndex,
     };
   }
 
@@ -92,6 +101,7 @@ class Conversation extends HiveObject {
       isPinned: json['isPinned'] as bool? ?? false,
       mcpServerIds: (json['mcpServerIds'] as List?)?.cast<String>() ?? const <String>[],
       assistantId: json['assistantId'] as String?,
+      truncateIndex: json['truncateIndex'] as int? ?? -1,
     );
   }
 }

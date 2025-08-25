@@ -190,7 +190,38 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   String _titleForLocale(BuildContext context) {
     final lang = Localizations.localeOf(context).languageCode;
-    return lang == 'zh' ? '新聊天' : 'New Chat';
+    return lang == 'zh' ? '新对话' : 'New Chat';
+  }
+
+  String _clearContextLabel() {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final assistant = context.read<AssistantProvider>().currentAssistant;
+    final configured = assistant?.contextMessageSize ?? 0;
+    final t = _currentConversation?.truncateIndex ?? -1;
+    int remaining = 0;
+    for (int i = 0; i < _messages.length; i++) {
+      if (i >= (t < 0 ? 0 : t)) {
+        if (_messages[i].content.trim().isNotEmpty) remaining++;
+      }
+    }
+    if (configured > 0) {
+      final actual = remaining > configured ? configured : remaining;
+      return zh ? '清空上下文 ($actual/$configured)' : 'Clear Context ($actual/$configured)';
+    }
+    return zh ? '清空上下文' : 'Clear Context';
+  }
+
+  Future<void> _onClearContext() async {
+    final convo = _currentConversation;
+    if (convo == null) return;
+    final updated = await _chatService.toggleTruncateAtTail(convo.id, defaultTitle: _titleForLocale(context));
+    if (!mounted) return;
+    if (updated != null) {
+      setState(() {
+        _currentConversation = updated;
+      });
+    }
+    if (_toolsOpen) _toggleTools();
   }
 
   void _toggleTools() {
@@ -500,13 +531,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     });
 
     // Prepare messages for API
-    // Prepare messages for API, but transform the last user message to include document content
-    final apiMessages = _messages
+    // Apply truncateIndex on the conversation first, then transform the last user message to include document content
+    final tIndex = _currentConversation?.truncateIndex ?? -1;
+    final List<ChatMessage> source = (tIndex >= 0 && tIndex <= _messages.length)
+        ? _messages.sublist(tIndex)
+        : List.of(_messages);
+    final apiMessages = source
         .where((m) => m.content.isNotEmpty)
         .map((m) => {
-      'role': m.role == 'assistant' ? 'assistant' : 'user',
-      'content': m.content,
-    })
+              'role': m.role == 'assistant' ? 'assistant' : 'user',
+              'content': m.content,
+            })
         .toList();
 
     // Build document prompts and clean markers in last user message
@@ -1128,7 +1163,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
     // Build content from messages (truncate to reasonable length)
     final msgs = _chatService.getMessages(convo.id);
-    final joined = msgs
+    final tIndex = convo.truncateIndex;
+    final List<ChatMessage> source = (tIndex >= 0 && tIndex <= msgs.length) ? msgs.sublist(tIndex) : msgs;
+    final joined = source
         .where((m) => m.content.isNotEmpty)
         .map((m) => '${m.role == 'assistant' ? 'Assistant' : 'User'}: ${m.content}')
         .join('\n\n');
@@ -1498,114 +1535,139 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           final chatScale = context.watch<SettingsProvider>().chatFontScale;
                           final assistant = context.watch<AssistantProvider>().currentAssistant;
                           final useAssist = assistant?.useAssistantAvatar == true;
-                          return MediaQuery(
-                            data: MediaQuery.of(context).copyWith(
-                              textScaleFactor: MediaQuery.of(context).textScaleFactor * chatScale,
-                            ),
-                            child: ChatMessageWidget(
-                              message: message,
-                              modelIcon: (!useAssist && message.role == 'assistant' && message.providerId != null && message.modelId != null)
-                                  ? _CurrentModelIcon(providerKey: message.providerId, modelId: message.modelId)
-                                  : null,
-                              showModelIcon: useAssist ? false : context.watch<SettingsProvider>().showModelIcon,
-                              useAssistantAvatar: useAssist && message.role == 'assistant',
-                              assistantName: useAssist ? (assistant?.name ?? 'Assistant') : null,
-                              assistantAvatar: useAssist ? (assistant?.avatar ?? '') : null,
-                              showUserAvatar: context.watch<SettingsProvider>().showUserAvatar,
-                              showTokenStats: context.watch<SettingsProvider>().showTokenStats,
-                              reasoningText: (message.role == 'assistant') ? (r?.text ?? '') : null,
-                              reasoningExpanded: (message.role == 'assistant') ? (r?.expanded ?? false) : false,
-                              reasoningLoading: (message.role == 'assistant') ? (r?.finishedAt == null && (r?.text.isNotEmpty == true)) : false,
-                              reasoningStartAt: (message.role == 'assistant') ? r?.startAt : null,
-                              reasoningFinishedAt: (message.role == 'assistant') ? r?.finishedAt : null,
-                              onToggleReasoning: (message.role == 'assistant' && r != null)
-                                  ? () {
-                                setState(() {
-                                  r.expanded = !r.expanded;
-                                });
-                              }
-                                  : null,
-                              translationExpanded: t?.expanded ?? true,
-                              onToggleTranslation: (message.translation != null && message.translation!.isNotEmpty && t != null)
-                                  ? () {
-                                setState(() {
-                                  t.expanded = !t.expanded;
-                                });
-                              }
-                                  : null,
-                              onRegenerate: message.role == 'assistant'
-                                  ? () {
-                                // TODO: Implement regenerate
-                              }
-                                  : null,
-                              onResend: message.role == 'user'
-                                  ? () {
-                                _sendMessage(_parseInputFromRaw(message.content));
-                              }
-                                  : null,
-                              onTranslate: message.role == 'assistant'
-                                  ? () {
-                                _translateMessage(message);
-                              }
-                                  : null,
-                              onMore: () async {
-                                final action = await showMessageMoreSheet(context, message);
-                                if (!mounted) return;
-                                if (action == MessageMoreAction.delete) {
-                                  final zh = Localizations.localeOf(context).languageCode == 'zh';
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      title: Text(zh ? '删除消息' : 'Delete Message'),
-                                      content: Text(zh ? '确定要删除这条消息吗？此操作不可撤销。' : 'Are you sure you want to delete this message? This cannot be undone.'),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.of(ctx).pop(false),
-                                          child: Text(zh ? '取消' : 'Cancel'),
+                          final trunc = _currentConversation?.truncateIndex ?? -1;
+                          final zh = Localizations.localeOf(context).languageCode == 'zh';
+                          final showDivider = trunc > 0 && index == trunc - 1;
+                          final cs = Theme.of(context).colorScheme;
+                          final label = zh ? '清空上下文' : 'Clear Context';
+                          final divider = Row(
+                            children: [
+                              Expanded(child: Divider(color: cs.outlineVariant.withOpacity(0.6), height: 1, thickness: 1)),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                child: Text(label, style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.6))),
+                              ),
+                              Expanded(child: Divider(color: cs.outlineVariant.withOpacity(0.6), height: 1, thickness: 1)),
+                            ],
+                          );
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              MediaQuery(
+                                data: MediaQuery.of(context).copyWith(
+                                  textScaleFactor: MediaQuery.of(context).textScaleFactor * chatScale,
+                                ),
+                                child: ChatMessageWidget(
+                                  message: message,
+                                  modelIcon: (!useAssist && message.role == 'assistant' && message.providerId != null && message.modelId != null)
+                                      ? _CurrentModelIcon(providerKey: message.providerId, modelId: message.modelId)
+                                      : null,
+                                  showModelIcon: useAssist ? false : context.watch<SettingsProvider>().showModelIcon,
+                                  useAssistantAvatar: useAssist && message.role == 'assistant',
+                                  assistantName: useAssist ? (assistant?.name ?? 'Assistant') : null,
+                                  assistantAvatar: useAssist ? (assistant?.avatar ?? '') : null,
+                                  showUserAvatar: context.watch<SettingsProvider>().showUserAvatar,
+                                  showTokenStats: context.watch<SettingsProvider>().showTokenStats,
+                                  reasoningText: (message.role == 'assistant') ? (r?.text ?? '') : null,
+                                  reasoningExpanded: (message.role == 'assistant') ? (r?.expanded ?? false) : false,
+                                  reasoningLoading: (message.role == 'assistant') ? (r?.finishedAt == null && (r?.text.isNotEmpty == true)) : false,
+                                  reasoningStartAt: (message.role == 'assistant') ? r?.startAt : null,
+                                  reasoningFinishedAt: (message.role == 'assistant') ? r?.finishedAt : null,
+                                  onToggleReasoning: (message.role == 'assistant' && r != null)
+                                      ? () {
+                                          setState(() {
+                                            r.expanded = !r.expanded;
+                                          });
+                                        }
+                                      : null,
+                                  translationExpanded: t?.expanded ?? true,
+                                  onToggleTranslation: (message.translation != null && message.translation!.isNotEmpty && t != null)
+                                      ? () {
+                                          setState(() {
+                                            t.expanded = !t.expanded;
+                                          });
+                                        }
+                                      : null,
+                                  onRegenerate: message.role == 'assistant'
+                                      ? () {
+                                          // TODO: Implement regenerate
+                                        }
+                                      : null,
+                                  onResend: message.role == 'user'
+                                      ? () {
+                                          _sendMessage(_parseInputFromRaw(message.content));
+                                        }
+                                      : null,
+                                  onTranslate: message.role == 'assistant'
+                                      ? () {
+                                          _translateMessage(message);
+                                        }
+                                      : null,
+                                  onMore: () async {
+                                    final action = await showMessageMoreSheet(context, message);
+                                    if (!mounted) return;
+                                    if (action == MessageMoreAction.delete) {
+                                      final zh = Localizations.localeOf(context).languageCode == 'zh';
+                                      final confirm = await showDialog<bool>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          title: Text(zh ? '删除消息' : 'Delete Message'),
+                                          content: Text(zh ? '确定要删除这条消息吗？此操作不可撤销。' : 'Are you sure you want to delete this message? This cannot be undone.'),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.of(ctx).pop(false),
+                                              child: Text(zh ? '取消' : 'Cancel'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () => Navigator.of(ctx).pop(true),
+                                              child: Text(zh ? '删除' : 'Delete', style: const TextStyle(color: Colors.red)),
+                                            ),
+                                          ],
                                         ),
-                                        TextButton(
-                                          onPressed: () => Navigator.of(ctx).pop(true),
-                                          child: Text(zh ? '删除' : 'Delete', style: const TextStyle(color: Colors.red)),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                  if (confirm == true) {
-                                    final id = message.id;
-                                    setState(() {
-                                      _messages.removeWhere((m) => m.id == id);
-                                      _reasoning.remove(id);
-                                      _translations.remove(id);
-                                      _toolParts.remove(id);
-                                      _reasoningSegments.remove(id);
-                                    });
-                                    await _chatService.deleteMessage(id);
-                                  }
-                                }
-                              },
-                              toolParts: message.role == 'assistant' ? _toolParts[message.id] : null,
-                              reasoningSegments: message.role == 'assistant'
-                                  ? (() {
-                                final segments = _reasoningSegments[message.id];
-                                if (segments == null || segments.isEmpty) return null;
-                                return segments
-                                    .map((s) => ReasoningSegment(
-                                  text: s.text,
-                                  expanded: s.expanded,
-                                  loading: s.finishedAt == null && s.text.isNotEmpty,
-                                  startAt: s.startAt,
-                                  finishedAt: s.finishedAt,
-                                  onToggle: () {
-                                    setState(() {
-                                      s.expanded = !s.expanded;
-                                    });
+                                      );
+                                      if (confirm == true) {
+                                        final id = message.id;
+                                        setState(() {
+                                          _messages.removeWhere((m) => m.id == id);
+                                          _reasoning.remove(id);
+                                          _translations.remove(id);
+                                          _toolParts.remove(id);
+                                          _reasoningSegments.remove(id);
+                                        });
+                                        await _chatService.deleteMessage(id);
+                                      }
+                                    }
                                   },
-                                  toolStartIndex: s.toolStartIndex,
-                                ))
-                                    .toList();
-                              })()
-                                  : null,
-                            ),
+                                  toolParts: message.role == 'assistant' ? _toolParts[message.id] : null,
+                                  reasoningSegments: message.role == 'assistant'
+                                      ? (() {
+                                          final segments = _reasoningSegments[message.id];
+                                          if (segments == null || segments.isEmpty) return null;
+                                          return segments
+                                              .map((s) => ReasoningSegment(
+                                                    text: s.text,
+                                                    expanded: s.expanded,
+                                                    loading: s.finishedAt == null && s.text.isNotEmpty,
+                                                    startAt: s.startAt,
+                                                    finishedAt: s.finishedAt,
+                                                    onToggle: () {
+                                                      setState(() {
+                                                        s.expanded = !s.expanded;
+                                                      });
+                                                    },
+                                                    toolStartIndex: s.toolStartIndex,
+                                                  ))
+                                              .toList();
+                                        })()
+                                      : null,
+                                ),
+                              ),
+                              if (showDivider)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: AppSpacing.md),
+                                  child: divider,
+                                ),
+                            ],
                           );
                         },
                       );
@@ -1709,6 +1771,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         onPhotos: _onPickPhotos,
                         onCamera: _onPickCamera,
                         onUpload: _onPickFiles,
+                        onClear: _onClearContext,
+                        clearLabel: _clearContextLabel(),
                       ),
                     ),
                   ),
