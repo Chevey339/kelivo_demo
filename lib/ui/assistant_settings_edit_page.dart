@@ -275,30 +275,78 @@ class _BasicSettingsTabState extends State<_BasicSettingsTab> {
         // Temperature
         card(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            titleDesc('Temperature', zh ? '控制输出的随机性，范围 0–2' : 'Controls randomness, range 0–2'),
-            _SliderTileNew(
-              value: a.temperature.clamp(0.0, 2.0),
-              min: 0.0,
-              max: 2.0,
-              divisions: 20,
-              label: a.temperature.toStringAsFixed(2),
-              onChanged: (v) => context.read<AssistantProvider>().updateAssistant(a.copyWith(temperature: v)),
+            Row(
+              children: [
+                Expanded(child: titleDesc('Temperature', zh ? '控制输出的随机性，范围 0–2' : 'Controls randomness, range 0–2')),
+                Switch(
+                  value: a.temperature != null,
+                  onChanged: (v) async {
+                    if (v) {
+                      await context.read<AssistantProvider>().updateAssistant(a.copyWith(temperature: (a.temperature ?? 0.6)));
+                    } else {
+                      await context.read<AssistantProvider>().updateAssistant(a.copyWith(clearTemperature: true));
+                    }
+                  },
+                ),
+              ],
             ),
+            if (a.temperature != null) ...[
+              _SliderTileNew(
+                value: a.temperature!.clamp(0.0, 2.0),
+                min: 0.0,
+                max: 2.0,
+                divisions: 20,
+                label: a.temperature!.toStringAsFixed(2),
+                onChanged: (v) => context.read<AssistantProvider>().updateAssistant(a.copyWith(temperature: v)),
+              ),
+            ] else ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+                child: Text(
+                  zh ? '已关闭（使用服务商默认）' : 'Disabled (uses provider default)',
+                  style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7)),
+                ),
+              ),
+            ],
           ]),
         ),
 
         // Top P
         card(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            titleDesc('Top P', zh ? '请不要修改此值，除非你知道自己在做什么' : 'Do not change unless you know what you are doing'),
-            _SliderTileNew(
-              value: a.topP.clamp(0.0, 1.0),
-              min: 0.0,
-              max: 1.0,
-              divisions: 20,
-              label: a.topP.toStringAsFixed(2),
-              onChanged: (v) => context.read<AssistantProvider>().updateAssistant(a.copyWith(topP: v)),
+            Row(
+              children: [
+                Expanded(child: titleDesc('Top P', zh ? '请不要修改此值，除非你知道自己在做什么' : 'Do not change unless you know what you are doing')),
+                Switch(
+                  value: a.topP != null,
+                  onChanged: (v) async {
+                    if (v) {
+                      await context.read<AssistantProvider>().updateAssistant(a.copyWith(topP: (a.topP ?? 1.0)));
+                    } else {
+                      await context.read<AssistantProvider>().updateAssistant(a.copyWith(clearTopP: true));
+                    }
+                  },
+                ),
+              ],
             ),
+            if (a.topP != null) ...[
+              _SliderTileNew(
+                value: a.topP!.clamp(0.0, 1.0),
+                min: 0.0,
+                max: 1.0,
+                divisions: 20,
+                label: a.topP!.toStringAsFixed(2),
+                onChanged: (v) => context.read<AssistantProvider>().updateAssistant(a.copyWith(topP: v)),
+              ),
+            ] else ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+                child: Text(
+                  zh ? '已关闭（使用服务商默认）' : 'Disabled (uses provider default)',
+                  style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7)),
+                ),
+              ),
+            ],
           ]),
         ),
 

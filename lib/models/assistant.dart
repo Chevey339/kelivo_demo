@@ -7,8 +7,8 @@ class Assistant {
   final bool useAssistantAvatar; // replace model icon in chat with assistant avatar
   final String? chatModelProvider; // null -> use global default
   final String? chatModelId; // null -> use global default
-  final double temperature; // 0.0 - 2.0
-  final double topP; // 0.0 - 1.0
+  final double? temperature; // null to disable; else 0.0 - 2.0
+  final double? topP; // null to disable; else 0.0 - 1.0
   final int contextMessageSize; // number of previous messages to include
   final bool streamOutput; // streaming responses
   final int? thinkingBudget; // null = use global/default; 0=off; >0 tokens budget
@@ -26,8 +26,8 @@ class Assistant {
     this.useAssistantAvatar = false,
     this.chatModelProvider,
     this.chatModelId,
-    this.temperature = 0.6,
-    this.topP = 1.0,
+    this.temperature,
+    this.topP,
     this.contextMessageSize = 64,
     this.streamOutput = true,
     this.thinkingBudget,
@@ -59,6 +59,8 @@ class Assistant {
     bool? deletable,
     bool clearChatModel = false,
     bool clearAvatar = false,
+    bool clearTemperature = false,
+    bool clearTopP = false,
     bool clearThinkingBudget = false,
     bool clearMaxTokens = false,
     bool clearBackground = false,
@@ -70,8 +72,8 @@ class Assistant {
       useAssistantAvatar: useAssistantAvatar ?? this.useAssistantAvatar,
       chatModelProvider: clearChatModel ? null : (chatModelProvider ?? this.chatModelProvider),
       chatModelId: clearChatModel ? null : (chatModelId ?? this.chatModelId),
-      temperature: temperature ?? this.temperature,
-      topP: topP ?? this.topP,
+      temperature: clearTemperature ? null : (temperature ?? this.temperature),
+      topP: clearTopP ? null : (topP ?? this.topP),
       contextMessageSize: contextMessageSize ?? this.contextMessageSize,
       streamOutput: streamOutput ?? this.streamOutput,
       thinkingBudget: clearThinkingBudget ? null : (thinkingBudget ?? this.thinkingBudget),
@@ -111,8 +113,8 @@ class Assistant {
         useAssistantAvatar: json['useAssistantAvatar'] as bool? ?? false,
         chatModelProvider: json['chatModelProvider'] as String?,
         chatModelId: json['chatModelId'] as String?,
-        temperature: (json['temperature'] as num?)?.toDouble() ?? 0.6,
-        topP: (json['topP'] as num?)?.toDouble() ?? 1.0,
+        temperature: (json['temperature'] as num?)?.toDouble(),
+        topP: (json['topP'] as num?)?.toDouble(),
         contextMessageSize: (json['contextMessageSize'] as num?)?.toInt() ?? 64,
         streamOutput: json['streamOutput'] as bool? ?? true,
         thinkingBudget: (json['thinkingBudget'] as num?)?.toInt(),
