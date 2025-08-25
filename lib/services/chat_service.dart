@@ -282,6 +282,8 @@ class ChatService extends ChangeNotifier {
       isPinned: conversation.isPinned,
       mcpServerIds: List.of(conversation.mcpServerIds),
       truncateIndex: conversation.truncateIndex,
+      assistantId: conversation.assistantId,
+      versionSelections: Map<String, int>.from(conversation.versionSelections),
     );
     await _conversationsBox.put(restored.id, restored);
 
@@ -519,6 +521,55 @@ class ChatService extends ChangeNotifier {
     }
     await _toolEventsBox.put(assistantMessageId, list);
     notifyListeners();
+  }
+
+  Future<Conversation> forkConversation({
+    required String title,
+    required String? assistantId,
+    required List<ChatMessage> sourceMessages,
+    Map<String, int>? versionSelections,
+  }) async {
+    if (!_initialized) await init();
+    // Create new conversation first
+    final convo = await createConversation(title: title, assistantId: assistantId);
+    final ids = <String>[];
+    for (final src in sourceMessages) {
+      final clone = ChatMessage(
+        role: src.role,
+        content: src.content,
+        timestamp: src.timestamp,
+        modelId: src.modelId,
+        providerId: src.providerId,
+        totalTokens: src.totalTokens,
+        conversationId: convo.id,
+        isStreaming: false,
+        reasoningText: src.reasoningText,
+        reasoningStartAt: src.reasoningStartAt,
+        reasoningFinishedAt: src.reasoningFinishedAt,
+        translation: src.translation,
+        reasoningSegmentsJson: src.reasoningSegmentsJson,
+        groupId: src.groupId,
+        version: src.version,
+      );
+      await _messagesBox.put(clone.id, clone);
+      ids.add(clone.id);
+    }
+    // Attach to conversation in storage
+    final c = _conversationsBox.get(convo.id);
+    if (c != null) {
+      c.messageIds
+        ..clear()
+        ..addAll(ids);
+      c.versionSelections = Map<String, int>.from(versionSelections ?? const <String, int>{});
+      c.updatedAt = DateTime.now();
+      await c.save();
+    }
+    // Cache
+    _messagesCache[convo.id] = [
+      for (final id in ids) _messagesBox.get(id)!
+    ];
+    notifyListeners();
+    return _conversationsBox.get(convo.id)!;
   }
 
   Future<ChatMessage?> appendMessageVersion({

@@ -2034,6 +2034,53 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                       }
                                     });
                                   }
+                                } else if (action == MessageMoreAction.fork) {
+                                  // Determine included groups up to the message's group (inclusive)
+                                  final Map<String, int> groupFirstIndex = <String, int>{};
+                                  final List<String> groupOrder = <String>[];
+                                  for (int i = 0; i < _messages.length; i++) {
+                                    final gid0 = (_messages[i].groupId ?? _messages[i].id);
+                                    if (!groupFirstIndex.containsKey(gid0)) {
+                                      groupFirstIndex[gid0] = i;
+                                      groupOrder.add(gid0);
+                                    }
+                                  }
+                                  final targetGroup = (message.groupId ?? message.id);
+                                  final targetOrderIndex = groupOrder.indexOf(targetGroup);
+                                  if (targetOrderIndex >= 0) {
+                                    final includeGroups = groupOrder.take(targetOrderIndex + 1).toSet();
+                                    final selected = [
+                                      for (final m in _messages)
+                                        if (includeGroups.contains(m.groupId ?? m.id)) m
+                                    ];
+                                    // Filter version selections to included groups
+                                    final sel = <String, int>{};
+                                    for (final gid in includeGroups) {
+                                      final v = _versionSelections[gid];
+                                      if (v != null) sel[gid] = v;
+                                    }
+                                    final newConvo = await _chatService.forkConversation(
+                                      title: _titleForLocale(context),
+                                      assistantId: _currentConversation?.assistantId,
+                                      sourceMessages: selected,
+                                      versionSelections: sel,
+                                    );
+                                    // Switch to the new conversation
+                                    _chatService.setCurrentConversation(newConvo.id);
+                                    final msgs = _chatService.getMessages(newConvo.id);
+                                    if (!mounted) return;
+                                    setState(() {
+                                      _currentConversation = newConvo;
+                                      _messages = List.of(msgs);
+                                      _loadVersionSelections();
+                                      _reasoning.clear();
+                                      _translations.clear();
+                                      _toolParts.clear();
+                                      _reasoningSegments.clear();
+                                    });
+                                    _triggerConversationFade();
+                                    _scrollToBottomSoon();
+                                  }
                                 }
                               },
                                   toolParts: message.role == 'assistant' ? _toolParts[message.id] : null,
