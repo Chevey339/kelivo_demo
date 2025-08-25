@@ -1171,23 +1171,68 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     final idx = _messages.indexWhere((m) => m.id == message.id);
     if (idx < 0) return;
 
-    // If target is user, keep up to that message; if assistant, keep up to the previous one
-    int lastKeep = message.role == 'user' ? idx : (idx - 1);
-    if (lastKeep < -1) lastKeep = -1;
-
-    // Remove messages after lastKeep (persistently)
-    if (lastKeep < _messages.length - 1) {
-      final toRemove = _messages.sublist(lastKeep + 1);
-      for (final m in toRemove) {
-        try { await _chatService.deleteMessage(m.id); } catch (_) {}
-        _reasoning.remove(m.id);
-        _translations.remove(m.id);
-        _toolParts.remove(m.id);
-        _reasoningSegments.remove(m.id);
+    // Compute versioning target (groupId + nextVersion) and where to cut
+    String? targetGroupId;
+    int nextVersion = 0;
+    int lastKeep;
+    if (message.role == 'assistant') {
+      // Keep the existing assistant message as old version
+      lastKeep = idx; // remove after this
+      targetGroupId = message.groupId ?? message.id;
+      int maxVer = -1;
+      for (final m in _messages) {
+        final gid = (m.groupId ?? m.id);
+        if (gid == targetGroupId) {
+          if (m.version > maxVer) maxVer = m.version;
+        }
       }
-      setState(() {
-        _messages.removeRange(lastKeep + 1, _messages.length);
-      });
+      nextVersion = maxVer + 1;
+    } else {
+      // User message: find the first assistant reply after it to branch from
+      int aid = -1;
+      for (int i = idx + 1; i < _messages.length; i++) {
+        if (_messages[i].role == 'assistant') { aid = i; break; }
+      }
+      if (aid >= 0) {
+        lastKeep = aid; // keep that assistant message as old version
+        targetGroupId = _messages[aid].groupId ?? _messages[aid].id;
+        int maxVer = -1;
+        for (final m in _messages) {
+          final gid = (m.groupId ?? m.id);
+          if (gid == targetGroupId) {
+            if (m.version > maxVer) maxVer = m.version;
+          }
+        }
+        nextVersion = maxVer + 1;
+      } else {
+        // No assistant reply yet; keep up to the user message and start new group
+        lastKeep = idx;
+        targetGroupId = null; // will be set to new id automatically
+        nextVersion = 0;
+      }
+    }
+
+    // Remove messages after lastKeep (persistently), but preserve other versions of the target group
+    if (lastKeep < _messages.length - 1) {
+      final trailing = _messages.sublist(lastKeep + 1);
+      final removeIds = <String>[];
+      for (final m in trailing) {
+        final gid = (m.groupId ?? m.id);
+        final shouldKeep = (targetGroupId != null && gid == targetGroupId);
+        if (!shouldKeep) removeIds.add(m.id);
+      }
+      for (final id in removeIds) {
+        try { await _chatService.deleteMessage(id); } catch (_) {}
+        _reasoning.remove(id);
+        _translations.remove(id);
+        _toolParts.remove(id);
+        _reasoningSegments.remove(id);
+      }
+      if (removeIds.isNotEmpty) {
+        setState(() {
+          _messages.removeWhere((m) => removeIds.contains(m.id));
+        });
+      }
     }
 
     // Start a new assistant generation from current context
@@ -1201,7 +1246,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       return;
     }
 
-    // Create assistant message placeholder
+    // Create assistant message placeholder (new version in target group)
     final assistantMessage = await _chatService.addMessage(
       conversationId: _currentConversation!.id,
       role: 'assistant',
@@ -1209,7 +1254,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       modelId: modelId,
       providerId: providerKey,
       isStreaming: true,
+      groupId: targetGroupId,
+      version: nextVersion,
     );
+
+    // Persist selection to the latest version of this group
+    final gid = assistantMessage.groupId ?? assistantMessage.id;
+    _versionSelections[gid] = assistantMessage.version;
+    await _chatService.setSelectedVersion(_currentConversation!.id, gid, assistantMessage.version);
 
     setState(() {
       _messages.add(assistantMessage);
