@@ -35,6 +35,10 @@ class Conversation extends HiveObject {
   @HiveField(8)
   int truncateIndex;
 
+  // Selected version per message group (groupId -> selected version index)
+  @HiveField(9)
+  Map<String, int> versionSelections;
+
   Conversation({
     String? id,
     required this.title,
@@ -45,13 +49,15 @@ class Conversation extends HiveObject {
     List<String>? mcpServerIds,
     String? assistantId,
     int? truncateIndex,
+    Map<String, int>? versionSelections,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
         messageIds = messageIds ?? [],
         mcpServerIds = mcpServerIds ?? [],
         assistantId = assistantId,
-        truncateIndex = truncateIndex ?? -1;
+        truncateIndex = truncateIndex ?? -1,
+        versionSelections = versionSelections ?? <String, int>{};
 
   Conversation copyWith({
     String? id,
@@ -63,6 +69,7 @@ class Conversation extends HiveObject {
     List<String>? mcpServerIds,
     String? assistantId,
     int? truncateIndex,
+    Map<String, int>? versionSelections,
   }) {
     return Conversation(
       id: id ?? this.id,
@@ -74,6 +81,7 @@ class Conversation extends HiveObject {
       mcpServerIds: mcpServerIds ?? this.mcpServerIds,
       assistantId: assistantId ?? this.assistantId,
       truncateIndex: truncateIndex ?? this.truncateIndex,
+      versionSelections: versionSelections ?? this.versionSelections,
     );
   }
 
@@ -88,6 +96,7 @@ class Conversation extends HiveObject {
       'mcpServerIds': mcpServerIds,
       'assistantId': assistantId,
       'truncateIndex': truncateIndex,
+      'versionSelections': versionSelections,
     };
   }
 
@@ -102,6 +111,7 @@ class Conversation extends HiveObject {
       mcpServerIds: (json['mcpServerIds'] as List?)?.cast<String>() ?? const <String>[],
       assistantId: json['assistantId'] as String?,
       truncateIndex: json['truncateIndex'] as int? ?? -1,
+      versionSelections: (json['versionSelections'] as Map?)?.map((k, v) => MapEntry(k.toString(), (v as num).toInt())) ?? <String, int>{},
     );
   }
 }

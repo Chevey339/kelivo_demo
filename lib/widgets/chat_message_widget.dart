@@ -34,6 +34,11 @@ class ChatMessageWidget extends StatefulWidget {
   final VoidCallback? onTranslate;
   final VoidCallback? onSpeak;
   final VoidCallback? onMore;
+  // Optional version switcher (branch) UI controls
+  final int? versionIndex; // zero-based
+  final int? versionCount;
+  final VoidCallback? onPrevVersion;
+  final VoidCallback? onNextVersion;
   // Optional reasoning UI props (for reasoning-capable models)
   final String? reasoningText;
   final bool reasoningExpanded;
@@ -65,6 +70,10 @@ class ChatMessageWidget extends StatefulWidget {
     this.onTranslate,
     this.onSpeak,
     this.onMore,
+    this.versionIndex,
+    this.versionCount,
+    this.onPrevVersion,
+    this.onNextVersion,
     this.reasoningText,
     this.reasoningExpanded = false,
     this.reasoningLoading = false,
@@ -424,6 +433,15 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                 visualDensity: VisualDensity.compact,
                 iconSize: 16,
               ),
+              if ((widget.versionCount ?? 1) > 1) ...[
+                const SizedBox(width: 6),
+                _BranchSelector(
+                  index: widget.versionIndex ?? 0,
+                  total: widget.versionCount ?? 1,
+                  onPrev: widget.onPrevVersion,
+                  onNext: widget.onNextVersion,
+                ),
+              ],
             ],
           ),
         ],
@@ -765,6 +783,15 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                 visualDensity: VisualDensity.compact,
                 iconSize: 16,
               ),
+              if ((widget.versionCount ?? 1) > 1) ...[
+                const SizedBox(width: 6),
+                _BranchSelector(
+                  index: widget.versionIndex ?? 0,
+                  total: widget.versionCount ?? 1,
+                  onPrev: widget.onPrevVersion,
+                  onNext: widget.onNextVersion,
+                ),
+              ],
             ],
           ),
         ],
@@ -816,6 +843,39 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
     if (widget.message.role == 'user') return _buildUserMessage();
     if (widget.message.role == 'tool') return _buildToolMessage();
     return _buildAssistantMessage();
+  }
+}
+
+class _BranchSelector extends StatelessWidget {
+  const _BranchSelector({required this.index, required this.total, this.onPrev, this.onNext});
+  final int index; // zero-based
+  final int total;
+  final VoidCallback? onPrev;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final canPrev = index > 0;
+    final canNext = index < total - 1;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: canPrev ? onPrev : null,
+          borderRadius: BorderRadius.circular(6),
+          child: Icon(Lucide.ChevronLeft, size: 16, color: canPrev ? cs.onSurface : cs.onSurface.withOpacity(0.35)),
+        ),
+        const SizedBox(width: 6),
+        Text('${index + 1}/$total', style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.8), fontWeight: FontWeight.w600)),
+        const SizedBox(width: 6),
+        InkWell(
+          onTap: canNext ? onNext : null,
+          borderRadius: BorderRadius.circular(6),
+          child: Icon(Lucide.ChevronRight, size: 16, color: canNext ? cs.onSurface : cs.onSurface.withOpacity(0.35)),
+        ),
+      ],
+    );
   }
 }
 

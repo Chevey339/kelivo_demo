@@ -50,6 +50,14 @@ class ChatMessage extends HiveObject {
   @HiveField(13)
   final String? reasoningSegmentsJson;
 
+  // Versioning: group messages sharing the same semantic position
+  // groupId identifies a message thread; version starts from 0 and increments
+  @HiveField(14)
+  final String? groupId;
+
+  @HiveField(15)
+  final int version;
+
   ChatMessage({
     String? id,
     required this.role,
@@ -65,8 +73,12 @@ class ChatMessage extends HiveObject {
     this.reasoningFinishedAt,
     this.translation,
     this.reasoningSegmentsJson,
+    String? groupId,
+    int? version,
   })  : id = id ?? const Uuid().v4(),
-        timestamp = timestamp ?? DateTime.now();
+        timestamp = timestamp ?? DateTime.now(),
+        groupId = groupId ?? id,
+        version = version ?? 0;
 
   ChatMessage copyWith({
     String? id,
@@ -83,6 +95,8 @@ class ChatMessage extends HiveObject {
     DateTime? reasoningFinishedAt,
     String? translation,
     String? reasoningSegmentsJson,
+    String? groupId,
+    int? version,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -99,6 +113,8 @@ class ChatMessage extends HiveObject {
       reasoningFinishedAt: reasoningFinishedAt ?? this.reasoningFinishedAt,
       translation: translation ?? this.translation,
       reasoningSegmentsJson: reasoningSegmentsJson ?? this.reasoningSegmentsJson,
+      groupId: groupId ?? this.groupId,
+      version: version ?? this.version,
     );
   }
 
@@ -118,6 +134,8 @@ class ChatMessage extends HiveObject {
       'reasoningFinishedAt': reasoningFinishedAt?.toIso8601String(),
       'translation': translation,
       'reasoningSegmentsJson': reasoningSegmentsJson,
+      'groupId': groupId,
+      'version': version,
     };
   }
 
@@ -141,6 +159,8 @@ class ChatMessage extends HiveObject {
           : null,
       translation: json['translation'] as String?,
       reasoningSegmentsJson: json['reasoningSegmentsJson'] as String?,
+      groupId: json['groupId'] as String?,
+      version: (json['version'] as int?) ?? 0,
     );
   }
 }

@@ -373,6 +373,8 @@ class ChatService extends ChangeNotifier {
     String? reasoningText,
     DateTime? reasoningStartAt,
     DateTime? reasoningFinishedAt,
+    String? groupId,
+    int? version,
   }) async {
     if (!_initialized) await init();
 
@@ -401,6 +403,8 @@ class ChatService extends ChangeNotifier {
       reasoningText: reasoningText,
       reasoningStartAt: reasoningStartAt,
       reasoningFinishedAt: reasoningFinishedAt,
+      groupId: groupId,
+      version: version,
     );
 
     await _messagesBox.put(message.id, message);
@@ -514,6 +518,87 @@ class ChatService extends ChangeNotifier {
       list.add(record);
     }
     await _toolEventsBox.put(assistantMessageId, list);
+    notifyListeners();
+  }
+
+  Future<ChatMessage?> appendMessageVersion({
+    required String messageId,
+    required String content,
+  }) async {
+    if (!_initialized) await init();
+    final original = _messagesBox.get(messageId);
+    if (original == null) return null;
+
+    final cid = original.conversationId;
+    final convo = _conversationsBox.get(cid) ?? _draftConversations[cid];
+    if (convo == null) return null;
+
+    final gid = (original.groupId ?? original.id);
+    // Find current max version within this group in this conversation
+    int maxVersion = -1;
+    for (final mid in convo.messageIds) {
+      final m = _messagesBox.get(mid);
+      if (m == null) continue;
+      final mg = (m.groupId ?? m.id);
+      if (mg == gid) {
+        if (m.version > maxVersion) maxVersion = m.version;
+      }
+    }
+    final nextVersion = maxVersion + 1;
+
+    final newMsg = ChatMessage(
+      role: original.role,
+      content: content,
+      conversationId: cid,
+      modelId: original.modelId,
+      providerId: original.providerId,
+      totalTokens: null,
+      isStreaming: false,
+      groupId: gid,
+      version: nextVersion,
+    );
+    await _messagesBox.put(newMsg.id, newMsg);
+    // Append to conversation order at the end (we'll group when rendering)
+    if (_draftConversations.containsKey(cid)) {
+      final draft = _draftConversations[cid]!;
+      draft.messageIds.add(newMsg.id);
+      draft.updatedAt = DateTime.now();
+      draft.versionSelections[gid] = nextVersion;
+    } else {
+      final c = _conversationsBox.get(cid);
+      if (c != null) {
+        c.messageIds.add(newMsg.id);
+        c.updatedAt = DateTime.now();
+        // Persist selection of latest version for this group
+        c.versionSelections[gid] = nextVersion;
+        await c.save();
+      }
+    }
+    // Update caches
+    final arr = _messagesCache[cid];
+    if (arr != null) arr.add(newMsg);
+    notifyListeners();
+    return newMsg;
+  }
+
+  Map<String, int> getVersionSelections(String conversationId) {
+    final c = _conversationsBox.get(conversationId) ?? _draftConversations[conversationId];
+    return Map<String, int>.from(c?.versionSelections ?? const <String, int>{});
+  }
+
+  Future<void> setSelectedVersion(String conversationId, String groupId, int version) async {
+    if (_draftConversations.containsKey(conversationId)) {
+      final draft = _draftConversations[conversationId]!;
+      draft.versionSelections[groupId] = version;
+      draft.updatedAt = DateTime.now();
+      notifyListeners();
+      return;
+    }
+    final c = _conversationsBox.get(conversationId);
+    if (c == null) return;
+    c.versionSelections[groupId] = version;
+    c.updatedAt = DateTime.now();
+    await c.save();
     notifyListeners();
   }
 

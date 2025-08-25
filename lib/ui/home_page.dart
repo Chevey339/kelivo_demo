@@ -27,6 +27,7 @@ import '../models/conversation.dart';
 import 'model_select_sheet.dart';
 import 'language_select_sheet.dart';
 import 'message_more_sheet.dart';
+import 'message_edit_dialog.dart';
 import 'mcp_assistant_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
@@ -193,6 +194,46 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     return lang == 'zh' ? '新对话' : 'New Chat';
   }
 
+  // Version selections (groupId -> selected version index)
+  Map<String, int> _versionSelections = <String, int>{};
+
+  void _loadVersionSelections() {
+    final cid = _currentConversation?.id;
+    if (cid == null) {
+      _versionSelections = <String, int>{};
+      return;
+    }
+    try {
+      _versionSelections = _chatService.getVersionSelections(cid);
+    } catch (_) {
+      _versionSelections = <String, int>{};
+    }
+  }
+
+  List<ChatMessage> _collapseVersions(List<ChatMessage> items) {
+    final Map<String, List<ChatMessage>> byGroup = <String, List<ChatMessage>>{};
+    final List<String> order = <String>[];
+    for (final m in items) {
+      final gid = (m.groupId ?? m.id);
+      final list = byGroup.putIfAbsent(gid, () {
+        order.add(gid);
+        return <ChatMessage>[];
+      });
+      list.add(m);
+    }
+    for (final e in byGroup.entries) {
+      e.value.sort((a, b) => a.version.compareTo(b.version));
+    }
+    final out = <ChatMessage>[];
+    for (final gid in order) {
+      final vers = byGroup[gid]!;
+      final sel = _versionSelections[gid];
+      final idx = (sel != null && sel >= 0 && sel < vers.length) ? sel : (vers.length - 1);
+      out.add(vers[idx]);
+    }
+    return out;
+  }
+
   String _clearContextLabel() {
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     final assistant = context.read<AssistantProvider>().currentAssistant;
@@ -282,6 +323,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         setState(() {
           _currentConversation = recent;
           _messages = List.of(msgs);
+          _loadVersionSelections();
           _reasoning.clear();
           _translations.clear();
           _toolParts.clear();
@@ -450,6 +492,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     setState(() {
       _currentConversation = conversation;
       _messages = [];
+      _versionSelections.clear();
       _reasoning.clear();
       _translations.clear();
       _toolParts.clear();
@@ -531,11 +574,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     });
 
     // Prepare messages for API
-    // Apply truncateIndex on the conversation first, then transform the last user message to include document content
+    // Apply truncateIndex and collapse versions first, then transform the last user message to include document content
     final tIndex = _currentConversation?.truncateIndex ?? -1;
-    final List<ChatMessage> source = (tIndex >= 0 && tIndex <= _messages.length)
+    final List<ChatMessage> sourceAll = (tIndex >= 0 && tIndex <= _messages.length)
         ? _messages.sublist(tIndex)
         : List.of(_messages);
+    final List<ChatMessage> source = _collapseVersions(sourceAll);
     final apiMessages = source
         .where((m) => m.content.isNotEmpty)
         .map((m) => {
@@ -1164,7 +1208,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     // Build content from messages (truncate to reasonable length)
     final msgs = _chatService.getMessages(convo.id);
     final tIndex = convo.truncateIndex;
-    final List<ChatMessage> source = (tIndex >= 0 && tIndex <= msgs.length) ? msgs.sublist(tIndex) : msgs;
+    final List<ChatMessage> sourceAll = (tIndex >= 0 && tIndex <= msgs.length) ? msgs.sublist(tIndex) : msgs;
+    final List<ChatMessage> source = _collapseVersions(sourceAll);
     final joined = source
         .where((m) => m.content.isNotEmpty)
         .map((m) => '${m.role == 'assistant' ? 'Assistant' : 'User'}: ${m.content}')
@@ -1425,6 +1470,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             setState(() {
               _currentConversation = convo;
               _messages = List.of(msgs);
+              _loadVersionSelections();
               _reasoning.clear();
               _translations.clear();
               _toolParts.clear();
@@ -1518,8 +1564,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   child: KeyedSubtree(
                     key: ValueKey<String>(_currentConversation?.id ?? 'none'),
                     child: (() {
-                      // Stable snapshot for this build
-                      final messages = List.of(_messages);
+                      // Stable snapshot for this build (collapse versions)
+                      final messages = _collapseVersions(_messages);
+                      final Map<String, List<ChatMessage>> byGroup = <String, List<ChatMessage>>{};
+                      for (final m in _messages) {
+                        final gid = (m.groupId ?? m.id);
+                        byGroup.putIfAbsent(gid, () => <ChatMessage>[]).add(m);
+                      }
                       return ListView.builder(
                         controller: _scrollController,
                         padding: const EdgeInsets.only(bottom: 16, top: 8),
@@ -1550,6 +1601,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               Expanded(child: Divider(color: cs.outlineVariant.withOpacity(0.6), height: 1, thickness: 1)),
                             ],
                           );
+                          final gid = (message.groupId ?? message.id);
+                          final vers = (byGroup[gid] ?? const <ChatMessage>[]).toList()..sort((a,b)=>a.version.compareTo(b.version));
+                          final selectedIdx = _versionSelections[gid] ?? (vers.isNotEmpty ? vers.length - 1 : 0);
+                          final total = vers.length;
+
                           return Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -1559,6 +1615,20 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                 ),
                                 child: ChatMessageWidget(
                                   message: message,
+                                  versionIndex: selectedIdx,
+                                  versionCount: total,
+                                  onPrevVersion: (selectedIdx > 0) ? () async {
+                                    final next = selectedIdx - 1;
+                                    _versionSelections[gid] = next;
+                                    await _chatService.setSelectedVersion(_currentConversation!.id, gid, next);
+                                    if (mounted) setState(() {});
+                                  } : null,
+                                  onNextVersion: (selectedIdx < total - 1) ? () async {
+                                    final next = selectedIdx + 1;
+                                    _versionSelections[gid] = next;
+                                    await _chatService.setSelectedVersion(_currentConversation!.id, gid, next);
+                                    if (mounted) setState(() {});
+                                  } : null,
                                   modelIcon: (!useAssist && message.role == 'assistant' && message.providerId != null && message.modelId != null)
                                       ? _CurrentModelIcon(providerKey: message.providerId, modelId: message.modelId)
                                       : null,
@@ -1603,41 +1673,54 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                           _translateMessage(message);
                                         }
                                       : null,
-                                  onMore: () async {
-                                    final action = await showMessageMoreSheet(context, message);
-                                    if (!mounted) return;
-                                    if (action == MessageMoreAction.delete) {
-                                      final zh = Localizations.localeOf(context).languageCode == 'zh';
-                                      final confirm = await showDialog<bool>(
-                                        context: context,
-                                        builder: (ctx) => AlertDialog(
-                                          title: Text(zh ? '删除消息' : 'Delete Message'),
-                                          content: Text(zh ? '确定要删除这条消息吗？此操作不可撤销。' : 'Are you sure you want to delete this message? This cannot be undone.'),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.of(ctx).pop(false),
-                                              child: Text(zh ? '取消' : 'Cancel'),
-                                            ),
-                                            TextButton(
-                                              onPressed: () => Navigator.of(ctx).pop(true),
-                                              child: Text(zh ? '删除' : 'Delete', style: const TextStyle(color: Colors.red)),
-                                            ),
-                                          ],
+                              onMore: () async {
+                                final action = await showMessageMoreSheet(context, message);
+                                if (!mounted) return;
+                                if (action == MessageMoreAction.delete) {
+                                  final zh = Localizations.localeOf(context).languageCode == 'zh';
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: Text(zh ? '删除消息' : 'Delete Message'),
+                                      content: Text(zh ? '确定要删除这条消息吗？此操作不可撤销。' : 'Are you sure you want to delete this message? This cannot be undone.'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.of(ctx).pop(false),
+                                          child: Text(zh ? '取消' : 'Cancel'),
                                         ),
-                                      );
-                                      if (confirm == true) {
-                                        final id = message.id;
-                                        setState(() {
-                                          _messages.removeWhere((m) => m.id == id);
-                                          _reasoning.remove(id);
-                                          _translations.remove(id);
-                                          _toolParts.remove(id);
-                                          _reasoningSegments.remove(id);
-                                        });
-                                        await _chatService.deleteMessage(id);
+                                        TextButton(
+                                          onPressed: () => Navigator.of(ctx).pop(true),
+                                          child: Text(zh ? '删除' : 'Delete', style: const TextStyle(color: Colors.red)),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm == true) {
+                                    final id = message.id;
+                                    setState(() {
+                                      _messages.removeWhere((m) => m.id == id);
+                                      _reasoning.remove(id);
+                                      _translations.remove(id);
+                                      _toolParts.remove(id);
+                                      _reasoningSegments.remove(id);
+                                    });
+                                    await _chatService.deleteMessage(id);
+                                  }
+                                } else if (action == MessageMoreAction.edit) {
+                                  final edited = await showEditMessageDialog(context, message);
+                                  if (edited != null) {
+                                    final newMsg = await _chatService.appendMessageVersion(messageId: message.id, content: edited);
+                                    if (!mounted) return;
+                                    setState(() {
+                                      if (newMsg != null) {
+                                        _messages.add(newMsg);
+                                        final gid = (newMsg.groupId ?? newMsg.id);
+                                        _versionSelections[gid] = newMsg.version;
                                       }
-                                    }
-                                  },
+                                    });
+                                  }
+                                }
+                              },
                                   toolParts: message.role == 'assistant' ? _toolParts[message.id] : null,
                                   reasoningSegments: message.role == 'assistant'
                                       ? (() {
