@@ -28,6 +28,7 @@ import 'model_select_sheet.dart';
 import 'language_select_sheet.dart';
 import 'message_more_sheet.dart';
 import 'message_edit_page.dart';
+import 'message_export_sheet.dart';
 import 'mcp_assistant_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
@@ -71,6 +72,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   final Map<String, List<_ReasoningSegmentData>> _reasoningSegments = <String, List<_ReasoningSegmentData>>{}; // assistantMessageId -> reasoning segments
   McpProvider? _mcpProvider;
   Set<String> _connectedMcpIds = <String>{};
+
+  // Selection mode state for export/share
+  bool _selecting = false;
+  final Set<String> _selectedItems = <String>{}; // selected message ids (collapsed view)
 
   // Helper methods to serialize/deserialize reasoning segments
   String _serializeReasoningSegments(List<_ReasoningSegmentData> segments) {
@@ -1930,11 +1935,31 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           return Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              MediaQuery(
-                                data: MediaQuery.of(context).copyWith(
-                                  textScaleFactor: MediaQuery.of(context).textScaleFactor * chatScale,
-                                ),
-                                child: ChatMessageWidget(
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (_selecting && (message.role == 'user' || message.role == 'assistant'))
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 10, right: 6),
+                                      child: Checkbox(
+                                        value: _selectedItems.contains(message.id),
+                                        onChanged: (v) {
+                                          setState(() {
+                                            if (v == true) {
+                                              _selectedItems.add(message.id);
+                                            } else {
+                                              _selectedItems.remove(message.id);
+                                            }
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  Expanded(
+                                    child: MediaQuery(
+                                      data: MediaQuery.of(context).copyWith(
+                                        textScaleFactor: MediaQuery.of(context).textScaleFactor * chatScale,
+                                      ),
+                                      child: ChatMessageWidget(
                                   message: message,
                                   versionIndex: selectedIdx,
                                   versionCount: total,
@@ -2081,6 +2106,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                     _triggerConversationFade();
                                     _scrollToBottomSoon();
                                   }
+                                } else if (action == MessageMoreAction.share) {
+                                  // Enter selection mode and preselect up to this message (inclusive)
+                                  setState(() {
+                                    _selecting = true;
+                                    _selectedItems.clear();
+                                    for (int i = 0; i <= index && i < messages.length; i++) {
+                                      final m = messages[i];
+                                      final enabled0 = (m.role == 'user' || m.role == 'assistant');
+                                      if (enabled0) _selectedItems.add(m.id);
+                                    }
+                                  });
                                 }
                               },
                                   toolParts: message.role == 'assistant' ? _toolParts[message.id] : null,
@@ -2105,8 +2141,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                               .toList();
                                         })()
                                       : null,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
                               if (showDivider)
                                 Padding(
                                   padding: const EdgeInsets.symmetric(vertical: 10, horizontal: AppSpacing.md),
@@ -2225,6 +2264,45 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               ),
             ),
           ),
+
+          // Selection toolbar overlay (above input bar)
+          if (_selecting)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: _toolsOpen ? (_sheetHeight + 72) : 72),
+                  child: _SelectionToolbar(
+                    onCancel: () {
+                      setState(() {
+                        _selecting = false;
+                        _selectedItems.clear();
+                      });
+                    },
+                    onConfirm: () async {
+                      final convo = _currentConversation;
+                      if (convo == null) return;
+                      final collapsed = _collapseVersions(_messages);
+                      final selected = <ChatMessage>[];
+                      for (final m in collapsed) {
+                        if (_selectedItems.contains(m.id)) selected.add(m);
+                      }
+                      if (selected.isEmpty) {
+                        final zh = Localizations.localeOf(context).languageCode == 'zh';
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(zh ? '请选择要分享的消息' : 'Please select messages to share')),
+                        );
+                        return;
+                      }
+                      setState(() { _selecting = false; });
+                      await showChatExportSheet(context, conversation: convo, selectedMessages: selected);
+                      if (mounted) setState(() { _selectedItems.clear(); });
+                    },
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -2376,6 +2454,56 @@ class _CurrentModelIcon extends StatelessWidget {
         width: size * 0.64,
         height: size * 0.64,
         child: Center(child: inner is SvgPicture || inner is Image ? inner : FittedBox(child: inner)),
+      ),
+    );
+  }
+}
+
+class _SelectionToolbar extends StatelessWidget {
+  const _SelectionToolbar({required this.onCancel, required this.onConfirm});
+  final VoidCallback onCancel;
+  final VoidCallback onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 16, offset: const Offset(0, 6)),
+        ],
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          OutlinedButton.icon(
+            icon: const Icon(Lucide.X, size: 16),
+            onPressed: onCancel,
+            label: Text(zh ? '取消' : 'Cancel'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton.icon(
+            icon: const Icon(Lucide.Check, size: 16),
+            onPressed: onConfirm,
+            label: Text(zh ? '完成' : 'Done'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: cs.primary,
+              foregroundColor: cs.onPrimary,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              elevation: 0,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -77,4 +77,5 @@ class Lucide {
   static const IconData Link = lucide.LucideIcons.link;
   static const IconData Eraser = lucide.LucideIcons.eraser;
   static const IconData ChevronLeft = lucide.LucideIcons.chevronLeft;
+  static const IconData MessageSquare = lucide.LucideIcons.messageSquare;
 }

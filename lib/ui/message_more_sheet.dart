@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import 'select_copy_page.dart';
 
-enum MessageMoreAction { edit, fork, delete }
+enum MessageMoreAction { edit, fork, delete, share }
 
 Future<MessageMoreAction?> showMessageMoreSheet(BuildContext context, ChatMessage message) async {
   final cs = Theme.of(context).colorScheme;
@@ -188,7 +188,13 @@ class _MessageMoreSheetState extends State<_MessageMoreSheet> {
                         Navigator.of(context).pop(MessageMoreAction.edit);
                       },
                     ),
-                    _actionItem(icon: Lucide.Share, label: zh ? '分享' : 'Share'),
+                    _actionItem(
+                      icon: Lucide.Share,
+                      label: zh ? '分享' : 'Share',
+                      onTap: () {
+                        Navigator.of(context).pop(MessageMoreAction.share);
+                      },
+                    ),
                     _actionItem(
                       icon: Lucide.GitFork,
                       label: zh ? '创建分支' : 'Create Branch',
