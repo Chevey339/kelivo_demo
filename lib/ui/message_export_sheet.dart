@@ -158,7 +158,7 @@ Future<File?> _renderAndSaveChatImage(BuildContext context, Conversation convers
 Future<File?> _renderWidgetDirectly(
   BuildContext context,
   Widget content, {
-  double width = 480,
+  double width = 480, // 宽度*3
   double pixelRatio = 3.0,
 }) async {
   final overlay = Overlay.of(context);
@@ -249,7 +249,7 @@ Future<File?> _renderWidgetDirectly(
 Future<File?> _renderAndSavePagedOld(
   BuildContext context,
   Widget content, {
-  double width = 480,
+  double width = 480, // 宽度*3
   double pageHeight = 1600,
   double pixelRatio = 3.0,
 }) async {
@@ -457,6 +457,10 @@ class _BatchExportSheetState extends State<_BatchExportSheet> {
 
   Future<void> _onExportMarkdown() async {
     if (_exporting) return;
+    
+    // Dismiss dialog immediately
+    if (mounted) Navigator.of(context).maybePop();
+    
     setState(() => _exporting = true);
     try {
       if (mounted) {
@@ -508,12 +512,6 @@ class _BatchExportSheetState extends State<_BatchExportSheet> {
       final file = File('${tmp.path}/$filename');
       await file.writeAsString(buf.toString());
       await Share.shareXFiles([XFile(file.path, mimeType: 'text/markdown', name: filename)], text: title);
-      if (mounted) {
-        final zh = Localizations.localeOf(context).languageCode == 'zh';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(zh ? '已导出为 $filename' : 'Exported as $filename')),
-        );
-      }
     } catch (e) {
       if (mounted) {
         final zh = Localizations.localeOf(context).languageCode == 'zh';
@@ -528,6 +526,10 @@ class _BatchExportSheetState extends State<_BatchExportSheet> {
 
   Future<void> _onExportImage() async {
     if (_exporting) return;
+    
+    // Dismiss dialog immediately
+    if (mounted) Navigator.of(context).maybePop();
+    
     setState(() => _exporting = true);
     try {
       if (mounted) {
@@ -540,12 +542,6 @@ class _BatchExportSheetState extends State<_BatchExportSheet> {
       if (file == null) throw 'render error';
       final filename = file.uri.pathSegments.isNotEmpty ? file.uri.pathSegments.last : 'chat.png';
       await Share.shareXFiles([XFile(file.path, mimeType: 'image/png', name: filename)]);
-      if (mounted) {
-        final zh = Localizations.localeOf(context).languageCode == 'zh';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(zh ? '已导出为 $filename' : 'Exported as $filename')),
-        );
-      }
     } catch (e) {
       if (mounted) {
         final zh = Localizations.localeOf(context).languageCode == 'zh';
@@ -587,18 +583,16 @@ class _BatchExportSheetState extends State<_BatchExportSheet> {
                     icon: Lucide.BookOpenText,
                     title: zh ? 'Markdown' : 'Markdown',
                     subtitle: zh ? '将选中的消息导出为 Markdown 文件' : 'Export selected messages as a Markdown file',
-                    onTap: _exporting ? null : () async {
-                      await _onExportMarkdown();
-                      if (mounted) Navigator.of(context).maybePop();
+                    onTap: _exporting ? null : () {
+                      _onExportMarkdown();
                     },
                   ),
                   _ExportOptionTile(
                     icon: Lucide.Image,
                     title: zh ? '导出为图片' : 'Export as Image',
                     subtitle: zh ? '将选中的消息渲染为 PNG 图片' : 'Render selected messages to a PNG image',
-                    onTap: _exporting ? null : () async {
-                      await _onExportImage();
-                      if (mounted) Navigator.of(context).maybePop();
+                    onTap: _exporting ? null : () {
+                      _onExportImage();
                     },
                   ),
                 ],
@@ -699,6 +693,10 @@ class _ExportSheetState extends State<_ExportSheet> {
 
   Future<void> _onExportImage() async {
     if (_exporting) return;
+    
+    // Dismiss dialog immediately
+    if (mounted) Navigator.of(context).maybePop();
+    
     setState(() => _exporting = true);
     try {
       if (mounted) {
@@ -711,12 +709,6 @@ class _ExportSheetState extends State<_ExportSheet> {
       if (file == null) throw 'render error';
       final filename = file.uri.pathSegments.isNotEmpty ? file.uri.pathSegments.last : 'chat.png';
       await Share.shareXFiles([XFile(file.path, mimeType: 'image/png', name: filename)]);
-      if (mounted) {
-        final zh = Localizations.localeOf(context).languageCode == 'zh';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(zh ? '已导出为 $filename' : 'Exported as $filename')),
-        );
-      }
     } catch (e) {
       if (mounted) {
         final zh = Localizations.localeOf(context).languageCode == 'zh';
@@ -758,18 +750,16 @@ class _ExportSheetState extends State<_ExportSheet> {
                     icon: Lucide.BookOpenText,
                     title: zh ? 'Markdown' : 'Markdown',
                     subtitle: zh ? '将该消息导出为 Markdown 文件' : 'Export this message as a Markdown file',
-                    onTap: _exporting ? null : () async {
-                      await _onExportMarkdown();
-                      if (mounted) Navigator.of(context).maybePop();
+                    onTap: _exporting ? null : () {
+                      _onExportMarkdown();
                     },
                   ),
                   _ExportOptionTile(
                     icon: Lucide.Image,
                     title: zh ? '导出为图片' : 'Export as Image',
                     subtitle: zh ? '将该消息渲染为 PNG 图片' : 'Render this message to a PNG image',
-                    onTap: _exporting ? null : () async {
-                      await _onExportImage();
-                      if (mounted) Navigator.of(context).maybePop();
+                    onTap: _exporting ? null : () {
+                      _onExportImage();
                     },
                   ),
                 ],
