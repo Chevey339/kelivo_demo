@@ -158,7 +158,7 @@ Future<File?> _renderAndSaveChatImage(BuildContext context, Conversation convers
 Future<File?> _renderWidgetDirectly(
   BuildContext context,
   Widget content, {
-  double width = 900,
+  double width = 480,
   double pixelRatio = 3.0,
 }) async {
   final overlay = Overlay.of(context);
@@ -249,7 +249,7 @@ Future<File?> _renderWidgetDirectly(
 Future<File?> _renderAndSavePagedOld(
   BuildContext context,
   Widget content, {
-  double width = 900,
+  double width = 480,
   double pageHeight = 1600,
   double pixelRatio = 3.0,
 }) async {
