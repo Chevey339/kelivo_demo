@@ -9,6 +9,7 @@ import '../services/chat_service.dart';
 import 'mcp_page.dart';
 import 'assistant_settings_page.dart';
 import 'about_page.dart';
+import 'tts_services_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -166,7 +167,15 @@ class SettingsPage extends StatelessWidget {
             },
           ),
           SettingRow(icon: Lucide.Earth, title: Localizations.localeOf(context).languageCode == 'zh' ? '搜索服务' : 'Search', onTap: () {}),
-          SettingRow(icon: Lucide.Volume2, title: Localizations.localeOf(context).languageCode == 'zh' ? '语音服务' : 'TTS', onTap: () {}),
+          SettingRow(
+            icon: Lucide.Volume2,
+            title: Localizations.localeOf(context).languageCode == 'zh' ? '语音服务' : 'TTS',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const TtsServicesPage()),
+              );
+            },
+          ),
           SettingRow(
             icon: Lucide.Terminal,
             title: Localizations.localeOf(context).languageCode == 'zh' ? 'MCP' : 'MCP',
