@@ -114,7 +114,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     return inferred.abilities.contains(ModelAbility.reasoning);
   }
 
-  void _cancelStreaming() async {
+  Future<void> _cancelStreaming() async {
     // Cancel active stream subscription, if any
     final sub = _messageStreamSubscription;
     _messageStreamSubscription = null;
@@ -1163,6 +1163,275 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     }
   }
 
+  Future<void> _regenerateAtMessage(ChatMessage message) async {
+    if (_currentConversation == null) return;
+    // Cancel any ongoing stream
+    await _cancelStreaming();
+
+    final idx = _messages.indexWhere((m) => m.id == message.id);
+    if (idx < 0) return;
+
+    // If target is user, keep up to that message; if assistant, keep up to the previous one
+    int lastKeep = message.role == 'user' ? idx : (idx - 1);
+    if (lastKeep < -1) lastKeep = -1;
+
+    // Remove messages after lastKeep (persistently)
+    if (lastKeep < _messages.length - 1) {
+      final toRemove = _messages.sublist(lastKeep + 1);
+      for (final m in toRemove) {
+        try { await _chatService.deleteMessage(m.id); } catch (_) {}
+        _reasoning.remove(m.id);
+        _translations.remove(m.id);
+        _toolParts.remove(m.id);
+        _reasoningSegments.remove(m.id);
+      }
+      setState(() {
+        _messages.removeRange(lastKeep + 1, _messages.length);
+      });
+    }
+
+    // Start a new assistant generation from current context
+    final settings = context.read<SettingsProvider>();
+    final providerKey = settings.currentModelProvider;
+    final modelId = settings.currentModelId;
+    final assistant = context.read<AssistantProvider>().currentAssistant;
+
+    if (providerKey == null || modelId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先选择模型')));
+      return;
+    }
+
+    // Create assistant message placeholder
+    final assistantMessage = await _chatService.addMessage(
+      conversationId: _currentConversation!.id,
+      role: 'assistant',
+      content: '',
+      modelId: modelId,
+      providerId: providerKey,
+      isStreaming: true,
+    );
+
+    setState(() {
+      _messages.add(assistantMessage);
+      _isLoading = true;
+    });
+
+    // Initialize reasoning state only when enabled and model supports it
+    final supportsReasoning = _isReasoningModel(providerKey, modelId);
+    final enableReasoning = supportsReasoning && _isReasoningEnabled((assistant?.thinkingBudget) ?? settings.thinkingBudget);
+    if (enableReasoning) {
+      final rd = _ReasoningData();
+      _reasoning[assistantMessage.id] = rd;
+      await _chatService.updateMessage(assistantMessage.id, reasoningStartAt: DateTime.now());
+    }
+
+    // Build API messages from current context (apply truncate + collapse versions)
+    final tIndex = _currentConversation?.truncateIndex ?? -1;
+    final List<ChatMessage> sourceAll = (tIndex >= 0 && tIndex <= _messages.length)
+        ? _messages.sublist(tIndex)
+        : List.of(_messages);
+    final List<ChatMessage> source = _collapseVersions(sourceAll);
+    final apiMessages = source
+        .where((m) => m.content.isNotEmpty)
+        .map((m) => {'role': m.role == 'assistant' ? 'assistant' : 'user', 'content': m.content})
+        .toList();
+
+    // Inject system prompt
+    if ((assistant?.systemPrompt.trim().isNotEmpty ?? false)) {
+      final vars = PromptTransformer.buildPlaceholders(
+        context: context,
+        assistant: assistant!,
+        modelId: modelId,
+        modelName: modelId,
+        userNickname: context.read<UserProvider>().name,
+      );
+      final sys = PromptTransformer.replacePlaceholders(assistant.systemPrompt, vars);
+      apiMessages.insert(0, {'role': 'system', 'content': sys});
+    }
+
+    // Limit context length
+    if ((assistant?.contextMessageSize ?? 0) > 0) {
+      final keep = assistant!.contextMessageSize.clamp(1, 512).toInt();
+      int startIdx = 0;
+      if (apiMessages.isNotEmpty && apiMessages.first['role'] == 'system') {
+        startIdx = 1;
+      }
+      final tail = apiMessages.sublist(startIdx);
+      if (tail.length > keep) {
+        final trimmed = tail.sublist(tail.length - keep);
+        apiMessages..removeRange(startIdx, apiMessages.length)..addAll(trimmed);
+      }
+    }
+
+    // Prepare MCP tools (if any)
+    List<Map<String, dynamic>>? toolDefs;
+    Future<String> Function(String, Map<String, dynamic>)? onToolCall;
+    try {
+      final mcp = context.read<McpProvider>();
+      final toolSvc = context.read<McpToolService>();
+      final tools = toolSvc.listAvailableToolsForAssistant(mcp, context.read<AssistantProvider>(), assistant?.id);
+      if (tools.isNotEmpty) {
+        toolDefs = tools.map((t) {
+          final props = <String, dynamic>{for (final p in t.params) p.name: {'type': 'string'}};
+          final required = [for (final p in t.params.where((e) => e.required)) p.name];
+          return {
+            'type': 'function',
+            'function': {
+              'name': t.name,
+              if ((t.description ?? '').isNotEmpty) 'description': t.description,
+              'parameters': {'type': 'object', 'properties': props, 'required': required},
+            }
+          };
+        }).toList();
+        onToolCall = (name, args) async {
+          final text = await toolSvc.callToolTextForAssistant(
+            mcp,
+            context.read<AssistantProvider>(),
+            assistantId: assistant?.id,
+            toolName: name,
+            arguments: args,
+          );
+          return text;
+        };
+      }
+    } catch (_) {}
+
+    final stream = ChatApiService.sendMessageStream(
+      config: settings.getProviderConfig(providerKey),
+      modelId: modelId,
+      messages: apiMessages,
+      thinkingBudget: assistant?.thinkingBudget ?? settings.thinkingBudget,
+      temperature: assistant?.temperature,
+      topP: assistant?.topP,
+      maxTokens: assistant?.maxTokens,
+      tools: toolDefs,
+      onToolCall: onToolCall,
+    );
+
+    String fullContent = '';
+    int totalTokens = 0;
+    TokenUsage? usage;
+
+    Future<void> finish({bool generateTitle = false}) async {
+      await _chatService.updateMessage(assistantMessage.id, content: fullContent, totalTokens: totalTokens, isStreaming: false);
+      if (!mounted) return;
+      setState(() {
+        final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
+        if (index != -1) {
+          _messages[index] = _messages[index].copyWith(content: fullContent, totalTokens: totalTokens, isStreaming: false);
+        }
+        _isLoading = false;
+      });
+      final r = _reasoning[assistantMessage.id];
+      if (r != null && r.finishedAt == null) {
+        r.finishedAt = DateTime.now();
+        await _chatService.updateMessage(assistantMessage.id, reasoningText: r.text, reasoningFinishedAt: r.finishedAt);
+      }
+      final segments = _reasoningSegments[assistantMessage.id];
+      if (segments != null && segments.isNotEmpty && segments.last.finishedAt == null) {
+        segments.last.finishedAt = DateTime.now();
+        final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+        if (autoCollapse) segments.last.expanded = false;
+        _reasoningSegments[assistantMessage.id] = segments;
+        if (mounted) setState(() {});
+        await _chatService.updateMessage(assistantMessage.id, reasoningSegmentsJson: _serializeReasoningSegments(segments));
+      }
+    }
+
+    _messageStreamSubscription?.cancel();
+    _messageStreamSubscription = stream.listen((chunk) async {
+      if ((chunk.reasoning ?? '').isNotEmpty && enableReasoning) {
+        final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
+        r.text += chunk.reasoning!;
+        r.startAt ??= DateTime.now();
+        r.finishedAt = null;
+        r.expanded = true;
+        _reasoning[assistantMessage.id] = r;
+        final segments = _reasoningSegments[assistantMessage.id] ?? <_ReasoningSegmentData>[];
+        if (segments.isEmpty) {
+          final seg = _ReasoningSegmentData();
+          seg.text = chunk.reasoning!;
+          seg.startAt = DateTime.now();
+          seg.expanded = true;
+          seg.toolStartIndex = (_toolParts[assistantMessage.id]?.length ?? 0);
+          segments.add(seg);
+        } else {
+          final last = segments.last;
+          if ((_toolParts[assistantMessage.id]?.isNotEmpty ?? false) && last.finishedAt != null) {
+            final seg = _ReasoningSegmentData();
+            seg.text = chunk.reasoning!;
+            seg.startAt = DateTime.now();
+            seg.expanded = true;
+            seg.toolStartIndex = (_toolParts[assistantMessage.id]?.length ?? 0);
+            segments.add(seg);
+          } else {
+            last.text += chunk.reasoning!;
+            last.startAt ??= DateTime.now();
+          }
+        }
+        _reasoningSegments[assistantMessage.id] = segments;
+        if (mounted) setState(() {});
+        await _chatService.updateMessage(assistantMessage.id, reasoningText: r.text, reasoningStartAt: r.startAt, reasoningSegmentsJson: _serializeReasoningSegments(segments));
+      }
+
+      if ((chunk.toolCalls ?? const []).isNotEmpty) {
+        final existing = List<ToolUIPart>.of(_toolParts[assistantMessage.id] ?? const []);
+        for (final c in chunk.toolCalls!) {
+          existing.add(ToolUIPart(id: c.id, toolName: c.name, arguments: c.arguments, loading: true));
+        }
+        setState(() => _toolParts[assistantMessage.id] = existing);
+        try {
+          final prev = _chatService.getToolEvents(assistantMessage.id);
+          final newEvents = <Map<String, dynamic>>[
+            ...prev,
+            for (final c in chunk.toolCalls!) {'id': c.id, 'name': c.name, 'arguments': c.arguments, 'content': null},
+          ];
+          await _chatService.setToolEvents(assistantMessage.id, newEvents);
+        } catch (_) {}
+      }
+
+      if ((chunk.toolResults ?? const []).isNotEmpty) {
+        final parts = List<ToolUIPart>.of(_toolParts[assistantMessage.id] ?? const []);
+        for (final r in chunk.toolResults!) {
+          int idx = -1;
+          for (int i = 0; i < parts.length; i++) {
+            if (parts[i].loading && (parts[i].id == r.id || (parts[i].id.isEmpty && parts[i].toolName == r.name))) {
+              idx = i; break;
+            }
+          }
+          if (idx >= 0) {
+            parts[idx] = ToolUIPart(id: parts[idx].id, toolName: parts[idx].toolName, arguments: parts[idx].arguments, content: r.content, loading: false);
+          } else {
+            parts.add(ToolUIPart(id: r.id, toolName: r.name, arguments: r.arguments, content: r.content, loading: false));
+          }
+          try { await _chatService.upsertToolEvent(assistantMessage.id, id: r.id, name: r.name, arguments: r.arguments, content: r.content); } catch (_) {}
+        }
+        setState(() => _toolParts[assistantMessage.id] = parts);
+        _scrollToBottomSoon();
+      }
+
+      if (chunk.content.isNotEmpty) {
+        fullContent += chunk.content;
+        setState(() {
+          final i = _messages.indexWhere((m) => m.id == assistantMessage.id);
+          if (i != -1) _messages[i] = _messages[i].copyWith(content: fullContent);
+        });
+      }
+
+      if (chunk.usage != null) {
+        usage = (usage ?? const TokenUsage()).merge(chunk.usage!);
+        totalTokens = usage!.totalTokens;
+      }
+
+      if (chunk.isDone) {
+        if (chunk.totalTokens > 0) totalTokens = chunk.totalTokens;
+        await finish();
+        await _messageStreamSubscription?.cancel();
+        _messageStreamSubscription = null;
+      }
+    });
+  }
+
   ChatInputData _parseInputFromRaw(String raw) {
     final imgRe = RegExp(r"\[image:(.+?)\]");
     final fileRe = RegExp(r"\[file:(.+?)\|(.+?)\|(.+?)\]");
@@ -1658,16 +1927,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                           });
                                         }
                                       : null,
-                                  onRegenerate: message.role == 'assistant'
-                                      ? () {
-                                          // TODO: Implement regenerate
-                                        }
-                                      : null,
-                                  onResend: message.role == 'user'
-                                      ? () {
-                                          _sendMessage(_parseInputFromRaw(message.content));
-                                        }
-                                      : null,
+                                  onRegenerate: message.role == 'assistant' ? () { _regenerateAtMessage(message); } : null,
+                                  onResend: message.role == 'user' ? () { _regenerateAtMessage(message); } : null,
                                   onTranslate: message.role == 'assistant'
                                       ? () {
                                           _translateMessage(message);
