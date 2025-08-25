@@ -75,13 +75,18 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
               },
             ));
           },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image(
-              image: provider,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stack) => const Icon(Icons.broken_image),
-            ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image(
+                  image: provider,
+                  width: constraints.maxWidth,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stack) => const Icon(Icons.broken_image),
+                ),
+              );
+            },
           ),
         );
       },
@@ -204,6 +209,7 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
       },
       // Inline `code` styling via highlightBuilder in gpt_markdown
       highlightBuilder: (ctx, inline, style) {
+        String softened = _softBreakInline(inline);
         final bg = isDark ? Colors.white12 : const Color(0xFFF1F3F5);
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -213,12 +219,14 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
             border: Border.all(color: cs.outlineVariant.withOpacity(0.22)),
           ),
           child: Text(
-            inline,
+            softened,
             style: const TextStyle(
               fontFamily: 'monospace',
               fontSize: 13,
               height: 1.3,
             ).copyWith(color: Theme.of(context).colorScheme.onSurface),
+            softWrap: true,
+            overflow: TextOverflow.visible,
           ),
         );
       },
@@ -393,6 +401,17 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
     out = out.replaceAllMapped(inlineClosing, (m) => "${m[1]}\n```");
 
     return out;
+  }
+
+  static String _softBreakInline(String input) {
+    // Insert zero-width break for inline code segments with long tokens.
+    if (input.length < 60) return input;
+    final buf = StringBuffer();
+    for (int i = 0; i < input.length; i++) {
+      buf.write(input[i]);
+      if ((i + 1) % 24 == 0) buf.write('\u200B');
+    }
+    return buf.toString();
   }
 
   Future<void> _handleLinkTap(BuildContext context, String url) async {

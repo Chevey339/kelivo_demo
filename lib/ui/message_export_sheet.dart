@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -57,97 +59,287 @@ _Parsed _parseContent(String raw) {
   return _Parsed(buffer.toString().trim(), images, docs);
 }
 
+String _softBreakMd(String input) {
+  // Insert zero-width break in very long tokens outside fenced code blocks.
+  final lines = input.split('\n');
+  final out = StringBuffer();
+  bool inFence = false;
+  for (final line in lines) {
+    String l = line;
+    final trimmed = l.trimLeft();
+    if (trimmed.startsWith('```')) {
+      inFence = !inFence; // toggle on fence lines
+      out.writeln(l);
+      continue;
+    }
+    if (!inFence) {
+      l = l.replaceAllMapped(RegExp(r'(\S{60,})'), (m) {
+        final s = m.group(1)!;
+        final buf = StringBuffer();
+        for (int i = 0; i < s.length; i++) {
+          buf.write(s[i]);
+          if ((i + 1) % 20 == 0) buf.write('\u200B');
+        }
+        return buf.toString();
+      });
+    }
+    out.writeln(l);
+  }
+  return out.toString();
+}
+
 Future<File?> _renderAndSaveMessageImage(BuildContext context, ChatMessage message) async {
+  final cs = Theme.of(context).colorScheme;
+  final settings = context.read<SettingsProvider>();
+  final zh = Localizations.localeOf(context).languageCode == 'zh';
+  final content = _ExportedMessageCard(
+    message: message,
+    title: context.read<ChatService>().getConversation(message.conversationId)?.title ?? (zh ? '新对话' : 'New Chat'),
+    cs: cs,
+    chatFontScale: settings.chatFontScale,
+  );
+  return _renderWidgetDirectly(context, content);
+}
+
+Future<File?> _renderAndSaveChatImage(BuildContext context, Conversation conversation, List<ChatMessage> messages) async {
+  final cs = Theme.of(context).colorScheme;
+  final settings = context.read<SettingsProvider>();
+  final zh = Localizations.localeOf(context).languageCode == 'zh';
+  final content = _ExportedChatImage(
+    conversationTitle: (conversation.title.trim().isNotEmpty) ? conversation.title : (zh ? '新对话' : 'New Chat'),
+    cs: cs,
+    chatFontScale: settings.chatFontScale,
+    messages: messages,
+  );
+  return _renderWidgetDirectly(context, content);
+}
+
+// New direct rendering approach without pagination
+Future<File?> _renderWidgetDirectly(
+  BuildContext context,
+  Widget content, {
+  double width = 900,
+  double pixelRatio = 3.0,
+}) async {
   final overlay = Overlay.of(context);
   if (overlay == null) return null;
-  final key = GlobalKey();
-  final entry = OverlayEntry(
-    builder: (ctx) {
-      final cs = Theme.of(ctx).colorScheme;
-      final settings = ctx.read<SettingsProvider>();
-      final zh = Localizations.localeOf(ctx).languageCode == 'zh';
-      return Material(
-        type: MaterialType.transparency,
-        child: Center(
-          child: RepaintBoundary(
-            key: key,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: _ExportedMessageCard(
-                message: message,
-                title: ctx.read<ChatService>().getConversation(message.conversationId)?.title ?? (zh ? '新对话' : 'New Chat'),
-                cs: cs,
-                chatFontScale: settings.chatFontScale,
-              ),
-            ),
+  
+  final boundaryKey = GlobalKey();
+  final completer = Completer<void>();
+  
+  late OverlayEntry entry;
+  entry = OverlayEntry(builder: (ctx) {
+    // Schedule the completion after multiple frames to ensure rendering
+    int frameCount = 0;
+    void scheduleCompletion() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        frameCount++;
+        if (frameCount < 3) {
+          // Wait for 3 frames to ensure complete rendering
+          scheduleCompletion();
+        } else if (!completer.isCompleted) {
+          completer.complete();
+        }
+      });
+    }
+    scheduleCompletion();
+    
+    return Positioned(
+      left: -10000, // Position far offscreen
+      top: -10000,
+      child: RepaintBoundary(
+        key: boundaryKey,
+        child: Container(
+          width: width,
+          color: Colors.transparent,
+          child: Material(
+            type: MaterialType.transparency,
+            child: content,
           ),
         ),
-      );
-    },
-  );
+      ),
+    );
+  });
+  
   overlay.insert(entry);
+  
   try {
-    await Future.delayed(const Duration(milliseconds: 40));
-    final boundary = key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    // Wait for the widget to be ready
+    await completer.future;
+    // Additional delay to ensure everything is painted
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    
+    final boundary = boundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
     if (boundary == null) return null;
-    final img = await boundary.toImage(pixelRatio: 3.0);
-    final data = await img.toByteData(format: ui.ImageByteFormat.png);
+    
+    // Try to capture the image with retries
+    ui.Image? image;
+    for (int retry = 0; retry < 10; retry++) {
+      try {
+        image = await boundary.toImage(pixelRatio: pixelRatio);
+        break;
+      } catch (e) {
+        if (retry == 9) {
+          print('Failed to capture image after 10 retries: $e');
+          return null;
+        }
+        // Wait before retrying
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+    }
+    
+    if (image == null) return null;
+    
+    // Convert to PNG
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
     if (data == null) return null;
-    final bytes = data.buffer.asUint8List();
+    
+    // Save to file
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/chat-export-${DateTime.now().millisecondsSinceEpoch}.png');
-    await file.writeAsBytes(bytes);
+    await file.writeAsBytes(data.buffer.asUint8List());
+    
     return file;
   } finally {
     entry.remove();
   }
 }
 
-Future<File?> _renderAndSaveChatImage(BuildContext context, Conversation conversation, List<ChatMessage> messages) async {
+// Keep the old paginated version for reference but renamed
+Future<File?> _renderAndSavePagedOld(
+  BuildContext context,
+  Widget content, {
+  double width = 900,
+  double pageHeight = 1600,
+  double pixelRatio = 3.0,
+}) async {
   final overlay = Overlay.of(context);
   if (overlay == null) return null;
-  final key = GlobalKey();
-  final entry = OverlayEntry(
-    builder: (ctx) {
-      final cs = Theme.of(ctx).colorScheme;
-      final settings = ctx.read<SettingsProvider>();
-      final zh = Localizations.localeOf(ctx).languageCode == 'zh';
-      return Material(
-        type: MaterialType.transparency,
-        child: Center(
-          child: RepaintBoundary(
-            key: key,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: _ExportedChatImage(
-                conversationTitle: (conversation.title.trim().isNotEmpty) ? conversation.title : (zh ? '新对话' : 'New Chat'),
-                cs: cs,
-                chatFontScale: settings.chatFontScale,
-                messages: messages,
+  final boundaryKey = GlobalKey();
+  final contentKey = GlobalKey();
+  final controller = ScrollController();
+  
+  // Create a completer to signal when the widget is ready
+  final completer = Completer<void>();
+  
+  late OverlayEntry entry;
+  entry = OverlayEntry(builder: (ctx) {
+    // Schedule a callback after the frame is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    });
+    
+    return Material(
+      type: MaterialType.transparency,
+      child: IgnorePointer(
+        ignoring: true,
+        child: Opacity(
+          opacity: 0.001,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: RepaintBoundary(
+              key: boundaryKey,
+              child: SizedBox(
+                width: width,
+                height: pageHeight,
+                child: SingleChildScrollView(
+                  controller: controller,
+                  child: KeyedSubtree(key: contentKey, child: content),
+                ),
               ),
             ),
           ),
         ),
-      );
-    },
-  );
+      ),
+    );
+  });
+  
   overlay.insert(entry);
+  
   try {
-    await Future.delayed(const Duration(milliseconds: 40));
-    final boundary = key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-    if (boundary == null) return null;
-    final img = await boundary.toImage(pixelRatio: 3.0);
+    // Wait for the initial frame to be ready
+    await completer.future;
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    
+    final contentSize = contentKey.currentContext?.size;
+    if (contentSize == null) return null;
+    
+    final totalHeight = contentSize.height;
+    final pages = (totalHeight / pageHeight).ceil().clamp(1, 200);
+    final images = <ui.Image>[];
+    final drawHeights = <int>[];
+    
+    for (int i = 0; i < pages; i++) {
+      final offset = i * pageHeight;
+      controller.jumpTo(offset);
+      
+      // Wait for the scroll to complete and the new content to render
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      
+      // Force a frame
+      SchedulerBinding.instance.scheduleFrameCallback((_) {});
+      await SchedulerBinding.instance.endOfFrame;
+      
+      final boundary = boundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) break;
+      
+      // Capture with retry logic
+      ui.Image? img;
+      for (int retry = 0; retry < 5; retry++) {
+        try {
+          img = await boundary.toImage(pixelRatio: pixelRatio);
+          break;
+        } catch (e) {
+          // Wait and retry
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+          SchedulerBinding.instance.scheduleFrameCallback((_) {});
+          await SchedulerBinding.instance.endOfFrame;
+        }
+      }
+      
+      if (img == null) continue;
+      
+      images.add(img);
+      final drawn = drawHeights.fold<int>(0, (a, b) => a + b);
+      final remaining = (totalHeight * pixelRatio).round() - drawn;
+      final h = remaining <= 0 ? 0 : math.min(img.height, remaining);
+      drawHeights.add(h);
+    }
+    
+    if (images.isEmpty) return null;
+    
+    final composedHeightPx = drawHeights.fold<int>(0, (a, b) => a + b);
+    final widthPx = (width * pixelRatio).round();
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    double y = 0;
+    
+    for (int i = 0; i < images.length; i++) {
+      final ui.Image page = images[i];
+      final int drawH = drawHeights[i];
+      if (drawH <= 0) break;
+      final src = Rect.fromLTWH(0, 0, page.width.toDouble(), drawH.toDouble());
+      final dst = Rect.fromLTWH(0, y, widthPx.toDouble(), drawH.toDouble());
+      canvas.drawImageRect(page, src, dst, Paint());
+      y += drawH.toDouble();
+    }
+    
+    final pic = recorder.endRecording();
+    final img = await pic.toImage(widthPx, composedHeightPx);
     final data = await img.toByteData(format: ui.ImageByteFormat.png);
     if (data == null) return null;
-    final bytes = data.buffer.asUint8List();
+    
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/chat-export-${DateTime.now().millisecondsSinceEpoch}.png');
-    await file.writeAsBytes(bytes);
+    await file.writeAsBytes(data.buffer.asUint8List());
     return file;
   } finally {
     entry.remove();
   }
 }
+
 
 Future<void> showMessageExportSheet(BuildContext context, ChatMessage message) async {
   final cs = Theme.of(context).colorScheme;
@@ -244,6 +436,12 @@ class _BatchExportSheetState extends State<_BatchExportSheet> {
     if (_exporting) return;
     setState(() => _exporting = true);
     try {
+      if (mounted) {
+        final zh = Localizations.localeOf(context).languageCode == 'zh';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(zh ? '正在导出…' : 'Exporting…')),
+        );
+      }
       final ctx = context;
       final conv = widget.conversation;
       final title = (conv.title.trim().isNotEmpty) ? conv.title : (Localizations.localeOf(ctx).languageCode == 'zh' ? '新对话' : 'New Chat');
@@ -313,6 +511,12 @@ class _BatchExportSheetState extends State<_BatchExportSheet> {
     if (_exporting) return;
     setState(() => _exporting = true);
     try {
+      if (mounted) {
+        final zh = Localizations.localeOf(context).languageCode == 'zh';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(zh ? '正在导出…' : 'Exporting…')),
+        );
+      }
       final file = await _renderAndSaveChatImage(context, widget.conversation, widget.messages);
       if (file == null) throw 'render error';
       final filename = file.uri.pathSegments.isNotEmpty ? file.uri.pathSegments.last : 'chat.png';
@@ -365,9 +569,8 @@ class _BatchExportSheetState extends State<_BatchExportSheet> {
                     title: zh ? 'Markdown' : 'Markdown',
                     subtitle: zh ? '将选中的消息导出为 Markdown 文件' : 'Export selected messages as a Markdown file',
                     onTap: _exporting ? null : () async {
-                      Navigator.of(context).maybePop();
-                      await Future.delayed(const Duration(milliseconds: 60));
                       await _onExportMarkdown();
+                      if (mounted) Navigator.of(context).maybePop();
                     },
                   ),
                   _ExportOptionTile(
@@ -375,9 +578,8 @@ class _BatchExportSheetState extends State<_BatchExportSheet> {
                     title: zh ? '导出为图片' : 'Export as Image',
                     subtitle: zh ? '将选中的消息渲染为 PNG 图片' : 'Render selected messages to a PNG image',
                     onTap: _exporting ? null : () async {
-                      Navigator.of(context).maybePop();
-                      await Future.delayed(const Duration(milliseconds: 60));
                       await _onExportImage();
+                      if (mounted) Navigator.of(context).maybePop();
                     },
                   ),
                 ],
@@ -501,6 +703,12 @@ class _ExportSheetState extends State<_ExportSheet> {
     if (_exporting) return;
     setState(() => _exporting = true);
     try {
+      if (mounted) {
+        final zh = Localizations.localeOf(context).languageCode == 'zh';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(zh ? '正在导出…' : 'Exporting…')),
+        );
+      }
       final file = await _renderAndSaveMessageImage(context, widget.message);
       if (file == null) throw 'render error';
       final filename = file.uri.pathSegments.isNotEmpty ? file.uri.pathSegments.last : 'chat.png';
@@ -553,9 +761,8 @@ class _ExportSheetState extends State<_ExportSheet> {
                     title: zh ? 'Markdown' : 'Markdown',
                     subtitle: zh ? '将该消息导出为 Markdown 文件' : 'Export this message as a Markdown file',
                     onTap: _exporting ? null : () async {
-                      Navigator.of(context).maybePop();
-                      await Future.delayed(const Duration(milliseconds: 60));
                       await _onExportMarkdown();
+                      if (mounted) Navigator.of(context).maybePop();
                     },
                   ),
                   _ExportOptionTile(
@@ -563,9 +770,8 @@ class _ExportSheetState extends State<_ExportSheet> {
                     title: zh ? '导出为图片' : 'Export as Image',
                     subtitle: zh ? '将该消息渲染为 PNG 图片' : 'Render this message to a PNG image',
                     onTap: _exporting ? null : () async {
-                      Navigator.of(context).maybePop();
-                      await Future.delayed(const Duration(milliseconds: 60));
                       await _onExportImage();
+                      if (mounted) Navigator.of(context).maybePop();
                     },
                   ),
                 ],
@@ -578,52 +784,6 @@ class _ExportSheetState extends State<_ExportSheet> {
   }
 
   // shared widgets and helpers moved to top-level
-
-  Future<File?> _renderAndSaveChatImage(BuildContext context, Conversation conversation, List<ChatMessage> messages) async {
-    final overlay = Overlay.of(context);
-    if (overlay == null) return null;
-    final key = GlobalKey();
-    final entry = OverlayEntry(
-      builder: (ctx) {
-        final cs = Theme.of(ctx).colorScheme;
-        final settings = ctx.read<SettingsProvider>();
-        final zh = Localizations.localeOf(ctx).languageCode == 'zh';
-        return Material(
-          type: MaterialType.transparency,
-          child: Center(
-            child: RepaintBoundary(
-              key: key,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 900),
-                child: _ExportedChatImage(
-                  conversationTitle: (conversation.title.trim().isNotEmpty) ? conversation.title : (zh ? '新对话' : 'New Chat'),
-                  cs: cs,
-                  chatFontScale: settings.chatFontScale,
-                  messages: messages,
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-    overlay.insert(entry);
-    try {
-      await Future.delayed(const Duration(milliseconds: 40));
-      final boundary = key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return null;
-      final img = await boundary.toImage(pixelRatio: 3.0);
-      final data = await img.toByteData(format: ui.ImageByteFormat.png);
-      if (data == null) return null;
-      final bytes = data.buffer.asUint8List();
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/chat-export-${DateTime.now().millisecondsSinceEpoch}.png');
-      await file.writeAsBytes(bytes);
-      return file;
-    } finally {
-      entry.remove();
-    }
-  }
 }
 
 class _ExportedMessageCard extends StatelessWidget {
@@ -650,13 +810,17 @@ class _ExportedMessageCard extends StatelessWidget {
 
     final parsed = _parseContent(message.content);
     final mdText = StringBuffer();
-    if (parsed.text.isNotEmpty) mdText.writeln(parsed.text);
+    if (parsed.text.isNotEmpty) mdText.writeln(_softBreakMd(parsed.text));
     for (final p in parsed.images) {
       mdText.writeln('\n![](${SandboxPathResolver.fix(p)})\n');
     }
     for (final d in parsed.docs) {
       mdText.writeln('\n- ${d.fileName}  `(${d.mime})`');
     }
+
+    final Widget contentWidget = (mdText.toString().trim().isNotEmpty)
+        ? MarkdownWithCodeHighlight(text: mdText.toString())
+        : Text('—', style: TextStyle(color: bubbleFg.withOpacity(0.5)));
 
     return MediaQuery(
       // Respect chat font scale for export rendering
@@ -700,27 +864,40 @@ class _ExportedMessageCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: bubbleBg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: cs.outlineVariant.withOpacity(0.30)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isAssistant ? (zh ? '助手' : 'Assistant') : (zh ? '用户' : 'User'),
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: bubbleFg.withOpacity(0.8)),
+            Align(
+              alignment: isAssistant ? Alignment.centerLeft : Alignment.centerRight,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 680),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: bubbleBg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: cs.outlineVariant.withOpacity(0.30)),
                   ),
-                  const SizedBox(height: 8),
-                  if (mdText.toString().trim().isNotEmpty)
-                    MarkdownWithCodeHighlight(text: mdText.toString()),
-                  if (mdText.toString().trim().isEmpty)
-                    Text('—', style: TextStyle(color: bubbleFg.withOpacity(0.5))),
-                ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            isAssistant ? (zh ? '助手' : 'Assistant') : (zh ? '用户' : 'User'),
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: bubbleFg.withOpacity(0.8)),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(time, style: TextStyle(fontSize: 12, color: bubbleFg.withOpacity(0.6))),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      contentWidget,
+                    ],
+                  ),
+                ),
               ),
+            ),
             ),
           ],
         ),
@@ -778,18 +955,19 @@ class _ExportedChatImage extends StatelessWidget {
       data: MediaQuery.of(context).copyWith(
         textScaleFactor: MediaQuery.of(context).textScaleFactor * chatFontScale,
       ),
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: cs.background,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: cs.outlineVariant.withOpacity(0.35)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
+      child: ClipRect(
+        child: Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cs.background,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: cs.outlineVariant.withOpacity(0.35)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
@@ -817,7 +995,8 @@ class _ExportedChatImage extends StatelessWidget {
               _ExportedBubble(message: m, cs: cs),
               const SizedBox(height: 8),
             ],
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -838,39 +1017,50 @@ class _ExportedBubble extends StatelessWidget {
     final time = DateFormat('yyyy-MM-dd HH:mm').format(message.timestamp);
     final parsed = _parseContent(message.content);
     final mdText = StringBuffer();
-    if (parsed.text.isNotEmpty) mdText.writeln(parsed.text);
+    if (parsed.text.isNotEmpty) mdText.writeln(_softBreakMd(parsed.text));
     for (final p in parsed.images) {
       mdText.writeln('\n![](${SandboxPathResolver.fix(p)})\n');
     }
     for (final d in parsed.docs) {
       mdText.writeln('\n- ${d.fileName}  `(${d.mime})`');
     }
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: bubbleBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.30)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                isAssistant ? (zh ? '助手' : 'Assistant') : (zh ? '用户' : 'User'),
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: bubbleFg.withOpacity(0.8)),
-              ),
-              const SizedBox(width: 8),
-              Text(time, style: TextStyle(fontSize: 12, color: bubbleFg.withOpacity(0.6))),
-            ],
+    final Widget contentWidget = (mdText.toString().trim().isNotEmpty)
+        ? MarkdownWithCodeHighlight(text: mdText.toString())
+        : Text('—', style: TextStyle(color: bubbleFg.withOpacity(0.5)));
+
+    return Align(
+      alignment: isAssistant ? Alignment.centerLeft : Alignment.centerRight,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 680),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: bubbleBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cs.outlineVariant.withOpacity(0.30)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      isAssistant ? (zh ? '助手' : 'Assistant') : (zh ? '用户' : 'User'),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: bubbleFg.withOpacity(0.8)),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(time, style: TextStyle(fontSize: 12, color: bubbleFg.withOpacity(0.6))),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                contentWidget,
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
-          if (mdText.toString().trim().isNotEmpty)
-            MarkdownWithCodeHighlight(text: mdText.toString())
-          else
-            Text('—', style: TextStyle(color: bubbleFg.withOpacity(0.5))),
-        ],
+        ),
       ),
     );
   }
