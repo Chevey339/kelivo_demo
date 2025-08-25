@@ -27,7 +27,7 @@ import '../models/conversation.dart';
 import 'model_select_sheet.dart';
 import 'language_select_sheet.dart';
 import 'message_more_sheet.dart';
-import 'message_edit_dialog.dart';
+import 'message_edit_page.dart';
 import 'mcp_assistant_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
@@ -1707,7 +1707,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                     await _chatService.deleteMessage(id);
                                   }
                                 } else if (action == MessageMoreAction.edit) {
-                                  final edited = await showEditMessageDialog(context, message);
+                                  final edited = await Navigator.of(context).push<String>(
+                                    MaterialPageRoute(builder: (_) => MessageEditPage(message: message)),
+                                  );
                                   if (edited != null) {
                                     final newMsg = await _chatService.appendMessageVersion(messageId: message.id, content: edited);
                                     if (!mounted) return;
