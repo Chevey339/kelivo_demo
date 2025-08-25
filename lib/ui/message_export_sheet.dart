@@ -16,6 +16,8 @@ import '../icons/lucide_adapter.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import '../providers/settings_provider.dart';
+import '../providers/user_provider.dart';
+import '../providers/assistant_provider.dart';
 import '../services/chat_service.dart';
 import '../utils/sandbox_path_resolver.dart';
 import '../widgets/markdown_with_highlight.dart';
@@ -27,6 +29,44 @@ String _guessImageMime(String path) {
   if (lower.endsWith('.gif')) return 'image/gif';
   if (lower.endsWith('.webp')) return 'image/webp';
   return 'image/png';
+}
+
+String? _modelDisplayName(BuildContext context, ChatMessage msg) {
+  if (msg.role != 'assistant') return null;
+  if (msg.providerId == null || msg.modelId == null) return null;
+  final settings = context.read<SettingsProvider>();
+  try {
+    final cfg = settings.getProviderConfig(msg.providerId!);
+    final ov = cfg.modelOverrides[msg.modelId!] as Map?;
+    if (ov != null) {
+      final name = (ov['name'] as String?)?.trim();
+      if (name != null && name.isNotEmpty) return name;
+    }
+    return msg.modelId!;
+  } catch (_) {
+    return msg.modelId!;
+  }
+}
+
+String _getRoleName(BuildContext context, ChatMessage msg) {
+  final zh = Localizations.localeOf(context).languageCode == 'zh';
+  if (msg.role == 'user') {
+    final userProvider = context.read<UserProvider>();
+    return userProvider.name;
+  } else if (msg.role == 'assistant') {
+    // Check if using assistant  
+    final assistant = context.read<AssistantProvider>().currentAssistant;
+    if (assistant != null && assistant.useAssistantAvatar == true && assistant.name.trim().isNotEmpty) {
+      return assistant.name.trim();
+    }
+    // Otherwise use model display name
+    final modelName = _modelDisplayName(context, msg);
+    if (modelName != null && modelName.isNotEmpty) {
+      return modelName;
+    }
+    return zh ? '助手' : 'Assistant';
+  }
+  return msg.role;
 }
 
 _Parsed _parseContent(String raw) {
@@ -415,23 +455,6 @@ class _BatchExportSheetState extends State<_BatchExportSheet> {
     return fmt.format(time);
   }
 
-  String? _modelDisplayName(BuildContext context, ChatMessage msg) {
-    if (msg.role != 'assistant') return null;
-    if (msg.providerId == null || msg.modelId == null) return null;
-    final settings = context.read<SettingsProvider>();
-    try {
-      final cfg = settings.getProviderConfig(msg.providerId!);
-      final ov = cfg.modelOverrides[msg.modelId!] as Map?;
-      if (ov != null) {
-        final name = (ov['name'] as String?)?.trim();
-        if (name != null && name.isNotEmpty) return name;
-      }
-      return msg.modelId!;
-    } catch (_) {
-      return msg.modelId!;
-    }
-  }
-
   Future<void> _onExportMarkdown() async {
     if (_exporting) return;
     setState(() => _exporting = true);
@@ -450,11 +473,7 @@ class _BatchExportSheetState extends State<_BatchExportSheet> {
       buf.writeln('');
       for (final msg in widget.messages) {
         final time = _formatTime(ctx, msg.timestamp);
-        final role = msg.role == 'assistant'
-            ? (Localizations.localeOf(ctx).languageCode == 'zh' ? '助手' : 'Assistant')
-            : (Localizations.localeOf(ctx).languageCode == 'zh' ? '用户' : 'User');
-        final model = _modelDisplayName(ctx, msg);
-        buf.writeln('> $time · $role${model != null ? ' · $model' : ''}');
+        buf.writeln('> $time · ${_getRoleName(ctx, msg)}');
         buf.writeln('');
         final parsed = _parseContent(msg.content);
         if (parsed.text.isNotEmpty) {
@@ -608,23 +627,6 @@ class _ExportSheetState extends State<_ExportSheet> {
     return fmt.format(time);
   }
 
-  String? _modelDisplayName(BuildContext context, ChatMessage msg) {
-    if (msg.role != 'assistant') return null;
-    if (msg.providerId == null || msg.modelId == null) return null;
-    final settings = context.read<SettingsProvider>();
-    try {
-      final cfg = settings.getProviderConfig(msg.providerId!);
-      final ov = cfg.modelOverrides[msg.modelId!] as Map?;
-      if (ov != null) {
-        final name = (ov['name'] as String?)?.trim();
-        if (name != null && name.isNotEmpty) return name;
-      }
-      return msg.modelId!;
-    } catch (_) {
-      return msg.modelId!;
-    }
-  }
-
   Future<void> _onExportMarkdown() async {
     if (_exporting) return;
     setState(() => _exporting = true);
@@ -635,17 +637,13 @@ class _ExportSheetState extends State<_ExportSheet> {
       final convo = service.getConversation(msg.conversationId);
       final title = (convo?.title ?? 'Chat');
       final time = _formatTime(ctx, msg.timestamp);
-      final role = msg.role == 'assistant'
-          ? (Localizations.localeOf(ctx).languageCode == 'zh' ? '助手' : 'Assistant')
-          : (Localizations.localeOf(ctx).languageCode == 'zh' ? '用户' : 'User');
-      final model = _modelDisplayName(ctx, msg);
 
       final parsed = _parseContent(msg.content);
 
       final buf = StringBuffer();
       buf.writeln('# $title');
       buf.writeln('');
-      buf.writeln('> $time · $role${model != null ? ' · $model' : ''}');
+      buf.writeln('> $time · ${_getRoleName(ctx, msg)}');
       buf.writeln('');
       if (parsed.text.isNotEmpty) {
         buf.writeln(parsed.text);
@@ -800,7 +798,6 @@ class _ExportedMessageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final zh = Localizations.localeOf(context).languageCode == 'zh';
     final isAssistant = message.role == 'assistant';
     final headerFg = cs.onSurface;
     final headerBg = cs.surface;
@@ -884,7 +881,7 @@ class _ExportedMessageCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            isAssistant ? (zh ? '助手' : 'Assistant') : (zh ? '用户' : 'User'),
+                            _getRoleName(context, message),
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: bubbleFg.withOpacity(0.8)),
                           ),
                           const SizedBox(width: 8),
@@ -950,7 +947,6 @@ class _ExportedChatImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final zh = Localizations.localeOf(context).languageCode == 'zh';
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(
         textScaleFactor: MediaQuery.of(context).textScaleFactor * chatFontScale,
@@ -1010,7 +1006,6 @@ class _ExportedBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final zh = Localizations.localeOf(context).languageCode == 'zh';
     final isAssistant = message.role == 'assistant';
     final bubbleBg = isAssistant ? cs.surfaceVariant.withOpacity(0.6) : cs.primary.withOpacity(0.08);
     final bubbleFg = cs.onSurface;
@@ -1048,7 +1043,7 @@ class _ExportedBubble extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      isAssistant ? (zh ? '助手' : 'Assistant') : (zh ? '用户' : 'User'),
+                      _getRoleName(context, message),
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: bubbleFg.withOpacity(0.8)),
                     ),
                     const SizedBox(width: 8),
