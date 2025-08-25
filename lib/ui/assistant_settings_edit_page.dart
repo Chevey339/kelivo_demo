@@ -1013,6 +1013,8 @@ class _PromptTab extends StatefulWidget {
 class _PromptTabState extends State<_PromptTab> {
   late final TextEditingController _sysCtrl;
   late final TextEditingController _tmplCtrl;
+  late final FocusNode _sysFocus;
+  late final FocusNode _tmplFocus;
 
   @override
   void initState() {
@@ -1021,6 +1023,8 @@ class _PromptTabState extends State<_PromptTab> {
     final a = ap.getById(widget.assistantId)!;
     _sysCtrl = TextEditingController(text: a.systemPrompt);
     _tmplCtrl = TextEditingController(text: a.messageTemplate);
+    _sysFocus = FocusNode(debugLabel: 'systemPromptFocus');
+    _tmplFocus = FocusNode(debugLabel: 'messageTemplateFocus');
   }
 
   @override
@@ -1038,7 +1042,22 @@ class _PromptTabState extends State<_PromptTab> {
   void dispose() {
     _sysCtrl.dispose();
     _tmplCtrl.dispose();
+    _sysFocus.dispose();
+    _tmplFocus.dispose();
     super.dispose();
+  }
+
+  void _insertAtCursor(TextEditingController controller, String toInsert) {
+    final text = controller.text;
+    final sel = controller.selection;
+    final start = (sel.start >= 0 && sel.start <= text.length) ? sel.start : text.length;
+    final end = (sel.end >= 0 && sel.end <= text.length && sel.end >= start) ? sel.end : start;
+    final nextText = text.replaceRange(start, end, toInsert);
+    controller.value = controller.value.copyWith(
+      text: nextText,
+      selection: TextSelection.collapsed(offset: start + toInsert.length),
+      composing: TextRange.empty,
+    );
   }
 
   @override
@@ -1130,6 +1149,7 @@ class _PromptTabState extends State<_PromptTab> {
             const SizedBox(height: 10),
             TextField(
               controller: _sysCtrl,
+              focusNode: _sysFocus,
               onChanged: (v) => context.read<AssistantProvider>().updateAssistant(a.copyWith(systemPrompt: v)),
               maxLines: 8,
               decoration: InputDecoration(
@@ -1158,11 +1178,10 @@ class _PromptTabState extends State<_PromptTab> {
                 (zh ? '用户昵称' : 'Nickname', '{nickname}'),
               ],
               onTapVar: (v) {
-                final current = _sysCtrl.text;
-                final next = (current + (current.isEmpty ? '' : ' ') + v).trim();
-                _sysCtrl.text = next;
-                _sysCtrl.selection = TextSelection.collapsed(offset: _sysCtrl.text.length);
-                context.read<AssistantProvider>().updateAssistant(a.copyWith(systemPrompt: next));
+                _insertAtCursor(_sysCtrl, v);
+                context.read<AssistantProvider>().updateAssistant(a.copyWith(systemPrompt: _sysCtrl.text));
+                // Restore focus to the input to keep cursor active
+                Future.microtask(() => _sysFocus.requestFocus());
               },
             ),
           ],
@@ -1186,6 +1205,7 @@ class _PromptTabState extends State<_PromptTab> {
             const SizedBox(height: 10),
             TextField(
               controller: _tmplCtrl,
+              focusNode: _tmplFocus,
               maxLines: 4,
               onChanged: (v) => context.read<AssistantProvider>().updateAssistant(a.copyWith(messageTemplate: v)),
               decoration: InputDecoration(
@@ -1206,11 +1226,10 @@ class _PromptTabState extends State<_PromptTab> {
                 (zh ? '日期' : 'Date', '{{ date }}'),
               ],
               onTapVar: (v) {
-                final current = _tmplCtrl.text;
-                final next = (current + (current.isEmpty ? '' : ' ') + v).trim();
-                _tmplCtrl.text = next;
-                _tmplCtrl.selection = TextSelection.collapsed(offset: _tmplCtrl.text.length);
-                context.read<AssistantProvider>().updateAssistant(a.copyWith(messageTemplate: next));
+                _insertAtCursor(_tmplCtrl, v);
+                context.read<AssistantProvider>().updateAssistant(a.copyWith(messageTemplate: _tmplCtrl.text));
+                // Restore focus to the input to keep cursor active
+                Future.microtask(() => _tmplFocus.requestFocus());
               },
             ),
 
