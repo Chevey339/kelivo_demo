@@ -1020,16 +1020,16 @@ class _ToolCallItem extends StatelessWidget {
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     switch (name) {
       case 'create_memory':
-        return zh ? (isResult ? '工具结果 · 创建记忆' : '调用工具 · 创建记忆') : (isResult ? 'Tool Result · Create Memory' : 'Tool Call · Create Memory');
+        return zh ? (isResult ? '调用工具 · 创建记忆' : '调用工具 · 创建记忆') : (isResult ? 'Tool Result · Create Memory' : 'Tool Call · Create Memory');
       case 'edit_memory':
-        return zh ? (isResult ? '工具结果 · 编辑记忆' : '调用工具 · 编辑记忆') : (isResult ? 'Tool Result · Edit Memory' : 'Tool Call · Edit Memory');
+        return zh ? (isResult ? '调用工具 · 编辑记忆' : '调用工具 · 编辑记忆') : (isResult ? 'Tool Result · Edit Memory' : 'Tool Call · Edit Memory');
       case 'delete_memory':
-        return zh ? (isResult ? '工具结果 · 删除记忆' : '调用工具 · 删除记忆') : (isResult ? 'Tool Result · Delete Memory' : 'Tool Call · Delete Memory');
+        return zh ? (isResult ? '调用工具 · 删除记忆' : '调用工具 · 删除记忆') : (isResult ? 'Tool Result · Delete Memory' : 'Tool Call · Delete Memory');
       case 'search_web':
         final q = (args['query'] ?? '').toString();
-        return zh ? (isResult ? '工具结果 · 联网检索: $q' : '调用工具 · 联网检索: $q') : (isResult ? 'Tool Result · Web Search: $q' : 'Tool Call · Web Search: $q');
+        return zh ? (isResult ? '调用工具 · 联网检索: $q' : '调用工具 · 联网检索: $q') : (isResult ? 'Tool Result · Web Search: $q' : 'Tool Call · Web Search: $q');
       default:
-        return zh ? (isResult ? '工具结果: $name' : '调用工具: $name') : (isResult ? 'Tool Result: $name' : 'Tool Call: $name');
+        return zh ? (isResult ? '调用工具: $name' : '调用工具: $name') : (isResult ? 'Tool Result: $name' : 'Tool Call: $name');
     }
   }
 
