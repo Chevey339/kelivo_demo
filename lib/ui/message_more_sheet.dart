@@ -168,7 +168,19 @@ class _MessageMoreSheetState extends State<_MessageMoreSheet> {
                         );
                       },
                     ),
-                    _actionItem(icon: Lucide.BookOpenText, label: zh ? '网页视图渲染' : 'Render Web View'),
+                    _actionItem(
+                      icon: Lucide.BookOpenText,
+                      label: zh ? '网页视图渲染' : 'Render Web View',
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(zh ? '暂未实现' : 'Not yet implemented'),
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                      },
+                    ),
                     _actionItem(
                       icon: Lucide.Pencil,
                       label: zh ? '编辑' : 'Edit',
