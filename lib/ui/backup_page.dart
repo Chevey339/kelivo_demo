@@ -454,42 +454,42 @@ class _RemoteListSheet extends StatelessWidget {
             Flexible(
               child: (items.isEmpty)
                   ? Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Text(zh ? '暂无备份' : 'No backups', style: TextStyle(color: cs.onSurface.withOpacity(0.6))),
-                    )
+                padding: const EdgeInsets.all(20),
+                child: Text(zh ? '暂无备份' : 'No backups', style: TextStyle(color: cs.onSurface.withOpacity(0.6))),
+              )
                   : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: items.length,
-                      itemBuilder: (ctx, i) {
-                        final it = items[i];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Material(
-                            color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF7F7F9),
-                            borderRadius: BorderRadius.circular(12),
-                            child: ListTile(
-                              title: Text(it.displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              subtitle: Text('${it.size} bytes'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Lucide.Import, size: 18),
-                                    tooltip: zh ? '恢复' : 'Restore',
-                                    onPressed: () => onRestore(it),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Lucide.Trash2, size: 18),
-                                    tooltip: zh ? '删除' : 'Delete',
-                                    onPressed: () => onDelete(it),
-                                  ),
-                                ],
-                              ),
+                shrinkWrap: true,
+                itemCount: items.length,
+                itemBuilder: (ctx, i) {
+                  final it = items[i];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Material(
+                      color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF7F7F9),
+                      borderRadius: BorderRadius.circular(12),
+                      child: ListTile(
+                        title: Text(it.displayName, maxLines: 3, overflow: TextOverflow.ellipsis),
+                        subtitle: Text('${it.size} bytes'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Lucide.Import, size: 18),
+                              tooltip: zh ? '恢复' : 'Restore',
+                              onPressed: () => onRestore(it),
                             ),
-                          ),
-                        );
-                      },
+                            IconButton(
+                              icon: const Icon(Lucide.Trash2, size: 18),
+                              tooltip: zh ? '删除' : 'Delete',
+                              onPressed: () => onDelete(it),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
+                  );
+                },
+              ),
             ),
           ],
         ),
