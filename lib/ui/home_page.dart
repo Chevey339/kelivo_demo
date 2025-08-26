@@ -32,6 +32,7 @@ import 'message_edit_page.dart';
 import 'message_export_sheet.dart';
 import 'mcp_assistant_sheet.dart';
 import 'reasoning_budget_sheet.dart';
+import 'search_settings_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
@@ -2261,6 +2262,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   supportsReasoning: (settings.currentModelProvider != null && settings.currentModelId != null)
                       ? _isReasoningModel(settings.currentModelProvider!, settings.currentModelId!)
                       : false,
+                  onOpenSearch: () => showSearchSettingsSheet(context),
                   onSend: (text) {
                     _sendMessage(text);
                     _inputController.clear();

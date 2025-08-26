@@ -25,6 +25,7 @@ class ChatInputBar extends StatefulWidget {
     this.onSelectModel,
     this.onOpenMcp,
     this.onToggleSearch,
+    this.onOpenSearch,
     this.onMore,
     this.onConfigureReasoning,
     this.moreOpen = false,
@@ -45,6 +46,7 @@ class ChatInputBar extends StatefulWidget {
   final VoidCallback? onSelectModel;
   final VoidCallback? onOpenMcp;
   final ValueChanged<bool>? onToggleSearch;
+  final VoidCallback? onOpenSearch;
   final VoidCallback? onMore;
   final VoidCallback? onConfigureReasoning;
   final bool moreOpen;
@@ -308,10 +310,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                           : 'Online Search',
                       icon: Lucide.Globe,
                       active: _searchEnabled,
-                      onTap: () {
-                        setState(() => _searchEnabled = !_searchEnabled);
-                        widget.onToggleSearch?.call(_searchEnabled);
-                      },
+                      onTap: widget.onOpenSearch,
                     ),
                     if (widget.supportsReasoning) ...[
                       const SizedBox(width: AppSpacing.xs),
