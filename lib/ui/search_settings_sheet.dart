@@ -157,7 +157,8 @@ class _SearchSettingsSheet extends StatelessWidget {
                       crossAxisCount: 2,
                       mainAxisSpacing: 10,
                       crossAxisSpacing: 10,
-                      childAspectRatio: 2.8,
+                      // Give tiles a bit more height to fit label + tag
+                      childAspectRatio: 2.7,
                     ),
                     itemCount: services.length,
                     itemBuilder: (ctx, i) {
