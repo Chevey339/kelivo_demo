@@ -273,7 +273,7 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
         return Container(
           width: double.infinity,
           margin: const EdgeInsets.symmetric(vertical: 6),
-          padding: const EdgeInsets.fromLTRB(10, 0, 6, 10),
+          padding: const EdgeInsets.fromLTRB(10, 6, 6, 10),
           decoration: BoxDecoration(
             color: isDark ? Colors.white10 : const Color(0xFFF7F7F9),
             borderRadius: BorderRadius.circular(10),
