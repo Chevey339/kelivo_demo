@@ -37,6 +37,7 @@ class ChatInputBar extends StatefulWidget {
     this.supportsReasoning = true,
     this.showMcpButton = false,
     this.mcpActive = false,
+    this.searchEnabled = false,
   });
 
   final ValueChanged<ChatInputData>? onSend;
@@ -56,6 +57,7 @@ class ChatInputBar extends StatefulWidget {
   final bool supportsReasoning;
   final bool showMcpButton;
   final bool mcpActive;
+  final bool searchEnabled;
 
   @override
   State<ChatInputBar> createState() => _ChatInputBarState();
@@ -97,6 +99,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
     super.initState();
     _controller = widget.controller ?? TextEditingController();
     widget.mediaController?._bind(this);
+    _searchEnabled = widget.searchEnabled;
   }
 
   @override
@@ -106,6 +109,14 @@ class _ChatInputBarState extends State<ChatInputBar> {
       _controller.dispose();
     }
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatInputBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.searchEnabled != widget.searchEnabled) {
+      _searchEnabled = widget.searchEnabled;
+    }
   }
 
   String _hint(BuildContext context) {

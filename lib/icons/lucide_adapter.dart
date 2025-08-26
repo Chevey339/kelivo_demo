@@ -20,7 +20,7 @@ class Lucide {
   static const IconData History = lucide.LucideIcons.history;
   static const IconData Settings = lucide.LucideIcons.settings;
   static const IconData Search = lucide.LucideIcons.search;
-  static const IconData Edit = lucide.LucideIcons.book;
+  static const IconData Edit = lucide.LucideIcons.pencil;
   static const IconData Pin = lucide.LucideIcons.pin;
   static const IconData PinOff = lucide.LucideIcons.pinOff;
   static const IconData Trash = lucide.LucideIcons.trash2;
@@ -79,4 +79,9 @@ class Lucide {
   static const IconData ChevronLeft = lucide.LucideIcons.chevronLeft;
   static const IconData MessageSquare = lucide.LucideIcons.messageSquare;
   static const IconData CircleStop = lucide.LucideIcons.circleStop;
+  static const IconData Link2 = lucide.LucideIcons.link2;
+  static const IconData Shield = lucide.LucideIcons.shield;
+  static const IconData Compass = lucide.LucideIcons.compass;
+  static const IconData ArrowDown = lucide.LucideIcons.arrowDown;
+  static const IconData Edit2 = lucide.LucideIcons.squarePen;
 }

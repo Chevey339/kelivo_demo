@@ -14,9 +14,14 @@ import '../ui/image_viewer_page.dart';
 
 /// gpt_markdown with custom code block highlight and inline code styling.
 class MarkdownWithCodeHighlight extends StatelessWidget {
-  const MarkdownWithCodeHighlight({super.key, required this.text});
+  const MarkdownWithCodeHighlight({
+    super.key,
+    required this.text,
+    this.onCitationTap,
+  });
 
   final String text;
+  final void Function(String id)? onCitationTap;
 
   @override
   Widget build(BuildContext context) {
@@ -91,10 +96,42 @@ class MarkdownWithCodeHighlight extends StatelessWidget {
         );
       },
       linkBuilder: (ctx, span, url, style) {
-        final text = span.toPlainText();
+        final label = span.toPlainText().trim();
+        // Special handling: [citation](index:id)
+        if (label.toLowerCase() == 'citation') {
+          final parts = url.split(':');
+          if (parts.length == 2) {
+            final indexText = parts[0].trim();
+            final id = parts[1].trim();
+            final cs = Theme.of(ctx).colorScheme;
+            return GestureDetector(
+              onTap: () {
+                if (onCitationTap != null && id.isNotEmpty) {
+                  onCitationTap!(id);
+                } else {
+                  // Fallback: do nothing
+                }
+              },
+              child: Container(
+                width: 20,
+                height: 20,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: cs.primary.withOpacity(0.20),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  indexText,
+                  style: const TextStyle(fontSize: 12, height: 1.0),
+                ),
+              ),
+            );
+          }
+        }
+        // Default link appearance
         final cs = Theme.of(ctx).colorScheme;
         return Text(
-          text,
+          span.toPlainText(),
           style: style.copyWith(
             color: cs.primary,
             decoration: TextDecoration.none,

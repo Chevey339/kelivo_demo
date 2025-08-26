@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+import '../models/search/search_service.dart';
+import '../providers/settings_provider.dart';
 import '../icons/lucide_adapter.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 class SearchServicesPage extends StatefulWidget {
   const SearchServicesPage({super.key});
@@ -10,327 +13,821 @@ class SearchServicesPage extends StatefulWidget {
 }
 
 class _SearchServicesPageState extends State<SearchServicesPage> {
-  final List<_SearchProviderEntry> _providers = <_SearchProviderEntry>[
-    _SearchProviderEntry(provider: 'Bing'),
-  ];
-  int _resultCount = 10;
+  bool _isEditing = false;
+  List<SearchServiceOptions> _services = [];
+  int _selectedIndex = 0;
 
-  static const List<String> _allProviders = <String>[
-    'Bing', '智谱', 'Tavily', 'Exa', 'SearXNG', 'LinkUp', 'Brave',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    final settings = context.read<SettingsProvider>();
+    _services = List.from(settings.searchServices);
+    _selectedIndex = settings.searchServiceSelected;
+  }
+
+  void _addService() {
+    showDialog(
+      context: context,
+      builder: (context) => _AddServiceDialog(
+        onAdd: (service) {
+          setState(() {
+            _services.add(service);
+          });
+          _saveChanges();
+        },
+      ),
+    );
+  }
+
+  void _editService(int index) {
+    final service = _services[index];
+    showDialog(
+      context: context,
+      builder: (context) => _EditServiceDialog(
+        service: service,
+        onSave: (updated) {
+          setState(() {
+            _services[index] = updated;
+          });
+          _saveChanges();
+        },
+      ),
+    );
+  }
+
+  void _deleteService(int index) {
+    if (_services.length <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('At least one search service is required')),
+      );
+      return;
+    }
+    
+    setState(() {
+      _services.removeAt(index);
+      if (_selectedIndex >= _services.length) {
+        _selectedIndex = _services.length - 1;
+      } else if (_selectedIndex > index) {
+        _selectedIndex--;
+      }
+    });
+    _saveChanges();
+  }
+
+  void _selectService(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+    _saveChanges();
+  }
+
+  void _saveChanges() {
+    final settings = context.read<SettingsProvider>();
+    context.read<SettingsProvider>().updateSettings(
+      settings.copyWith(
+        searchServices: _services,
+        searchServiceSelected: _selectedIndex,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
     final zh = Localizations.localeOf(context).languageCode == 'zh';
-
+    
     return Scaffold(
-      backgroundColor: cs.surface,
       appBar: AppBar(
         leading: IconButton(
           icon: Icon(Lucide.ArrowLeft, size: 22),
           onPressed: () => Navigator.of(context).maybePop(),
-          tooltip: zh ? '返回' : 'Back',
         ),
         title: Text(zh ? '搜索服务' : 'Search Services'),
         actions: [
           IconButton(
-            tooltip: zh ? '添加提供商' : 'Add Provider',
-            icon: Icon(Lucide.Plus, color: cs.onSurface),
+            icon: Icon(_isEditing ? Lucide.Check : Lucide.Edit),
             onPressed: () {
               setState(() {
-                _providers.add(_SearchProviderEntry(provider: 'Bing'));
+                _isEditing = !_isEditing;
               });
             },
           ),
-          const SizedBox(width: 6),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      body: Column(
         children: [
-          _sectionHeader(zh ? '搜索提供商' : 'Search Providers', cs),
-          const SizedBox(height: 8),
-          ..._providers.asMap().entries.map((e) {
-            final i = e.key;
-            final entry = e.value;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _buildProviderCard(context, cs, isDark, zh, i, entry),
-            );
-          }),
-          const SizedBox(height: 16),
-          _sectionHeader(zh ? '通用选项' : 'General Options', cs),
-          const SizedBox(height: 8),
-          _buildGeneralOptionsCard(context, cs, isDark, zh),
+          // Common Search Options
+          Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.cardColor,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  zh ? '搜索设置' : 'Search Settings',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildCommonOptions(),
+              ],
+            ),
+          ),
+          
+          // Service List
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _services.length,
+              itemBuilder: (context, index) {
+                return _buildServiceCard(index);
+              },
+            ),
+          ),
         ],
       ),
+      floatingActionButton: _isEditing
+          ? FloatingActionButton(
+              onPressed: _addService,
+              child: Icon(Lucide.Plus),
+            )
+          : null,
     );
   }
 
-  Widget _buildProviderCard(BuildContext context, ColorScheme cs, bool isDark, bool zh, int index, _SearchProviderEntry entry) {
-    final bg = isDark ? Colors.white10 : cs.primary.withOpacity(0.06);
-    final borderColor = cs.primary.withOpacity(0.35);
-    final allowDelete = _providers.length > 1;
-    final requiresKey = _requiresApiKey(entry.provider);
-    final desc = _providerTip(entry.provider, zh);
-
-    return Material(
-      color: cs.surface,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: borderColor),
-        ),
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+  Widget _buildCommonOptions() {
+    final settings = context.watch<SettingsProvider>();
+    final commonOptions = settings.searchCommonOptions;
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Provider picker
-            InkWell(
-              onTap: () => _pickProvider(index),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white12 : cs.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: cs.outlineVariant.withOpacity(0.4)),
+            Text(zh ? '最大结果数' : 'Max Results'),
+            Row(
+              children: [
+                IconButton(
+                  icon: Icon(Lucide.Minus),
+                  onPressed: commonOptions.resultSize > 1 ? () {
+                    context.read<SettingsProvider>().updateSettings(
+                      settings.copyWith(
+                        searchCommonOptions: SearchCommonOptions(
+                          resultSize: commonOptions.resultSize - 1,
+                          timeout: commonOptions.timeout,
+                        ),
+                      ),
+                    );
+                  } : null,
                 ),
-                child: Row(
+                Text('${commonOptions.resultSize}'),
+                IconButton(
+                  icon: Icon(Lucide.Plus),
+                  onPressed: commonOptions.resultSize < 20 ? () {
+                    context.read<SettingsProvider>().updateSettings(
+                      settings.copyWith(
+                        searchCommonOptions: SearchCommonOptions(
+                          resultSize: commonOptions.resultSize + 1,
+                          timeout: commonOptions.timeout,
+                        ),
+                      ),
+                    );
+                  } : null,
+                ),
+              ],
+            ),
+          ],
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(zh ? '超时时间（秒）' : 'Timeout (seconds)'),
+            Row(
+              children: [
+                IconButton(
+                  icon: Icon(Lucide.Minus),
+                  onPressed: commonOptions.timeout > 1000 ? () {
+                    context.read<SettingsProvider>().updateSettings(
+                      settings.copyWith(
+                        searchCommonOptions: SearchCommonOptions(
+                          resultSize: commonOptions.resultSize,
+                          timeout: commonOptions.timeout - 1000,
+                        ),
+                      ),
+                    );
+                  } : null,
+                ),
+                Text('${commonOptions.timeout ~/ 1000}'),
+                IconButton(
+                  icon: Icon(Lucide.Plus),
+                  onPressed: commonOptions.timeout < 30000 ? () {
+                    context.read<SettingsProvider>().updateSettings(
+                      settings.copyWith(
+                        searchCommonOptions: SearchCommonOptions(
+                          resultSize: commonOptions.resultSize,
+                          timeout: commonOptions.timeout + 1000,
+                        ),
+                      ),
+                    );
+                  } : null,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildServiceCard(int index) {
+    final service = _services[index];
+    final isSelected = index == _selectedIndex;
+    final theme = Theme.of(context);
+    final searchService = SearchService.getService(service);
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    
+    return GestureDetector(
+      onTap: () => _selectService(index),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+            width: 2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Service Icon
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  _getServiceIcon(service),
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 16),
+              
+              // Service Details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _BrandBadge(name: entry.provider, size: 22),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        entry.provider,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    Text(
+                      searchService.name,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Icon(Lucide.ChevronDown, size: 18, color: cs.onSurface.withOpacity(0.8)),
+                    const SizedBox(height: 4),
+                    searchService.description(context),
+                    if (_getServiceStatus(service) != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getServiceStatus(service) == (zh ? '已配置' : 'Configured')
+                              ? Colors.green.withOpacity(0.1)
+                              : Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          _getServiceStatus(service)!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _getServiceStatus(service) == (zh ? '已配置' : 'Configured')
+                                ? Colors.green
+                                : Colors.orange,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-            ),
-            if (desc != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                desc,
-                style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.65)),
-              ),
-            ],
-            if (requiresKey) ...[
-              const SizedBox(height: 10),
-              Text(zh ? 'API Key' : 'API Key', style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7))),
-              const SizedBox(height: 6),
-              TextField(
-                onChanged: (v) {
-                  setState(() {
-                    _providers[index] = entry.copyWith(apiKey: v);
-                  });
-                },
-                decoration: InputDecoration(
-                  hintText: zh ? '请输入 API Key' : 'Enter API Key',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.outlineVariant.withOpacity(0.35))),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.5))),
+              
+              // Actions
+              if (_isEditing) ...[
+                IconButton(
+                  icon: Icon(Lucide.Edit),
+                  onPressed: () => _editService(index),
                 ),
-              ),
-              const SizedBox(height: 6),
-              InkWell(
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(zh ? '打开获取 API Key 的链接（未实现）' : 'Open API Key link (not implemented)')),
-                  );
-                },
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                  child: Text(
-                    zh ? '点击获取 API Key' : 'Get API Key',
-                    style: TextStyle(color: cs.primary, fontSize: 12, fontWeight: FontWeight.w700),
-                  ),
+                IconButton(
+                  icon: Icon(Lucide.Trash2),
+                  onPressed: () => _deleteService(index),
                 ),
-              ),
+              ] else if (isSelected) ...[
+                Icon(
+                  Lucide.Check,
+                  color: theme.colorScheme.primary,
+                ),
+              ],
             ],
-            if (allowDelete) ...[
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  IconButton(
-                    tooltip: zh ? '删除' : 'Delete',
-                    icon: Icon(Lucide.Trash2, size: 18, color: cs.onSurface.withOpacity(0.8)),
-                    onPressed: () {
-                      setState(() { _providers.removeAt(index); });
-                    },
-                  ),
-                  const Spacer(),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGeneralOptionsCard(BuildContext context, ColorScheme cs, bool isDark, bool zh) {
-    final bg = isDark ? Colors.white10 : cs.primary.withOpacity(0.06);
-    final borderColor = cs.primary.withOpacity(0.35);
-    final controller = TextEditingController(text: _resultCount.toString());
-    return Material(
-      color: cs.surface,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: borderColor),
-        ),
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(zh ? '结果数量' : 'Result Count', style: const TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: controller,
-              keyboardType: TextInputType.number,
-              onChanged: (v) {
-                final n = int.tryParse(v.trim());
-                if (n != null) _resultCount = n;
-              },
-              decoration: InputDecoration(
-                hintText: '10',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.outlineVariant.withOpacity(0.35))),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.5))),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _sectionHeader(String text, ColorScheme cs) => Padding(
-        padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
-        child: Text(
-          text,
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.primary),
-        ),
-      );
-
-  Future<void> _pickProvider(int index) async {
-    final cs = Theme.of(context).colorScheme;
-    final zh = Localizations.localeOf(context).languageCode == 'zh';
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: cs.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (ctx) {
-        return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: _allProviders.map((p) {
-              return ListTile(
-                leading: _BrandBadge(name: p, size: 20),
-                title: Text(p),
-                onTap: () => Navigator.of(ctx).pop(p),
-              );
-            }).toList(),
           ),
-        );
-      },
+        ),
+      ),
     );
-    if (picked != null && picked.isNotEmpty) {
-      setState(() {
-        _providers[index] = _providers[index].copyWith(provider: picked);
-      });
-    }
   }
 
-  static bool _requiresApiKey(String provider) {
-    // Only Tavily explicitly required in spec; others may be added later
-    return provider == 'Tavily';
+  IconData _getServiceIcon(SearchServiceOptions service) {
+    if (service is BingLocalOptions) return Lucide.Search;
+    if (service is TavilyOptions) return Lucide.Sparkles;
+    if (service is ExaOptions) return Lucide.Brain;
+    if (service is ZhipuOptions) return Lucide.Languages;
+    if (service is SearXNGOptions) return Lucide.Shield;
+    if (service is LinkUpOptions) return Lucide.Link2;
+    if (service is BraveOptions) return Lucide.Shield;
+    if (service is MetasoOptions) return Lucide.Compass;
+    return Lucide.Search;
   }
 
-  static String? _providerTip(String provider, bool zh) {
-    if (provider == 'Bing') {
-      return zh
-          ? 'Bing 搜索基于爬虫，容易被风控拦截，不推荐使用'
-          : 'Bing relies on scraping and is often blocked by anti-bot measures; not recommended.';
-    }
+  String? _getServiceStatus(SearchServiceOptions service) {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    if (service is BingLocalOptions) return null;
+    if (service is TavilyOptions) return service.apiKey.isNotEmpty ? (zh ? '已配置' : 'Configured') : (zh ? '需要 API Key' : 'API Key Required');
+    if (service is ExaOptions) return service.apiKey.isNotEmpty ? (zh ? '已配置' : 'Configured') : (zh ? '需要 API Key' : 'API Key Required');
+    if (service is ZhipuOptions) return service.apiKey.isNotEmpty ? (zh ? '已配置' : 'Configured') : (zh ? '需要 API Key' : 'API Key Required');
+    if (service is SearXNGOptions) return service.url.isNotEmpty ? (zh ? '已配置' : 'Configured') : (zh ? '需要 URL' : 'URL Required');
+    if (service is LinkUpOptions) return service.apiKey.isNotEmpty ? (zh ? '已配置' : 'Configured') : (zh ? '需要 API Key' : 'API Key Required');
+    if (service is BraveOptions) return service.apiKey.isNotEmpty ? (zh ? '已配置' : 'Configured') : (zh ? '需要 API Key' : 'API Key Required');
+    if (service is MetasoOptions) return service.apiKey.isNotEmpty ? (zh ? '已配置' : 'Configured') : (zh ? '需要 API Key' : 'API Key Required');
     return null;
   }
 }
 
-class _BrandBadge extends StatelessWidget {
-  const _BrandBadge({required this.name, this.size = 20});
-  final String name;
-  final double size;
+// Add Service Dialog
+class _AddServiceDialog extends StatefulWidget {
+  final Function(SearchServiceOptions) onAdd;
+
+  const _AddServiceDialog({required this.onAdd});
+
+  @override
+  State<_AddServiceDialog> createState() => _AddServiceDialogState();
+}
+
+class _AddServiceDialogState extends State<_AddServiceDialog> {
+  String _selectedType = 'bing_local';
+  final _formKey = GlobalKey<FormState>();
+  final Map<String, TextEditingController> _controllers = {};
+
+  @override
+  void dispose() {
+    for (var controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final lower = name.toLowerCase();
-    String? asset;
-    // Map known search brands to assets/icons
-    final mapping = <RegExp, String>{
-      RegExp(r'bing'): 'bing.png',
-      RegExp(r'zhipu|glm|智谱'): 'zhipu-color.svg',
-      RegExp(r'tavily'): 'tavily.png',
-      RegExp(r'exa'): 'exa.png',
-      RegExp(r'linkup'): 'linkup.png',
-      RegExp(r'brave'): 'brave-color.svg',
-      // SearXNG has no dedicated asset; will fall back to letter
-    };
-    for (final e in mapping.entries) {
-      if (e.key.hasMatch(lower)) { asset = 'assets/icons/${e.value}'; break; }
-    }
-    if (asset != null) {
-      final bg = isDark ? Colors.white10 : cs.primary.withOpacity(0.1);
-      if (asset!.endsWith('.svg')) {
-        final isColorful = asset!.contains('color');
-        final ColorFilter? tint = (isDark && !isColorful) ? const ColorFilter.mode(Colors.white, BlendMode.srcIn) : null;
-        return Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-          alignment: Alignment.center,
-          child: SvgPicture.asset(asset!, width: size * 0.62, height: size * 0.62, colorFilter: tint),
-        );
-      } else {
-        return Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(color: isDark ? Colors.white10 : cs.primary.withOpacity(0.1), shape: BoxShape.circle),
-          alignment: Alignment.center,
-          child: Image.asset(asset!, width: size * 0.62, height: size * 0.62, fit: BoxFit.contain),
-        );
-      }
-    }
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(color: isDark ? Colors.white10 : cs.primary.withOpacity(0.1), shape: BoxShape.circle),
-      alignment: Alignment.center,
-      child: Text(name.isNotEmpty ? name.characters.first.toUpperCase() : '?', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: size * 0.42)),
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    
+    return AlertDialog(
+      title: Text(zh ? '添加搜索服务' : 'Add Search Service'),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: _selectedType,
+                decoration: InputDecoration(
+                  labelText: zh ? '服务类型' : 'Service Type',
+                  border: const OutlineInputBorder(),
+                ),
+                items: [
+                  DropdownMenuItem(value: 'bing_local', child: Text('Bing (${zh ? '本地' : 'Local'})')),
+                  const DropdownMenuItem(value: 'tavily', child: Text('Tavily')),
+                  const DropdownMenuItem(value: 'exa', child: Text('Exa')),
+                  DropdownMenuItem(value: 'zhipu', child: Text('Zhipu (${zh ? '智谱' : ''})')),
+                  const DropdownMenuItem(value: 'searxng', child: Text('SearXNG')),
+                  const DropdownMenuItem(value: 'linkup', child: Text('LinkUp')),
+                  const DropdownMenuItem(value: 'brave', child: Text('Brave Search')),
+                  DropdownMenuItem(value: 'metaso', child: Text('Metaso (${zh ? '秘塔' : ''})')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedType = value!;
+                    _controllers.clear();
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              ..._buildFieldsForType(_selectedType),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(zh ? '取消' : 'Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_formKey.currentState!.validate()) {
+              final service = _createService();
+              widget.onAdd(service);
+              Navigator.pop(context);
+            }
+          },
+          child: Text(zh ? '添加' : 'Add'),
+        ),
+      ],
     );
+  }
+
+  List<Widget> _buildFieldsForType(String type) {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    
+    switch (type) {
+      case 'bing_local':
+        return [];
+      case 'tavily':
+      case 'exa':
+      case 'zhipu':
+      case 'linkup':
+      case 'brave':
+      case 'metaso':
+        _controllers['apiKey'] ??= TextEditingController();
+        return [
+          TextFormField(
+            controller: _controllers['apiKey'],
+            decoration: const InputDecoration(
+              labelText: 'API Key',
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return zh ? 'API Key 必填' : 'API Key is required';
+              }
+              return null;
+            },
+          ),
+        ];
+      case 'searxng':
+        _controllers['url'] ??= TextEditingController();
+        _controllers['engines'] ??= TextEditingController();
+        _controllers['language'] ??= TextEditingController();
+        _controllers['username'] ??= TextEditingController();
+        _controllers['password'] ??= TextEditingController();
+        return [
+          TextFormField(
+            controller: _controllers['url'],
+            decoration: InputDecoration(
+              labelText: zh ? '实例 URL' : 'Instance URL',
+              border: const OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return zh ? 'URL 必填' : 'URL is required';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _controllers['engines'],
+            decoration: InputDecoration(
+              labelText: zh ? '搜索引擎（可选）' : 'Engines (optional)',
+              hintText: 'google,duckduckgo',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _controllers['language'],
+            decoration: InputDecoration(
+              labelText: zh ? '语言（可选）' : 'Language (optional)',
+              hintText: 'en-US',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _controllers['username'],
+            decoration: InputDecoration(
+              labelText: zh ? '用户名（可选）' : 'Username (optional)',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _controllers['password'],
+            obscureText: true,
+            decoration: InputDecoration(
+              labelText: zh ? '密码（可选）' : 'Password (optional)',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ];
+      default:
+        return [];
+    }
+  }
+
+  SearchServiceOptions _createService() {
+    final uuid = const Uuid();
+    final id = uuid.v4().substring(0, 8);
+    
+    switch (_selectedType) {
+      case 'bing_local':
+        return BingLocalOptions(id: id);
+      case 'tavily':
+        return TavilyOptions(
+          id: id,
+          apiKey: _controllers['apiKey']!.text,
+        );
+      case 'exa':
+        return ExaOptions(
+          id: id,
+          apiKey: _controllers['apiKey']!.text,
+        );
+      case 'zhipu':
+        return ZhipuOptions(
+          id: id,
+          apiKey: _controllers['apiKey']!.text,
+        );
+      case 'searxng':
+        return SearXNGOptions(
+          id: id,
+          url: _controllers['url']!.text,
+          engines: _controllers['engines']!.text,
+          language: _controllers['language']!.text,
+          username: _controllers['username']!.text,
+          password: _controllers['password']!.text,
+        );
+      case 'linkup':
+        return LinkUpOptions(
+          id: id,
+          apiKey: _controllers['apiKey']!.text,
+        );
+      case 'brave':
+        return BraveOptions(
+          id: id,
+          apiKey: _controllers['apiKey']!.text,
+        );
+      case 'metaso':
+        return MetasoOptions(
+          id: id,
+          apiKey: _controllers['apiKey']!.text,
+        );
+      default:
+        return BingLocalOptions(id: id);
+    }
   }
 }
 
-class _SearchProviderEntry {
-  final String provider;
-  final String? apiKey;
-  _SearchProviderEntry({required this.provider, this.apiKey});
-  _SearchProviderEntry copyWith({String? provider, String? apiKey}) => _SearchProviderEntry(
-        provider: provider ?? this.provider,
-        apiKey: apiKey ?? this.apiKey,
+// Edit Service Dialog
+class _EditServiceDialog extends StatefulWidget {
+  final SearchServiceOptions service;
+  final Function(SearchServiceOptions) onSave;
+
+  const _EditServiceDialog({
+    required this.service,
+    required this.onSave,
+  });
+
+  @override
+  State<_EditServiceDialog> createState() => _EditServiceDialogState();
+}
+
+class _EditServiceDialogState extends State<_EditServiceDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final Map<String, TextEditingController> _controllers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _initControllers();
+  }
+
+  void _initControllers() {
+    final service = widget.service;
+    if (service is TavilyOptions) {
+      _controllers['apiKey'] = TextEditingController(text: service.apiKey);
+    } else if (service is ExaOptions) {
+      _controllers['apiKey'] = TextEditingController(text: service.apiKey);
+    } else if (service is ZhipuOptions) {
+      _controllers['apiKey'] = TextEditingController(text: service.apiKey);
+    } else if (service is SearXNGOptions) {
+      _controllers['url'] = TextEditingController(text: service.url);
+      _controllers['engines'] = TextEditingController(text: service.engines);
+      _controllers['language'] = TextEditingController(text: service.language);
+      _controllers['username'] = TextEditingController(text: service.username);
+      _controllers['password'] = TextEditingController(text: service.password);
+    } else if (service is LinkUpOptions) {
+      _controllers['apiKey'] = TextEditingController(text: service.apiKey);
+    } else if (service is BraveOptions) {
+      _controllers['apiKey'] = TextEditingController(text: service.apiKey);
+    } else if (service is MetasoOptions) {
+      _controllers['apiKey'] = TextEditingController(text: service.apiKey);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (var controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final searchService = SearchService.getService(widget.service);
+    
+    return AlertDialog(
+      title: Text('${zh ? '编辑' : 'Edit'} ${searchService.name}'),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: _buildFields(),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(zh ? '取消' : 'Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_formKey.currentState!.validate()) {
+              final updated = _updateService();
+              widget.onSave(updated);
+              Navigator.pop(context);
+            }
+          },
+          child: Text(zh ? '保存' : 'Save'),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildFields() {
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final service = widget.service;
+    
+    if (service is BingLocalOptions) {
+      return [Text(zh ? 'Bing 本地搜索不需要配置。' : 'No configuration required for Bing Local search.')];
+    } else if (service is TavilyOptions || 
+               service is ExaOptions || 
+               service is ZhipuOptions ||
+               service is LinkUpOptions ||
+               service is BraveOptions ||
+               service is MetasoOptions) {
+      return [
+        TextFormField(
+          controller: _controllers['apiKey'],
+          decoration: const InputDecoration(
+            labelText: 'API Key',
+            border: OutlineInputBorder(),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return zh ? 'API Key 必填' : 'API Key is required';
+            }
+            return null;
+          },
+        ),
+      ];
+    } else if (service is SearXNGOptions) {
+      return [
+        TextFormField(
+          controller: _controllers['url'],
+          decoration: InputDecoration(
+            labelText: zh ? '实例 URL' : 'Instance URL',
+            border: const OutlineInputBorder(),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return zh ? 'URL 必填' : 'URL is required';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _controllers['engines'],
+          decoration: InputDecoration(
+            labelText: zh ? '搜索引擎（可选）' : 'Engines (optional)',
+            hintText: 'google,duckduckgo',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _controllers['language'],
+          decoration: InputDecoration(
+            labelText: zh ? '语言（可选）' : 'Language (optional)',
+            hintText: 'en-US',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _controllers['username'],
+          decoration: InputDecoration(
+            labelText: zh ? '用户名（可选）' : 'Username (optional)',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _controllers['password'],
+          obscureText: true,
+          decoration: InputDecoration(
+            labelText: zh ? '密码（可选）' : 'Password (optional)',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+      ];
+    }
+    
+    return [];
+  }
+
+  SearchServiceOptions _updateService() {
+    final service = widget.service;
+    
+    if (service is TavilyOptions) {
+      return TavilyOptions(
+        id: service.id,
+        apiKey: _controllers['apiKey']!.text,
       );
+    } else if (service is ExaOptions) {
+      return ExaOptions(
+        id: service.id,
+        apiKey: _controllers['apiKey']!.text,
+      );
+    } else if (service is ZhipuOptions) {
+      return ZhipuOptions(
+        id: service.id,
+        apiKey: _controllers['apiKey']!.text,
+      );
+    } else if (service is SearXNGOptions) {
+      return SearXNGOptions(
+        id: service.id,
+        url: _controllers['url']!.text,
+        engines: _controllers['engines']!.text,
+        language: _controllers['language']!.text,
+        username: _controllers['username']!.text,
+        password: _controllers['password']!.text,
+      );
+    } else if (service is LinkUpOptions) {
+      return LinkUpOptions(
+        id: service.id,
+        apiKey: _controllers['apiKey']!.text,
+      );
+    } else if (service is BraveOptions) {
+      return BraveOptions(
+        id: service.id,
+        apiKey: _controllers['apiKey']!.text,
+      );
+    } else if (service is MetasoOptions) {
+      return MetasoOptions(
+        id: service.id,
+        apiKey: _controllers['apiKey']!.text,
+      );
+    }
+    
+    return service;
+  }
 }

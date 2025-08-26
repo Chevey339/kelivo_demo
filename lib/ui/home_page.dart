@@ -31,6 +31,7 @@ import 'message_more_sheet.dart';
 import 'message_edit_page.dart';
 import 'message_export_sheet.dart';
 import 'mcp_assistant_sheet.dart';
+import 'reasoning_budget_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
@@ -38,7 +39,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'reasoning_budget_sheet.dart';
+import '../services/search_tool_service.dart';
 
 
 class HomePage extends StatefulWidget {
@@ -650,6 +651,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       apiMessages.insert(0, {'role': 'system', 'content': sys});
     }
 
+    // Optionally inject search tool usage guide (when search is enabled)
+    if (settings.searchEnabled) {
+      final prompt = SearchToolService.getSystemPrompt();
+      if (apiMessages.isNotEmpty && apiMessages.first['role'] == 'system') {
+        apiMessages[0]['content'] = ((apiMessages[0]['content'] ?? '') as String) + '\n\n' + prompt;
+      } else {
+        apiMessages.insert(0, {'role': 'system', 'content': prompt});
+      }
+    }
+
     // Limit context length according to assistant settings
     if ((assistant?.contextMessageSize ?? 0) > 0) {
       final keep = assistant!.contextMessageSize.clamp(1, 512).toInt();
@@ -676,14 +687,21 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     TokenUsage? usage;
 
     try {
-      // Prepare MCP tools (if any selected for this conversation)
-      List<Map<String, dynamic>>? toolDefs;
+      // Prepare tools (Search tool + MCP tools)
+      final List<Map<String, dynamic>> toolDefs = <Map<String, dynamic>>[];
       Future<String> Function(String, Map<String, dynamic>)? onToolCall;
+
+      // Search tool
+      if (settings.searchEnabled) {
+        toolDefs.add(SearchToolService.getToolDefinition());
+      }
+
+      // MCP tools
       final mcp = context.read<McpProvider>();
       final toolSvc = context.read<McpToolService>();
       final tools = toolSvc.listAvailableToolsForAssistant(mcp, context.read<AssistantProvider>(), assistant?.id);
       if (tools.isNotEmpty) {
-        toolDefs = tools.map((t) {
+        toolDefs.addAll(tools.map((t) {
           final props = <String, dynamic>{
             for (final p in t.params) p.name: {'type': 'string'},
           };
@@ -700,8 +718,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               },
             }
           };
-        }).toList();
+        }));
+      }
+
+      if (toolDefs.isNotEmpty) {
         onToolCall = (name, args) async {
+          if (name == SearchToolService.toolName && settings.searchEnabled) {
+            final q = (args['query'] ?? '').toString();
+            return await SearchToolService.executeSearch(q, settings);
+          }
+          // Fallback to MCP tools
           final text = await toolSvc.callToolTextForAssistant(
             mcp,
             context.read<AssistantProvider>(),
@@ -722,7 +748,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         temperature: assistant?.temperature,
         topP: assistant?.topP,
         maxTokens: assistant?.maxTokens,
-        tools: toolDefs,
+        tools: toolDefs.isEmpty ? null : toolDefs,
         onToolCall: onToolCall,
       );
 
@@ -1306,6 +1332,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       final sys = PromptTransformer.replacePlaceholders(assistant.systemPrompt, vars);
       apiMessages.insert(0, {'role': 'system', 'content': sys});
     }
+    // Inject search tool usage guide when enabled
+    if (settings.searchEnabled) {
+      final prompt = SearchToolService.getSystemPrompt();
+      if (apiMessages.isNotEmpty && apiMessages.first['role'] == 'system') {
+        apiMessages[0]['content'] = ((apiMessages[0]['content'] ?? '') as String) + '\n\n' + prompt;
+      } else {
+        apiMessages.insert(0, {'role': 'system', 'content': prompt});
+      }
+    }
 
     // Limit context length
     if ((assistant?.contextMessageSize ?? 0) > 0) {
@@ -1321,15 +1356,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       }
     }
 
-    // Prepare MCP tools (if any)
-    List<Map<String, dynamic>>? toolDefs;
+    // Prepare tools (Search + MCP)
+    final List<Map<String, dynamic>> toolDefs = <Map<String, dynamic>>[];
     Future<String> Function(String, Map<String, dynamic>)? onToolCall;
     try {
+      if (settings.searchEnabled) {
+        toolDefs.add(SearchToolService.getToolDefinition());
+      }
       final mcp = context.read<McpProvider>();
       final toolSvc = context.read<McpToolService>();
       final tools = toolSvc.listAvailableToolsForAssistant(mcp, context.read<AssistantProvider>(), assistant?.id);
       if (tools.isNotEmpty) {
-        toolDefs = tools.map((t) {
+        toolDefs.addAll(tools.map((t) {
           final props = <String, dynamic>{for (final p in t.params) p.name: {'type': 'string'}};
           final required = [for (final p in t.params.where((e) => e.required)) p.name];
           return {
@@ -1340,8 +1378,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               'parameters': {'type': 'object', 'properties': props, 'required': required},
             }
           };
-        }).toList();
+        }));
+      }
+      if (toolDefs.isNotEmpty) {
         onToolCall = (name, args) async {
+          if (name == SearchToolService.toolName && settings.searchEnabled) {
+            final q = (args['query'] ?? '').toString();
+            return await SearchToolService.executeSearch(q, settings);
+          }
           final text = await toolSvc.callToolTextForAssistant(
             mcp,
             context.read<AssistantProvider>(),
@@ -1362,7 +1406,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       temperature: assistant?.temperature,
       topP: assistant?.topP,
       maxTokens: assistant?.maxTokens,
-      tools: toolDefs,
+      tools: toolDefs.isEmpty ? null : toolDefs,
       onToolCall: onToolCall,
     );
 
@@ -2178,6 +2222,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 child: ChatInputBar(
                   onMore: _toggleTools,
                   moreOpen: _toolsOpen,
+                  searchEnabled: context.watch<SettingsProvider>().searchEnabled,
+                  onToggleSearch: (enabled) {
+                    context.read<SettingsProvider>().setSearchEnabled(enabled);
+                  },
                   onSelectModel: () => showModelSelectSheet(context),
                   onOpenMcp: () {
                     final a = context.read<AssistantProvider>().currentAssistant;

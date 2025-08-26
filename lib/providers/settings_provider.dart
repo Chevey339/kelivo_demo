@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import '../models/search/search_service.dart';
 
 class SettingsProvider extends ChangeNotifier {
   static const String _providersOrderKey = 'providers_order_v1';
@@ -20,6 +21,10 @@ class SettingsProvider extends ChangeNotifier {
   static const String _displayChatFontScaleKey = 'display_chat_font_scale_v1';
   static const String _translateModelKey = 'translate_model_v1';
   static const String _translatePromptKey = 'translate_prompt_v1';
+  static const String _searchServicesKey = 'search_services_v1';
+  static const String _searchCommonKey = 'search_common_v1';
+  static const String _searchSelectedKey = 'search_selected_v1';
+  static const String _searchEnabledKey = 'search_enabled_v1';
 
   List<String> _providersOrder = const [];
   List<String> get providersOrder => _providersOrder;
@@ -37,6 +42,16 @@ class SettingsProvider extends ChangeNotifier {
     _providerConfigs[key] = cfg;
     return cfg;
   }
+
+  // Search service settings
+  List<SearchServiceOptions> _searchServices = [SearchServiceOptions.defaultOption];
+  List<SearchServiceOptions> get searchServices => List.unmodifiable(_searchServices);
+  SearchCommonOptions _searchCommonOptions = const SearchCommonOptions();
+  SearchCommonOptions get searchCommonOptions => _searchCommonOptions;
+  int _searchServiceSelected = 0;
+  int get searchServiceSelected => _searchServiceSelected;
+  bool _searchEnabled = false;
+  bool get searchEnabled => _searchEnabled;
 
   SettingsProvider() {
     _load();
@@ -111,6 +126,24 @@ class SettingsProvider extends ChangeNotifier {
     _autoCollapseThinking = prefs.getBool(_displayAutoCollapseThinkingKey) ?? true;
     _newChatOnLaunch = prefs.getBool(_displayNewChatOnLaunchKey) ?? true;
     _chatFontScale = prefs.getDouble(_displayChatFontScaleKey) ?? 1.0;
+    
+    // load search settings
+    final searchServicesStr = prefs.getString(_searchServicesKey);
+    if (searchServicesStr != null && searchServicesStr.isNotEmpty) {
+      try {
+        final list = jsonDecode(searchServicesStr) as List;
+        _searchServices = list.map((e) => SearchServiceOptions.fromJson(e as Map<String, dynamic>)).toList();
+      } catch (_) {}
+    }
+    final searchCommonStr = prefs.getString(_searchCommonKey);
+    if (searchCommonStr != null && searchCommonStr.isNotEmpty) {
+      try {
+        _searchCommonOptions = SearchCommonOptions.fromJson(jsonDecode(searchCommonStr) as Map<String, dynamic>);
+      } catch (_) {}
+    }
+    _searchServiceSelected = prefs.getInt(_searchSelectedKey) ?? 0;
+    _searchEnabled = prefs.getBool(_searchEnabledKey) ?? false;
+    
     notifyListeners();
   }
 
@@ -365,6 +398,89 @@ Please translate the <source_text> section:
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_displayChatFontScaleKey, _chatFontScale);
+  }
+
+  // Search service settings
+  Future<void> setSearchServices(List<SearchServiceOptions> services) async {
+    _searchServices = List.from(services);
+    if (_searchServiceSelected >= _searchServices.length) {
+      _searchServiceSelected = _searchServices.isNotEmpty ? _searchServices.length - 1 : 0;
+    }
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_searchServicesKey, jsonEncode(_searchServices.map((e) => e.toJson()).toList()));
+    await prefs.setInt(_searchSelectedKey, _searchServiceSelected);
+  }
+
+  Future<void> setSearchCommonOptions(SearchCommonOptions options) async {
+    _searchCommonOptions = options;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_searchCommonKey, jsonEncode(options.toJson()));
+  }
+
+  Future<void> setSearchServiceSelected(int index) async {
+    _searchServiceSelected = index.clamp(0, _searchServices.isNotEmpty ? _searchServices.length - 1 : 0);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_searchSelectedKey, _searchServiceSelected);
+  }
+
+  Future<void> setSearchEnabled(bool enabled) async {
+    _searchEnabled = enabled;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_searchEnabledKey, enabled);
+  }
+
+  // Combined update for settings
+  Future<void> updateSettings(SettingsProvider newSettings) async {
+    if (!listEquals(_searchServices, newSettings._searchServices)) {
+      await setSearchServices(newSettings._searchServices);
+    }
+    if (_searchCommonOptions != newSettings._searchCommonOptions) {
+      await setSearchCommonOptions(newSettings._searchCommonOptions);
+    }
+    if (_searchServiceSelected != newSettings._searchServiceSelected) {
+      await setSearchServiceSelected(newSettings._searchServiceSelected);
+    }
+    if (_searchEnabled != newSettings._searchEnabled) {
+      await setSearchEnabled(newSettings._searchEnabled);
+    }
+  }
+
+  SettingsProvider copyWith({
+    List<SearchServiceOptions>? searchServices,
+    SearchCommonOptions? searchCommonOptions,
+    int? searchServiceSelected,
+    bool? searchEnabled,
+  }) {
+    final copy = SettingsProvider();
+    copy._searchServices = searchServices ?? _searchServices;
+    copy._searchCommonOptions = searchCommonOptions ?? _searchCommonOptions;
+    copy._searchServiceSelected = searchServiceSelected ?? _searchServiceSelected;
+    copy._searchEnabled = searchEnabled ?? _searchEnabled;
+    // Copy other fields
+    copy._providersOrder = _providersOrder;
+    copy._themeMode = _themeMode;
+    copy._providerConfigs = _providerConfigs;
+    copy._pinnedModels.addAll(_pinnedModels);
+    copy._currentModelProvider = _currentModelProvider;
+    copy._currentModelId = _currentModelId;
+    copy._titleModelProvider = _titleModelProvider;
+    copy._titleModelId = _titleModelId;
+    copy._titlePrompt = _titlePrompt;
+    copy._translateModelProvider = _translateModelProvider;
+    copy._translateModelId = _translateModelId;
+    copy._translatePrompt = _translatePrompt;
+    copy._thinkingBudget = _thinkingBudget;
+    copy._showUserAvatar = _showUserAvatar;
+    copy._showModelIcon = _showModelIcon;
+    copy._showTokenStats = _showTokenStats;
+    copy._autoCollapseThinking = _autoCollapseThinking;
+    copy._newChatOnLaunch = _newChatOnLaunch;
+    copy._chatFontScale = _chatFontScale;
+    return copy;
   }
 }
 

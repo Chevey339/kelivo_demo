@@ -18,6 +18,7 @@ import 'package:intl/intl.dart';
 import '../utils/sandbox_path_resolver.dart';
 import '../providers/tts_provider.dart';
 import 'markdown_with_highlight.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ChatMessageWidget extends StatefulWidget {
   final ChatMessage message;
@@ -647,7 +648,13 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
               children: [
                 MarkdownWithCodeHighlight(
                   text: widget.message.content,
+                  onCitationTap: (id) => _handleCitationTap(id),
                 ),
+                // Optional sources list derived from search_web tool result
+                if (_latestSearchItems().isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _SourcesList(items: _latestSearchItems()),
+                ],
                 if (widget.message.isStreaming)
                   Padding(
                     padding: const EdgeInsets.only(left: 4),
@@ -730,6 +737,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                                 padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
                                 child: MarkdownWithCodeHighlight(
                                   text: widget.message.translation!,
+                                  onCitationTap: (id) => _handleCitationTap(id),
                                 ),
                               ),
                           ],
@@ -800,6 +808,60 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
         ],
       ),
     );
+  }
+
+  // Try resolve citation id -> url from the latest search_web tool results of this assistant message
+  void _handleCitationTap(String id) async {
+    final items = _latestSearchItems();
+    final match = items.cast<Map<String, dynamic>?>().firstWhere(
+      (e) => (e?['id']?.toString() ?? '') == id,
+      orElse: () => null,
+    );
+    final url = match?['url']?.toString();
+    if (url == null || url.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('未找到引用来源')),
+        );
+      }
+      return;
+    }
+    try {
+      final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (!ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('无法打开链接: $url')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('打开链接失败')),
+        );
+      }
+    }
+  }
+
+  // Extract items from the last search_web tool result for this assistant message
+  List<Map<String, dynamic>> _latestSearchItems() {
+    final parts = widget.toolParts ?? const <ToolUIPart>[];
+    for (int i = parts.length - 1; i >= 0; i--) {
+      final p = parts[i];
+      if (p.toolName == 'search_web' && (p.content?.isNotEmpty ?? false)) {
+        try {
+          final obj = jsonDecode(p.content!) as Map<String, dynamic>;
+          final arr = obj['items'] as List? ?? const <dynamic>[];
+          return [
+            for (final it in arr)
+              if (it is Map)
+                it.cast<String, dynamic>()
+          ];
+        } catch (_) {
+          return const <Map<String, dynamic>>[];
+        }
+      }
+    }
+    return const <Map<String, dynamic>>[];
   }
 
   Widget _buildAssistantAvatar(ColorScheme cs) {
@@ -1030,7 +1092,7 @@ class _ToolCallItem extends StatelessWidget {
         return zh ? (isResult ? '调用工具 · 删除记忆' : '调用工具 · 删除记忆') : (isResult ? 'Tool Result · Delete Memory' : 'Tool Call · Delete Memory');
       case 'search_web':
         final q = (args['query'] ?? '').toString();
-        return zh ? (isResult ? '调用工具 · 联网检索: $q' : '调用工具 · 联网检索: $q') : (isResult ? 'Tool Result · Web Search: $q' : 'Tool Call · Web Search: $q');
+        return zh ? (isResult ? '联网检索: $q' : '联网检索: $q') : (isResult ? 'Web Search: $q' : 'Web Search: $q');
       default:
         return zh ? (isResult ? '调用工具: $name' : '调用工具: $name') : (isResult ? 'Tool Result: $name' : 'Tool Call: $name');
     }
@@ -1158,6 +1220,87 @@ class _ToolCallItem extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _SourcesList extends StatelessWidget {
+  const _SourcesList({required this.items});
+  final List<Map<String, dynamic>> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+      ),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              '引用 (${items.length})',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface.withOpacity(0.75)),
+            ),
+          ),
+          for (int i = 0; i < items.length; i++)
+            _SourceRow(index: (items[i]['index'] ?? (i + 1)).toString(), title: (items[i]['title'] ?? '').toString(), url: (items[i]['url'] ?? '').toString()),
+        ],
+      ),
+    );
+  }
+}
+
+class _SourceRow extends StatelessWidget {
+  const _SourceRow({required this.index, required this.title, required this.url});
+  final String index;
+  final String title;
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 18,
+            height: 18,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: cs.primary.withOpacity(0.20),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            margin: const EdgeInsets.only(top: 2),
+            child: Text(index, style: const TextStyle(fontSize: 11)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: InkWell(
+              onTap: () async {
+                try {
+                  await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                } catch (_) {}
+              },
+              child: Text(
+                title.isNotEmpty ? title : url,
+                style: TextStyle(color: cs.primary),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
