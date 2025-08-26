@@ -84,4 +84,5 @@ class Lucide {
   static const IconData Compass = lucide.LucideIcons.compass;
   static const IconData ArrowDown = lucide.LucideIcons.arrowDown;
   static const IconData Edit2 = lucide.LucideIcons.squarePen;
+  static const IconData BookOpen = lucide.LucideIcons.bookOpen;
 }

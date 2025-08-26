@@ -650,11 +650,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                   text: widget.message.content,
                   onCitationTap: (id) => _handleCitationTap(id),
                 ),
-                // Optional sources list derived from search_web tool result
-                if (_latestSearchItems().isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  _SourcesList(items: _latestSearchItems()),
-                ],
+                // Inline sources removed; show a summary card at bottom instead
                 if (widget.message.isStreaming)
                   Padding(
                     padding: const EdgeInsets.only(left: 4),
@@ -749,6 +745,14 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
               ],
             ),
           ),
+          // Sources summary card (tap to open full citations)
+          if (_latestSearchItems().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _SourcesSummaryCard(
+              count: _latestSearchItems().length,
+              onTap: () => _showCitationsSheet(_latestSearchItems()),
+            ),
+          ],
           // Action buttons
           const SizedBox(height: 8),
           Row(
@@ -862,6 +866,66 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
       }
     }
     return const <Map<String, dynamic>>[];
+  }
+
+  void _showCitationsSheet(List<Map<String, dynamic>> items) {
+    final cs = Theme.of(context).colorScheme;
+    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: cs.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+        return SafeArea(
+          child: FractionallySizedBox(
+            heightFactor: 0.72,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, bottomInset + 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Lucide.BookOpen, size: 18, color: cs.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isZh ? '引用（共${items.length}条）' : 'Citations (${items.length})',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (int i = 0; i < items.length; i++)
+                              _SourceRow(
+                                index: (items[i]['index'] ?? (i + 1)).toString(),
+                                title: (items[i]['title'] ?? '').toString(),
+                                url: (items[i]['url'] ?? '').toString(),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildAssistantAvatar(ColorScheme cs) {
@@ -1300,6 +1364,44 @@ class _SourceRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SourcesSummaryCard extends StatelessWidget {
+  const _SourcesSummaryCard({required this.count, required this.onTap});
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final label = isZh ? '共$count条引用' : 'Citations ($count)';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Ink(
+          decoration: BoxDecoration(
+            // Match deep thinking (reasoning) card background
+            color: cs.primaryContainer.withOpacity(
+              Theme.of(context).brightness == Brightness.dark ? 0.25 : 0.30,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Lucide.BookOpen, size: 16, color: cs.secondary),
+              const SizedBox(width: 8),
+              Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.secondary)),
+            ],
+          ),
+        ),
       ),
     );
   }
