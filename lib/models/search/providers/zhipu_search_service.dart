@@ -10,8 +10,8 @@ class ZhipuSearchService extends SearchService<ZhipuOptions> {
   @override
   Widget description(BuildContext context) {
     return const Text(
-      'Chinese AI search service by Zhipu AI. '
-      'Optimized for Chinese content and queries.',
+      '智谱AI旗下中文AI搜索服务。'
+      '针对中文内容和查询进行了优化。',
       style: TextStyle(fontSize: 12),
     );
   }

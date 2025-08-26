@@ -11,8 +11,8 @@ class BingSearchService extends SearchService<BingLocalOptions> {
   @override
   Widget description(BuildContext context) {
     return const Text(
-      'Uses web scraping to fetch Bing search results. '
-      'No API key required but may be less stable.',
+      '使用网络抓取工具获取必应搜索结果。'
+      '无需API密钥，但可能不够稳定。',
       style: TextStyle(fontSize: 12),
     );
   }

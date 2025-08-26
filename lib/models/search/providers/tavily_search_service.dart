@@ -10,8 +10,8 @@ class TavilySearchService extends SearchService<TavilyOptions> {
   @override
   Widget description(BuildContext context) {
     return const Text(
-      'AI-powered search API optimized for LLMs. '
-      'Provides high-quality, relevant search results.',
+      '为大型语言模型（LLMs）优化的AI搜索API。'
+      '提供高质量、相关的搜索结果。',
       style: TextStyle(fontSize: 12),
     );
   }
