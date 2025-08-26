@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../icons/lucide_adapter.dart';
+import '../providers/tts_provider.dart';
 
 class TtsServicesPage extends StatelessWidget {
   const TtsServicesPage({super.key});
@@ -34,27 +36,34 @@ class TtsServicesPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          _TtsServiceCard(
-            avatarText: '系',
-            title: zh ? '系统TTS' : 'System TTS',
-            subtitle: zh ? '系统TTS' : 'System TTS',
-            selected: true,
-            onTest: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(zh ? '测试播放暂未实现' : 'Test playback not implemented')),
-              );
-            },
-            onDelete: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(zh ? '系统 TTS 不可删除' : 'System TTS cannot be deleted')),
-              );
-            },
-            onConfig: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(zh ? '配置暂未实现' : 'Configure not implemented')),
-              );
-            },
-          ),
+          Consumer<TtsProvider>(builder: (context, tts, _) {
+            final available = tts.isAvailable && (tts.error == null);
+            return _TtsServiceCard(
+              avatarText: '系',
+              title: zh ? '系统TTS' : 'System TTS',
+              subtitle: available
+                  ? (zh ? '使用系统内置语音合成' : 'Use system built-in TTS')
+                  : (zh ? '不可用：${tts.error ?? '未初始化'}' : 'Unavailable: ${tts.error ?? 'not initialized'}'),
+              selected: true,
+              speaking: tts.isSpeaking,
+              onTest: available
+                  ? () async {
+                      if (!tts.isSpeaking) {
+                        final demo = zh ? '你好，这是一次测试语音。' : 'Hello, this is a test speech.';
+                        await tts.speak(demo);
+                      } else {
+                        await tts.stop();
+                      }
+                    }
+                  : null,
+              onDelete: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(zh ? '系统 TTS 不可删除' : 'System TTS cannot be deleted')),
+                );
+              },
+              onConfig: available ? () => _showSystemTtsConfig(context) : null,
+            );
+          }),
         ],
       ),
     );
@@ -67,6 +76,7 @@ class _TtsServiceCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.selected = false,
+    this.speaking = false,
     this.onConfig,
     this.onTest,
     this.onDelete,
@@ -76,6 +86,7 @@ class _TtsServiceCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool selected;
+  final bool speaking;
   final VoidCallback? onConfig;
   final VoidCallback? onTest;
   final VoidCallback? onDelete;
@@ -146,9 +157,11 @@ class _TtsServiceCard extends StatelessWidget {
                 if (selected) const _SelectedTagFancy() else const SizedBox.shrink(),
                 const Spacer(),
                 IconButton(
-                  tooltip: Localizations.localeOf(context).languageCode == 'zh' ? '测试语音' : 'Test voice',
+                  tooltip: Localizations.localeOf(context).languageCode == 'zh'
+                      ? (speaking ? '停止' : '测试语音')
+                      : (speaking ? 'Stop' : 'Test voice'),
                   onPressed: onTest,
-                  icon: Icon(Lucide.Volume2, size: 20, color: cs.onSurface),
+                  icon: Icon(speaking ? Lucide.CircleStop : Lucide.Volume2, size: 20, color: cs.onSurface),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
@@ -224,4 +237,158 @@ class _SelectedTagFancy extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> _showSystemTtsConfig(BuildContext context) async {
+  final cs = Theme.of(context).colorScheme;
+  final zh = Localizations.localeOf(context).languageCode == 'zh';
+  final tts = context.read<TtsProvider>();
+  double rate = tts.speechRate;
+  double pitch = tts.pitch;
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: false,
+    backgroundColor: cs.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (ctx) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Lucide.Settings, size: 18, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text(zh ? '系统 TTS 设置' : 'System TTS Settings', style: const TextStyle(fontWeight: FontWeight.w700)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Engine selector
+              FutureBuilder<List<String>>(
+                future: tts.listEngines(),
+                builder: (context, snap) {
+                  final engines = snap.data ?? const <String>[];
+                  final cur = tts.engineId ?? (engines.isNotEmpty ? engines.first : '');
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(zh ? '引擎' : 'Engine', style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7))),
+                    subtitle: Text(cur.isEmpty ? (zh ? '自动' : 'Auto') : cur, style: const TextStyle(fontSize: 13)),
+                    trailing: const Icon(Icons.keyboard_arrow_right),
+                    onTap: engines.isEmpty ? null : () async {
+                      final picked = await showModalBottomSheet<String>(
+                        context: context,
+                        backgroundColor: cs.surface,
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+                        builder: (ctx2) {
+                          return SafeArea(
+                            child: ListView(
+                              shrinkWrap: true,
+                              children: engines.map((e) => ListTile(
+                                title: Text(e),
+                                onTap: () => Navigator.of(ctx2).pop(e),
+                              )).toList(),
+                            ),
+                          );
+                        },
+                      );
+                      if (picked != null && picked.isNotEmpty) {
+                        await tts.setEngineId(picked);
+                        (ctx as Element).markNeedsBuild();
+                      }
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 4),
+              // Language selector
+              FutureBuilder<List<String>>(
+                future: tts.listLanguages(),
+                builder: (context, snap) {
+                  final langs = snap.data ?? const <String>[];
+                  final cur = tts.languageTag ?? (langs.contains('zh-CN') ? 'zh-CN' : (langs.contains('en-US') ? 'en-US' : (langs.isNotEmpty ? langs.first : '')));
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(zh ? '语言' : 'Language', style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7))),
+                    subtitle: Text(cur.isEmpty ? (zh ? '自动' : 'Auto') : cur, style: const TextStyle(fontSize: 13)),
+                    trailing: const Icon(Icons.keyboard_arrow_right),
+                    onTap: langs.isEmpty ? null : () async {
+                      final picked = await showModalBottomSheet<String>(
+                        context: context,
+                        backgroundColor: cs.surface,
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+                        builder: (ctx2) {
+                          return SafeArea(
+                            child: ListView(
+                              shrinkWrap: true,
+                              children: langs.map((e) => ListTile(
+                                title: Text(e),
+                                onTap: () => Navigator.of(ctx2).pop(e),
+                              )).toList(),
+                            ),
+                          );
+                        },
+                      );
+                      if (picked != null && picked.isNotEmpty) {
+                        await tts.setLanguageTag(picked);
+                        (ctx as Element).markNeedsBuild();
+                      }
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+              Text(zh ? '语速' : 'Speech rate', style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7))),
+              Slider(
+                value: rate,
+                min: 0.1,
+                max: 1.0,
+                onChanged: (v) {
+                  rate = v;
+                  // Rebuild this bottom sheet
+                  (ctx as Element).markNeedsBuild();
+                },
+                onChangeEnd: (v) async {
+                  await tts.setSpeechRate(v);
+                },
+              ),
+              const SizedBox(height: 4),
+              Text(zh ? '音调' : 'Pitch', style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7))),
+              Slider(
+                value: pitch,
+                min: 0.5,
+                max: 2.0,
+                onChanged: (v) {
+                  pitch = v;
+                  (ctx as Element).markNeedsBuild();
+                },
+                onChangeEnd: (v) async {
+                  await tts.setPitch(v);
+                },
+              ),
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    final demo = zh ? '设置已保存。' : 'Settings saved.';
+                    Navigator.of(ctx).maybePop();
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(demo)));
+                  },
+                  icon: Icon(Lucide.Check, size: 16),
+                  label: Text(zh ? '完成' : 'Done'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }

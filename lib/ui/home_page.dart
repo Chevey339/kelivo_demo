@@ -22,6 +22,7 @@ import '../services/mcp_tool_service.dart';
 import '../models/token_usage.dart';
 import '../providers/model_provider.dart';
 import '../providers/mcp_provider.dart';
+import '../providers/tts_provider.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import 'model_select_sheet.dart';
@@ -2009,6 +2010,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                   onTranslate: message.role == 'assistant'
                                       ? () {
                                           _translateMessage(message);
+                                        }
+                                      : null,
+                                  onSpeak: message.role == 'assistant'
+                                      ? () async {
+                                          final tts = context.read<TtsProvider>();
+                                          if (!tts.isSpeaking) {
+                                            await tts.speak(message.content);
+                                          } else {
+                                            await tts.stop();
+                                          }
                                         }
                                       : null,
                               onMore: () async {
