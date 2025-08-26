@@ -4,6 +4,7 @@ import '../providers/settings_provider.dart';
 import '../models/search/search_service.dart';
 import '../icons/lucide_adapter.dart';
 import 'search_services_page.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 Future<void> showSearchSettingsSheet(BuildContext context) async {
   await showModalBottomSheet(
@@ -163,7 +164,7 @@ class _SearchSettingsSheet extends StatelessWidget {
                       final s = services[i];
                       final status = _statusOf(ctx, s);
                       return _ServiceTileLarge(
-                        icon: _iconFor(s),
+                        leading: _BrandBadge.forService(s, size: 20),
                         label: _nameOf(context, s),
                         status: status,
                         selected: i == selected,
@@ -188,13 +189,13 @@ class _SearchSettingsSheet extends StatelessWidget {
 
 class _ServiceTileLarge extends StatelessWidget {
   const _ServiceTileLarge({
-    required this.icon,
+    this.leading,
     required this.label,
     required this.selected,
     this.status,
     required this.onTap,
   });
-  final IconData icon;
+  final Widget? leading;
   final String label;
   final bool selected;
   final String? status;
@@ -226,7 +227,8 @@ class _ServiceTileLarge extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(color: fg.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-                child: Icon(icon, size: 18, color: fg),
+                alignment: Alignment.center,
+                child: leading ?? Icon(Lucide.Search, size: 18, color: fg),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -250,6 +252,79 @@ class _ServiceTileLarge extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// Brand badge for known services using assets/icons; falls back to letter if unknown
+class _BrandBadge extends StatelessWidget {
+  const _BrandBadge({required this.name, this.size = 20});
+  final String name;
+  final double size;
+
+  static Widget forService(SearchServiceOptions s, {double size = 24}) {
+    final n = _nameForService(s);
+    return _BrandBadge(name: n, size: size);
+  }
+
+  static String _nameForService(SearchServiceOptions s) {
+    if (s is BingLocalOptions) return 'Bing';
+    if (s is TavilyOptions) return 'Tavily';
+    if (s is ExaOptions) return 'Exa';
+    if (s is ZhipuOptions) return '智谱';
+    if (s is SearXNGOptions) return 'SearXNG';
+    if (s is LinkUpOptions) return 'LinkUp';
+    if (s is BraveOptions) return 'Brave';
+    if (s is MetasoOptions) return 'Metaso';
+    return 'Search';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final lower = name.toLowerCase();
+    String? asset;
+    final mapping = <RegExp, String>{
+      RegExp(r'bing'): 'bing.png',
+      RegExp(r'zhipu|glm|智谱'): 'zhipu-color.svg',
+      RegExp(r'tavily'): 'tavily.png',
+      RegExp(r'exa'): 'exa.png',
+      RegExp(r'linkup'): 'linkup.png',
+      RegExp(r'brave'): 'brave-color.svg',
+      // SearXNG/Metaso fall back to letter
+    };
+    for (final e in mapping.entries) {
+      if (e.key.hasMatch(lower)) { asset = 'assets/icons/${e.value}'; break; }
+    }
+    final bg = isDark ? Colors.white10 : cs.primary.withOpacity(0.1);
+    if (asset != null) {
+      if (asset!.endsWith('.svg')) {
+        final isColorful = asset!.contains('color');
+        final ColorFilter? tint = (isDark && !isColorful) ? const ColorFilter.mode(Colors.white, BlendMode.srcIn) : null;
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+          alignment: Alignment.center,
+          child: SvgPicture.asset(asset!, width: size * 0.62, height: size * 0.62, colorFilter: tint),
+        );
+      } else {
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+          alignment: Alignment.center,
+          child: Image.asset(asset!, width: size * 0.62, height: size * 0.62, fit: BoxFit.contain),
+        );
+      }
+    }
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: Text(name.isNotEmpty ? name.characters.first.toUpperCase() : '?', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: size * 0.42)),
     );
   }
 }

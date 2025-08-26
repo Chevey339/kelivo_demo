@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:uuid/uuid.dart';
 import '../models/search/search_service.dart';
 import '../providers/settings_provider.dart';
@@ -94,90 +95,79 @@ class _SearchServicesPageState extends State<SearchServicesPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final zh = Localizations.localeOf(context).languageCode == 'zh';
-    
+
     return Scaffold(
+      backgroundColor: cs.surface,
       appBar: AppBar(
         leading: IconButton(
           icon: Icon(Lucide.ArrowLeft, size: 22),
           onPressed: () => Navigator.of(context).maybePop(),
+          tooltip: zh ? '返回' : 'Back',
         ),
         title: Text(zh ? '搜索服务' : 'Search Services'),
         actions: [
           IconButton(
-            icon: Icon(_isEditing ? Lucide.Check : Lucide.Edit),
-            onPressed: () {
-              setState(() {
-                _isEditing = !_isEditing;
-              });
-            },
+            tooltip: _isEditing ? (zh ? '完成' : 'Done') : (zh ? '编辑' : 'Edit'),
+            icon: Icon(_isEditing ? Lucide.Check : Lucide.Edit, color: cs.onSurface),
+            onPressed: () => setState(() => _isEditing = !_isEditing),
           ),
+          const SizedBox(width: 4),
+          IconButton(
+            tooltip: zh ? '添加提供商' : 'Add Provider',
+            icon: Icon(Lucide.Plus, color: cs.onSurface),
+            onPressed: _addService,
+          ),
+          const SizedBox(width: 6),
         ],
       ),
-      body: Column(
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          // Common Search Options
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: theme.cardColor,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+          _sectionHeader(zh ? '搜索提供商' : 'Search Providers', cs),
+          const SizedBox(height: 8),
+          for (int i = 0; i < _services.length; i++) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildProviderCard(context, i),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  zh ? '搜索设置' : 'Search Settings',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _buildCommonOptions(),
-              ],
-            ),
-          ),
-          
-          // Service List
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _services.length,
-              itemBuilder: (context, index) {
-                return _buildServiceCard(index);
-              },
-            ),
-          ),
+          ],
+          const SizedBox(height: 18),
+          _sectionHeader(zh ? '通用选项' : 'General Options', cs),
+          const SizedBox(height: 8),
+          _buildCommonOptionsCard(context),
         ],
       ),
-      floatingActionButton: _isEditing
-          ? FloatingActionButton(
-              onPressed: _addService,
-              child: Icon(Lucide.Plus),
-            )
-          : null,
     );
   }
 
-  Widget _buildCommonOptions() {
+  Widget _sectionHeader(String text, ColorScheme cs) => Padding(
+        padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+        child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.primary)),
+      );
+
+  Widget _buildCommonOptionsCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final settings = context.watch<SettingsProvider>();
     final commonOptions = settings.searchCommonOptions;
     final zh = Localizations.localeOf(context).languageCode == 'zh';
-    
-    return Column(
+    final bg = isDark ? Colors.white10 : cs.primary.withOpacity(0.06);
+    final border = cs.primary.withOpacity(0.35);
+
+    return Material(
+      color: cs.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(16), border: Border.all(color: border)),
+        padding: const EdgeInsets.all(14),
+        child: Column(
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(zh ? '最大结果数' : 'Max Results'),
+            Text(zh ? '最大结果数' : 'Max Results', style: const TextStyle(fontWeight: FontWeight.w700)),
             Row(
               children: [
                 IconButton(
@@ -211,10 +201,11 @@ class _SearchServicesPageState extends State<SearchServicesPage> {
             ),
           ],
         ),
+        const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(zh ? '超时时间（秒）' : 'Timeout (seconds)'),
+            Text(zh ? '超时时间（秒）' : 'Timeout (seconds)', style: const TextStyle(fontWeight: FontWeight.w700)),
             Row(
               children: [
                 IconButton(
@@ -249,111 +240,76 @@ class _SearchServicesPageState extends State<SearchServicesPage> {
           ],
         ),
       ],
+        ),
+      ),
     );
   }
 
-  Widget _buildServiceCard(int index) {
+  Widget _buildProviderCard(BuildContext context, int index) {
     final service = _services[index];
-    final isSelected = index == _selectedIndex;
+    final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final isSelected = index == _selectedIndex;
     final searchService = SearchService.getService(service);
     final zh = Localizations.localeOf(context).languageCode == 'zh';
-    
-    return GestureDetector(
-      onTap: () => _selectService(index),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: theme.cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? theme.colorScheme.primary : Colors.transparent,
-            width: 2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
+    final bg = isDark ? Colors.white10 : cs.primary.withOpacity(0.06);
+    final border = isSelected ? cs.primary : cs.primary.withOpacity(0.35);
+    final statusText = _getServiceStatus(service);
+    final configured = statusText == (zh ? '已配置' : 'Configured');
+    final Color statusBg = configured ? Colors.green.withOpacity(0.12) : Colors.orange.withOpacity(0.12);
+    final Color statusFg = configured ? Colors.green : Colors.orange;
+
+    return Material(
+      color: cs.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _selectService(index),
+        child: Container(
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(16), border: Border.all(color: border, width: isSelected ? 1.4 : 1)),
+          padding: const EdgeInsets.all(14),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Service Icon
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  _getServiceIcon(service),
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 16),
-              
-              // Service Details
+              _BrandBadge.forService(service, size: 36),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      searchService.name,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(searchService.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                        ),
+                        if (_isEditing) ...[
+                          IconButton(icon: Icon(Lucide.Edit, size: 18, color: cs.onSurface.withOpacity(0.9)), onPressed: () => _editService(index)),
+                          IconButton(
+                            icon: Icon(
+                              Lucide.Trash2,
+                              size: 18,
+                              color: (service is BingLocalOptions)
+                                  ? cs.onSurface.withOpacity(0.3)
+                                  : cs.onSurface.withOpacity(0.9),
+                            ),
+                            onPressed: (service is BingLocalOptions) ? null : () => _deleteService(index),
+                            tooltip: (service is BingLocalOptions)
+                                ? (zh ? '内置服务，无法删除' : 'Built-in, cannot delete')
+                                : null,
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 4),
-                    searchService.description(context),
-                    if (_getServiceStatus(service) != null) ...[
+                    DefaultTextStyle.merge(style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.8)), child: searchService.description(context)),
+                    if (statusText != null) ...[
                       const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _getServiceStatus(service) == (zh ? '已配置' : 'Configured')
-                              ? Colors.green.withOpacity(0.1)
-                              : Colors.orange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          _getServiceStatus(service)!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: _getServiceStatus(service) == (zh ? '已配置' : 'Configured')
-                                ? Colors.green
-                                : Colors.orange,
-                          ),
-                        ),
-                      ),
+                      Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(6)), child: Text(statusText, style: TextStyle(fontSize: 11, color: statusFg))),
                     ],
                   ],
                 ),
               ),
-              
-              // Actions
-              if (_isEditing) ...[
-                IconButton(
-                  icon: Icon(Lucide.Edit),
-                  onPressed: () => _editService(index),
-                ),
-                IconButton(
-                  icon: Icon(Lucide.Trash2),
-                  onPressed: () => _deleteService(index),
-                ),
-              ] else if (isSelected) ...[
-                Icon(
-                  Lucide.Check,
-                  color: theme.colorScheme.primary,
-                ),
-              ],
             ],
           ),
         ),
@@ -384,6 +340,82 @@ class _SearchServicesPageState extends State<SearchServicesPage> {
     if (service is BraveOptions) return service.apiKey.isNotEmpty ? (zh ? '已配置' : 'Configured') : (zh ? '需要 API Key' : 'API Key Required');
     if (service is MetasoOptions) return service.apiKey.isNotEmpty ? (zh ? '已配置' : 'Configured') : (zh ? '需要 API Key' : 'API Key Required');
     return null;
+  }
+
+  // Brand badge for known services using assets/icons; falls back to letter if unknown
+  // ignore: unused_element
+  Widget _brandBadgeForName(String name, {double size = 20}) => _BrandBadge(name: name, size: size);
+}
+
+class _BrandBadge extends StatelessWidget {
+  const _BrandBadge({required this.name, this.size = 20});
+  final String name;
+  final double size;
+
+  static Widget forService(SearchServiceOptions s, {double size = 24}) {
+    final n = _nameForService(s);
+    return _BrandBadge(name: n, size: size);
+  }
+
+  static String _nameForService(SearchServiceOptions s) {
+    if (s is BingLocalOptions) return 'Bing';
+    if (s is TavilyOptions) return 'Tavily';
+    if (s is ExaOptions) return 'Exa';
+    if (s is ZhipuOptions) return '智谱';
+    if (s is SearXNGOptions) return 'SearXNG';
+    if (s is LinkUpOptions) return 'LinkUp';
+    if (s is BraveOptions) return 'Brave';
+    if (s is MetasoOptions) return 'Metaso';
+    return 'Search';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final lower = name.toLowerCase();
+    String? asset;
+    final mapping = <RegExp, String>{
+      RegExp(r'bing'): 'bing.png',
+      RegExp(r'zhipu|glm|智谱'): 'zhipu-color.svg',
+      RegExp(r'tavily'): 'tavily.png',
+      RegExp(r'exa'): 'exa.png',
+      RegExp(r'linkup'): 'linkup.png',
+      RegExp(r'brave'): 'brave-color.svg',
+      // SearXNG/Metaso fall back to letter
+    };
+    for (final e in mapping.entries) {
+      if (e.key.hasMatch(lower)) { asset = 'assets/icons/${e.value}'; break; }
+    }
+    final bg = isDark ? Colors.white10 : cs.primary.withOpacity(0.1);
+    if (asset != null) {
+      if (asset!.endsWith('.svg')) {
+        final isColorful = asset!.contains('color');
+        final ColorFilter? tint = (isDark && !isColorful) ? const ColorFilter.mode(Colors.white, BlendMode.srcIn) : null;
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+          alignment: Alignment.center,
+          child: SvgPicture.asset(asset!, width: size * 0.62, height: size * 0.62, colorFilter: tint),
+        );
+      } else {
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+          alignment: Alignment.center,
+          child: Image.asset(asset!, width: size * 0.62, height: size * 0.62, fit: BoxFit.contain),
+        );
+      }
+    }
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: Text(name.isNotEmpty ? name.characters.first.toUpperCase() : '?', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: size * 0.42)),
+    );
   }
 }
 
