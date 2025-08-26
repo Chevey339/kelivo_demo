@@ -88,4 +88,5 @@ class Lucide {
   static const IconData Activity = lucide.LucideIcons.activity;
   static const IconData Export = lucide.LucideIcons.folderUp;
   static const IconData Import2 = lucide.LucideIcons.folderDown;
+  static const IconData RotateCw = lucide.LucideIcons.rotateCw;
 }

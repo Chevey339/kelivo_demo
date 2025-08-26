@@ -198,7 +198,7 @@ class SettingsPage extends StatelessWidget {
           SettingRow(
             icon: Lucide.Database,
             title: Localizations.localeOf(context).languageCode == 'zh' ? '数据备份' : 'Backup',
-            subtitle: Localizations.localeOf(context).languageCode == 'zh' ? 'WebDAV · 导入导出' : 'WebDAV · Import/Export',
+            // subtitle: Localizations.localeOf(context).languageCode == 'zh' ? 'WebDAV · 导入导出' : 'WebDAV · Import/Export',
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const BackupPage()),
