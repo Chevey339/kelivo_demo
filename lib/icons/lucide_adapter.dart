@@ -86,4 +86,6 @@ class Lucide {
   static const IconData Edit2 = lucide.LucideIcons.squarePen;
   static const IconData BookOpen = lucide.LucideIcons.bookOpen;
   static const IconData Activity = lucide.LucideIcons.activity;
+  static const IconData Export = lucide.LucideIcons.folderUp;
+  static const IconData Import2 = lucide.LucideIcons.folderDown;
 }

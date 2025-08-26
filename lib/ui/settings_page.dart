@@ -11,6 +11,7 @@ import 'assistant_settings_page.dart';
 import 'about_page.dart';
 import 'tts_services_page.dart';
 import 'search_services_page.dart';
+import 'backup_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -194,7 +195,16 @@ class SettingsPage extends StatelessWidget {
           ),
 
           header(Localizations.localeOf(context).languageCode == 'zh' ? '数据设置' : 'Data'),
-          SettingRow(icon: Lucide.Database, title: Localizations.localeOf(context).languageCode == 'zh' ? '数据备份' : 'Backup', onTap: () {}),
+          SettingRow(
+            icon: Lucide.Database,
+            title: Localizations.localeOf(context).languageCode == 'zh' ? '数据备份' : 'Backup',
+            subtitle: Localizations.localeOf(context).languageCode == 'zh' ? 'WebDAV · 导入导出' : 'WebDAV · Import/Export',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const BackupPage()),
+              );
+            },
+          ),
           SettingRow(
             icon: Lucide.HardDrive,
             title: Localizations.localeOf(context).languageCode == 'zh' ? '聊天记录存储' : 'Chat Storage',

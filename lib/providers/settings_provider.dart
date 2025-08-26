@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
 import '../models/search/search_service.dart';
+import '../models/backup.dart';
 
 class SettingsProvider extends ChangeNotifier {
   static const String _providersOrderKey = 'providers_order_v1';
@@ -26,6 +27,7 @@ class SettingsProvider extends ChangeNotifier {
   static const String _searchCommonKey = 'search_common_v1';
   static const String _searchSelectedKey = 'search_selected_v1';
   static const String _searchEnabledKey = 'search_enabled_v1';
+  static const String _webDavConfigKey = 'webdav_config_v1';
 
   List<String> _providersOrder = const [];
   List<String> get providersOrder => _providersOrder;
@@ -147,11 +149,26 @@ class SettingsProvider extends ChangeNotifier {
     }
     _searchServiceSelected = prefs.getInt(_searchSelectedKey) ?? 0;
     _searchEnabled = prefs.getBool(_searchEnabledKey) ?? false;
+    // webdav config
+    final webdavStr = prefs.getString(_webDavConfigKey);
+    if (webdavStr != null && webdavStr.isNotEmpty) {
+      try { _webDavConfig = WebDavConfig.fromJson(jsonDecode(webdavStr) as Map<String, dynamic>); } catch (_) {}
+    }
     
     // kick off a one-time connectivity test for services (exclude local Bing)
     _initSearchConnectivityTests();
 
     notifyListeners();
+  }
+
+  // ===== Backup & WebDAV settings =====
+  WebDavConfig _webDavConfig = const WebDavConfig();
+  WebDavConfig get webDavConfig => _webDavConfig;
+  Future<void> setWebDavConfig(WebDavConfig cfg) async {
+    _webDavConfig = cfg;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_webDavConfigKey, jsonEncode(cfg.toJson()));
   }
 
   Future<void> _initSearchConnectivityTests() async {

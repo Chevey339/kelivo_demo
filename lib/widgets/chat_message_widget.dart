@@ -882,7 +882,7 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
         final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
         return SafeArea(
           child: FractionallySizedBox(
-            heightFactor: 0.6,
+            heightFactor: 0.5,
             child: Padding(
               padding: EdgeInsets.fromLTRB(16, 16, 16, bottomInset + 16),
               child: Column(
