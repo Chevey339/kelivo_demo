@@ -286,17 +286,8 @@ class _SearchServicesPageState extends State<SearchServicesPage> {
                         if (_isEditing) ...[
                           IconButton(icon: Icon(Lucide.Edit, size: 18, color: cs.onSurface.withOpacity(0.9)), onPressed: () => _editService(index)),
                           IconButton(
-                            icon: Icon(
-                              Lucide.Trash2,
-                              size: 18,
-                              color: (service is BingLocalOptions)
-                                  ? cs.onSurface.withOpacity(0.3)
-                                  : cs.onSurface.withOpacity(0.9),
-                            ),
-                            onPressed: (service is BingLocalOptions) ? null : () => _deleteService(index),
-                            tooltip: (service is BingLocalOptions)
-                                ? (zh ? '内置服务，无法删除' : 'Built-in, cannot delete')
-                                : null,
+                            icon: Icon(Lucide.Trash2, size: 18, color: cs.onSurface.withOpacity(0.9)),
+                            onPressed: () => _deleteService(index),
                           ),
                         ],
                       ],
