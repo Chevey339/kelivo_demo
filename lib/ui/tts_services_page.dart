@@ -56,11 +56,7 @@ class TtsServicesPage extends StatelessWidget {
                       }
                     }
                   : null,
-              onDelete: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(zh ? '系统 TTS 不可删除' : 'System TTS cannot be deleted')),
-                );
-              },
+              onDelete: null,
               onConfig: available ? () => _showSystemTtsConfig(context) : null,
             );
           }),
@@ -151,10 +147,9 @@ class _TtsServiceCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            // Bottom row: selected tag on the left, actions on the right
+            // Bottom row: actions on the right
             Row(
               children: [
-                if (selected) const _SelectedTagFancy() else const SizedBox.shrink(),
                 const Spacer(),
                 IconButton(
                   tooltip: Localizations.localeOf(context).languageCode == 'zh'
@@ -167,7 +162,13 @@ class _TtsServiceCard extends StatelessWidget {
                 IconButton(
                   tooltip: Localizations.localeOf(context).languageCode == 'zh' ? '删除' : 'Delete',
                   onPressed: onDelete,
-                  icon: Icon(Lucide.Trash2, size: 20, color: cs.onSurface.withOpacity(0.9)),
+                  icon: Icon(
+                    Lucide.Trash2,
+                    size: 20,
+                    color: (onDelete == null)
+                        ? cs.onSurface.withOpacity(0.35)
+                        : cs.onSurface,
+                  ),
                 ),
               ],
             ),
@@ -206,38 +207,7 @@ class _CircleAvatar extends StatelessWidget {
   }
 }
 
-class _SelectedTagFancy extends StatelessWidget {
-  const _SelectedTagFancy();
-
-  @override
-  Widget build(BuildContext context) {
-    final zh = Localizations.localeOf(context).languageCode == 'zh';
-    const base = Color(0xFF22C55E);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? base.withOpacity(0.22) : base.withOpacity(0.14);
-    final border = isDark ? base.withOpacity(0.45) : base.withOpacity(0.28);
-    final fg = isDark ? const Color(0xFF34D399) : base;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Lucide.Check, size: 13, color: fg),
-          const SizedBox(width: 7),
-          Text(
-            zh ? '已选择' : 'Selected',
-            style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.1),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// Removed selected tag; background highlight indicates selection
 
 Future<void> _showSystemTtsConfig(BuildContext context) async {
   final cs = Theme.of(context).colorScheme;
