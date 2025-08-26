@@ -16,6 +16,7 @@ import '../theme/design_tokens.dart';
 import '../providers/user_provider.dart';
 import 'package:intl/intl.dart';
 import '../utils/sandbox_path_resolver.dart';
+import '../providers/tts_provider.dart';
 import 'markdown_with_highlight.dart';
 
 class ChatMessageWidget extends StatefulWidget {
@@ -762,12 +763,14 @@ class _ChatMessageWidgetState extends State<ChatMessageWidget> {
                 visualDensity: VisualDensity.compact,
                 iconSize: 16,
               ),
-              IconButton(
-                icon: Icon(Lucide.Volume2, size: 16),
-                onPressed: widget.onSpeak,
-                tooltip: '朗读',
-                visualDensity: VisualDensity.compact,
-                iconSize: 16,
+              Consumer<TtsProvider>(
+                builder: (context, tts, _) => IconButton(
+                  icon: Icon(tts.isSpeaking ? Lucide.CircleStop : Lucide.Volume2, size: 16),
+                  onPressed: widget.onSpeak,
+                  tooltip: tts.isSpeaking ? '停止' : '朗读',
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 16,
+                ),
               ),
               IconButton(
                 icon: Icon(Lucide.Languages, size: 16),
