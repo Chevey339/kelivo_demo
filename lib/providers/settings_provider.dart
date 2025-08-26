@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import 'dart:convert';
 import '../models/search/search_service.dart';
 
@@ -52,6 +53,9 @@ class SettingsProvider extends ChangeNotifier {
   int get searchServiceSelected => _searchServiceSelected;
   bool _searchEnabled = false;
   bool get searchEnabled => _searchEnabled;
+  // Ephemeral connection test results: serviceId -> connected (true), failed (false), or null (not tested)
+  final Map<String, bool?> _searchConnection = <String, bool?>{};
+  Map<String, bool?> get searchConnection => Map.unmodifiable(_searchConnection);
 
   SettingsProvider() {
     _load();
@@ -144,6 +148,38 @@ class SettingsProvider extends ChangeNotifier {
     _searchServiceSelected = prefs.getInt(_searchSelectedKey) ?? 0;
     _searchEnabled = prefs.getBool(_searchEnabledKey) ?? false;
     
+    // kick off a one-time connectivity test for services (exclude local Bing)
+    _initSearchConnectivityTests();
+
+    notifyListeners();
+  }
+
+  Future<void> _initSearchConnectivityTests() async {
+    final services = List<SearchServiceOptions>.from(_searchServices);
+    final common = _searchCommonOptions;
+    for (final s in services) {
+      if (s is BingLocalOptions) {
+        _searchConnection[s.id] = null; // no label for local Bing
+        continue;
+      }
+      // Run in background; don't await all
+      unawaited(_testSingleSearchService(s, common));
+    }
+  }
+
+  Future<void> _testSingleSearchService(SearchServiceOptions s, SearchCommonOptions common) async {
+    try {
+      final svc = SearchService.getService(s);
+      await svc.search(query: 'connectivity test', commonOptions: common, serviceOptions: s);
+      _searchConnection[s.id] = true;
+    } catch (_) {
+      _searchConnection[s.id] = false;
+    }
+    notifyListeners();
+  }
+
+  void setSearchConnection(String id, bool? value) {
+    _searchConnection[id] = value;
     notifyListeners();
   }
 

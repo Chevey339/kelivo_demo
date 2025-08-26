@@ -162,11 +162,28 @@ class _SearchSettingsSheet extends StatelessWidget {
                     itemCount: services.length,
                     itemBuilder: (ctx, i) {
                       final s = services[i];
-                      final status = _statusOf(ctx, s);
+                      // Build connection status label from app-start results
+                      final conn = settings.searchConnection[s.id];
+                      String status;
+                      Color statusBg;
+                      Color statusFg;
+                      if (conn == true) {
+                        status = zh ? '已连接' : 'Connected';
+                        statusBg = Colors.green.withOpacity(0.12);
+                        statusFg = Colors.green;
+                      } else if (conn == false) {
+                        status = zh ? '连接失败' : 'Failed';
+                        statusBg = Colors.orange.withOpacity(0.12);
+                        statusFg = Colors.orange;
+                      } else {
+                        status = zh ? '未测试' : 'Not tested';
+                        statusBg = cs.onSurface.withOpacity(0.06);
+                        statusFg = cs.onSurface.withOpacity(0.7);
+                      }
                       return _ServiceTileLarge(
                         leading: _BrandBadge.forService(s, size: 20),
                         label: _nameOf(context, s),
-                        status: status,
+                        status: (s is BingLocalOptions) ? null : _TileStatus(text: status, bg: statusBg, fg: statusFg),
                         selected: i == selected,
                         onTap: () => context.read<SettingsProvider>().setSearchServiceSelected(i),
                       );
@@ -198,7 +215,7 @@ class _ServiceTileLarge extends StatelessWidget {
   final Widget? leading;
   final String label;
   final bool selected;
-  final String? status;
+  final _TileStatus? status;
   final VoidCallback onTap;
 
   @override
@@ -208,9 +225,8 @@ class _ServiceTileLarge extends StatelessWidget {
     final bg = selected ? cs.primary.withOpacity(isDark ? 0.18 : 0.12) : (isDark ? Colors.white12 : const Color(0xFFF7F7F9));
     final fg = selected ? cs.primary : cs.onSurface.withOpacity(0.85);
     final border = selected ? Border.all(color: cs.primary, width: 1.2) : null;
-    final configured = (status != null) && (status!.contains('已配置') || status!.toLowerCase().contains('configured'));
-    final statusBg = configured ? Colors.green.withOpacity(0.12) : Colors.orange.withOpacity(0.12);
-    final statusFg = configured ? Colors.green : Colors.orange;
+    final statusBg = status?.bg ?? cs.onSurface.withOpacity(0.06);
+    final statusFg = status?.fg ?? cs.onSurface.withOpacity(0.7);
 
     return Material(
       color: bg,
@@ -237,12 +253,12 @@ class _ServiceTileLarge extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: fg)),
-                    if (status != null) ...[
+                    if ((status?.text ?? '').isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(6)),
-                        child: Text(status!, style: TextStyle(fontSize: 11, color: statusFg)),
+                        child: Text(status!.text, style: TextStyle(fontSize: 11, color: statusFg)),
                       ),
                     ],
                   ],
@@ -254,6 +270,13 @@ class _ServiceTileLarge extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TileStatus {
+  final String text;
+  final Color bg;
+  final Color fg;
+  const _TileStatus({required this.text, required this.bg, required this.fg});
 }
 
 // Brand badge for known services using assets/icons; falls back to letter if unknown

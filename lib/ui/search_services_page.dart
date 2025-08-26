@@ -17,6 +17,8 @@ class _SearchServicesPageState extends State<SearchServicesPage> {
   bool _isEditing = false;
   List<SearchServiceOptions> _services = [];
   int _selectedIndex = 0;
+  final Map<String, bool> _testing = <String, bool>{}; // serviceId -> testing
+  // Use SettingsProvider for connection results; keep only local testing spinner state
 
   @override
   void initState() {
@@ -24,6 +26,7 @@ class _SearchServicesPageState extends State<SearchServicesPage> {
     final settings = context.read<SettingsProvider>();
     _services = List.from(settings.searchServices);
     _selectedIndex = settings.searchServiceSelected;
+    // Do not auto test here; rely on app-start tests. Users can test manually.
   }
 
   void _addService() {
@@ -90,6 +93,36 @@ class _SearchServicesPageState extends State<SearchServicesPage> {
         searchServiceSelected: _selectedIndex,
       ),
     );
+  }
+
+  Future<void> _testConnection(int index) async {
+    if (index < 0 || index >= _services.length) return;
+    final s = _services[index];
+    final id = s.id;
+    setState(() {
+      _testing[id] = true;
+    });
+    try {
+      final svc = SearchService.getService(s);
+      final settings = context.read<SettingsProvider>();
+      // Use a tiny search to validate connectivity
+      final common = SearchCommonOptions(
+        resultSize: 1,
+        timeout: settings.searchCommonOptions.timeout,
+      );
+      await svc.search(
+        query: 'connectivity test',
+        commonOptions: common,
+        serviceOptions: s,
+      );
+      settings.setSearchConnection(id, true);
+    } catch (_) {
+      context.read<SettingsProvider>().setSearchConnection(id, false);
+    } finally {
+      setState(() {
+        _testing[id] = false;
+      });
+    }
   }
 
   @override
@@ -255,10 +288,29 @@ class _SearchServicesPageState extends State<SearchServicesPage> {
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     final bg = isDark ? Colors.white10 : cs.primary.withOpacity(0.06);
     final border = isSelected ? cs.primary : cs.primary.withOpacity(0.35);
-    final statusText = _getServiceStatus(service);
-    final configured = statusText == (zh ? '已配置' : 'Configured');
-    final Color statusBg = configured ? Colors.green.withOpacity(0.12) : Colors.orange.withOpacity(0.12);
-    final Color statusFg = configured ? Colors.green : Colors.orange;
+    // Connection status label (replaces previous "已配置/需要Key")
+    final testing = _testing[service.id] == true;
+    final conn = context.watch<SettingsProvider>().searchConnection[service.id];
+    String statusText;
+    Color statusBg;
+    Color statusFg;
+    if (testing) {
+      statusText = zh ? '测试中…' : 'Testing…';
+      statusBg = cs.primary.withOpacity(0.12);
+      statusFg = cs.primary;
+    } else if (conn == true) {
+      statusText = zh ? '已连接' : 'Connected';
+      statusBg = Colors.green.withOpacity(0.12);
+      statusFg = Colors.green;
+    } else if (conn == false) {
+      statusText = zh ? '连接失败' : 'Failed';
+      statusBg = Colors.orange.withOpacity(0.12);
+      statusFg = Colors.orange;
+    } else {
+      statusText = zh ? '未测试' : 'Not tested';
+      statusBg = cs.onSurface.withOpacity(0.06);
+      statusFg = cs.onSurface.withOpacity(0.7);
+    }
 
     return Material(
       color: cs.surface,
@@ -284,6 +336,24 @@ class _SearchServicesPageState extends State<SearchServicesPage> {
                           child: Text(searchService.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                         ),
                         if (_isEditing) ...[
+                          // Test connection button (omit for local Bing)
+                          if (service is! BingLocalOptions)
+                            (testing
+                                ? SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4),
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
+                                  )
+                                : IconButton(
+                                    tooltip: zh ? '测试连接' : 'Test Connection',
+                                    icon: Icon(Lucide.Activity, size: 18, color: cs.onSurface.withOpacity(0.9)),
+                                    onPressed: () => _testConnection(index),
+                                  ))
+                          else
+                            const SizedBox(width: 24, height: 24),
                           IconButton(icon: Icon(Lucide.Edit, size: 18, color: cs.onSurface.withOpacity(0.9)), onPressed: () => _editService(index)),
                           IconButton(
                             icon: Icon(Lucide.Trash2, size: 18, color: cs.onSurface.withOpacity(0.9)),
@@ -294,7 +364,7 @@ class _SearchServicesPageState extends State<SearchServicesPage> {
                     ),
                     const SizedBox(height: 4),
                     DefaultTextStyle.merge(style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.8)), child: searchService.description(context)),
-                    if (statusText != null) ...[
+                    if (service is! BingLocalOptions && statusText.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(6)), child: Text(statusText, style: TextStyle(fontSize: 11, color: statusFg))),
                     ],
