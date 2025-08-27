@@ -18,7 +18,7 @@ class LanguageOption {
 const List<LanguageOption> supportedLanguages = [
   LanguageOption(code: 'zh-CN', displayName: 'Simplified Chinese', displayNameZh: '简体中文', flag: '🇨🇳'),
   LanguageOption(code: 'en', displayName: 'English', displayNameZh: 'English', flag: '🇺🇸'),
-  LanguageOption(code: 'zh-TW', displayName: 'Traditional Chinese', displayNameZh: '繁體中文', flag: '🇹🇼'),
+  LanguageOption(code: 'zh-TW', displayName: 'Traditional Chinese', displayNameZh: '繁體中文', flag: '🇨🇳'),
   LanguageOption(code: 'ja', displayName: 'Japanese', displayNameZh: '日本語', flag: '🇯🇵'),
   LanguageOption(code: 'ko', displayName: 'Korean', displayNameZh: '한국어', flag: '🇰🇷'),
   LanguageOption(code: 'fr', displayName: 'French', displayNameZh: 'Français', flag: '🇫🇷'),

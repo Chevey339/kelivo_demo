@@ -1695,7 +1695,18 @@ class _McpTab extends StatelessWidget {
     final ap = context.watch<AssistantProvider>();
     final a = ap.getById(assistantId)!;
     final mcp = context.watch<McpProvider>();
-    final servers = mcp.servers.toList();
+    final servers = mcp.servers
+        .where((s) => mcp.statusFor(s.id) == McpStatus.connected)
+        .toList();
+
+    if (servers.isEmpty) {
+      return Center(
+        child: Text(
+          zh ? '暂无已启动的 MCP 服务器' : 'No running MCP servers',
+          style: TextStyle(color: cs.onSurface.withOpacity(0.6)),
+        ),
+      );
+    }
 
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
