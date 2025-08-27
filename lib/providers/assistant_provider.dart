@@ -37,6 +37,8 @@ class AssistantProvider extends ChangeNotifier {
         name: '示例助手',
         systemPrompt: '你是{model_name}, 一个人工智能助手，乐意为用户提供准确，有益的帮助。现在时间是{cur_datetime}，用户设备语言为"{locale}"，时区为{timezone}，用户正在使用{device_info}，版本{system_version}。如果用户没有明确说明，请使用用户设备语言和用户对话。',
         deletable: false,
+        temperature: 0.6,
+        topP: 1.0,
       ));
       await _persist();
     }
@@ -50,6 +52,8 @@ class AssistantProvider extends ChangeNotifier {
         systemPrompt: '',
         deletable: false,
         thinkingBudget: null,
+        temperature: 0.6,
+        topP: 1.0,
       );
 
   Future<void> _persist() async {
@@ -72,7 +76,12 @@ class AssistantProvider extends ChangeNotifier {
   }
 
   Future<String> addAssistant({String? name}) async {
-    final a = Assistant(id: const Uuid().v4(), name: (name ?? '新助手'));
+    final a = Assistant(
+      id: const Uuid().v4(),
+      name: (name ?? '新助手'),
+      temperature: 0.6,
+      topP: 1.0,
+    );
     _assistants.add(a);
     await _persist();
     notifyListeners();
