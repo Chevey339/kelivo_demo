@@ -59,8 +59,21 @@ class MyApp extends StatelessWidget {
           }
           return DynamicColorBuilder(
             builder: (lightDynamic, darkDynamic) {
+              // if (lightDynamic != null) {
+              //   debugPrint('[DynamicColor] Light dynamic detected. primary=${lightDynamic.primary.value.toRadixString(16)} surface=${lightDynamic.surface.value.toRadixString(16)}');
+              // } else {
+              //   debugPrint('[DynamicColor] Light dynamic not available');
+              // }
+              // if (darkDynamic != null) {
+              //   debugPrint('[DynamicColor] Dark dynamic detected. primary=${darkDynamic.primary.value.toRadixString(16)} surface=${darkDynamic.surface.value.toRadixString(16)}');
+              // } else {
+              //   debugPrint('[DynamicColor] Dark dynamic not available');
+              // }
               final light = buildLightTheme(lightDynamic);
               final dark = buildDarkTheme(darkDynamic);
+              // Log top-level colors likely used by widgets (card/bg/shadow approximations)
+              // debugPrint('[Theme/App] Light scaffoldBg=${light.colorScheme.surface.value.toRadixString(16)} card≈${light.colorScheme.surface.value.toRadixString(16)} shadow=${light.colorScheme.shadow.value.toRadixString(16)}');
+              // debugPrint('[Theme/App] Dark scaffoldBg=${dark.colorScheme.surface.value.toRadixString(16)} card≈${dark.colorScheme.surface.value.toRadixString(16)} shadow=${dark.colorScheme.shadow.value.toRadixString(16)}');
               return MaterialApp(
                 debugShowCheckedModeBanner: false,
                 title: 'Kelivo',
