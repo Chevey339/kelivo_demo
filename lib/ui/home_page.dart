@@ -76,6 +76,32 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   McpProvider? _mcpProvider;
   Set<String> _connectedMcpIds = <String>{};
 
+  // Deduplicate tool UI parts by id or by name+args when id is empty
+  List<ToolUIPart> _dedupeToolPartsList(List<ToolUIPart> parts) {
+    final seen = <String>{};
+    final out = <ToolUIPart>[];
+    for (final p in parts) {
+      final id = (p.id).trim();
+      final key = id.isNotEmpty ? 'id:$id' : 'name:${p.toolName}|args:${jsonEncode(p.arguments)}';
+      if (seen.add(key)) out.add(p);
+    }
+    return out;
+  }
+
+  // Deduplicate raw persisted tool events using same criteria
+  List<Map<String, dynamic>> _dedupeToolEvents(List<Map<String, dynamic>> events) {
+    final seen = <String>{};
+    final out = <Map<String, dynamic>>[];
+    for (final e in events) {
+      final id = (e['id']?.toString() ?? '').trim();
+      final name = (e['name']?.toString() ?? '');
+      final args = ((e['arguments'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{});
+      final key = id.isNotEmpty ? 'id:$id' : 'name:$name|args:${jsonEncode(args)}';
+      if (seen.add(key)) out.add(e.map((k, v) => MapEntry(k.toString(), v)));
+    }
+    return out;
+  }
+
   // Selection mode state for export/share
   bool _selecting = false;
   final Set<String> _selectedItems = <String>{}; // selected message ids (collapsed view)
@@ -349,7 +375,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 _reasoning[m.id] = rd;
               }
               // Restore tool events persisted for this assistant message
-              final events = _chatService.getToolEvents(m.id);
+              final events = _dedupeToolEvents(_chatService.getToolEvents(m.id));
               if (events.isNotEmpty) {
                 _toolParts[m.id] = events
                     .map((e) => ToolUIPart(
@@ -894,7 +920,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               existing.add(ToolUIPart(id: c.id, toolName: c.name, arguments: c.arguments, loading: true));
             }
             setState(() {
-              _toolParts[assistantMessage.id] = existing;
+              _toolParts[assistantMessage.id] = _dedupeToolPartsList(existing);
             });
 
             // Persist placeholders - append new events
@@ -910,7 +936,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     'content': null,
                   },
               ];
-              await _chatService.setToolEvents(assistantMessage.id, newEvents);
+              await _chatService.setToolEvents(assistantMessage.id, _dedupeToolEvents(newEvents));
             } catch (_) {}
           }
 
@@ -958,7 +984,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               } catch (_) {}
             }
             setState(() {
-              _toolParts[assistantMessage.id] = parts;
+              _toolParts[assistantMessage.id] = _dedupeToolPartsList(parts);
             });
             _scrollToBottomSoon();
           }
@@ -1482,14 +1508,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         for (final c in chunk.toolCalls!) {
           existing.add(ToolUIPart(id: c.id, toolName: c.name, arguments: c.arguments, loading: true));
         }
-        setState(() => _toolParts[assistantMessage.id] = existing);
+        setState(() => _toolParts[assistantMessage.id] = _dedupeToolPartsList(existing));
         try {
           final prev = _chatService.getToolEvents(assistantMessage.id);
           final newEvents = <Map<String, dynamic>>[
             ...prev,
             for (final c in chunk.toolCalls!) {'id': c.id, 'name': c.name, 'arguments': c.arguments, 'content': null},
           ];
-          await _chatService.setToolEvents(assistantMessage.id, newEvents);
+          await _chatService.setToolEvents(assistantMessage.id, _dedupeToolEvents(newEvents));
         } catch (_) {}
       }
 
@@ -1509,7 +1535,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           }
           try { await _chatService.upsertToolEvent(assistantMessage.id, id: r.id, name: r.name, arguments: r.arguments, content: r.content); } catch (_) {}
         }
-        setState(() => _toolParts[assistantMessage.id] = parts);
+        setState(() => _toolParts[assistantMessage.id] = _dedupeToolPartsList(parts));
         _scrollToBottomSoon();
       }
 
@@ -1860,18 +1886,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     _reasoning[m.id] = rd;
                   }
                   // Restore tool events for this message
-                  final events = _chatService.getToolEvents(m.id);
-                  if (events.isNotEmpty) {
-                    _toolParts[m.id] = events
-                        .map((e) => ToolUIPart(
-                      id: (e['id'] ?? '').toString(),
-                      toolName: (e['name'] ?? '').toString(),
-                      arguments: (e['arguments'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
-                      content: (e['content']?.toString().isNotEmpty == true) ? e['content'].toString() : null,
-                      loading: !(e['content']?.toString().isNotEmpty == true),
-                    ))
-                        .toList();
-                  }
+        final events = _dedupeToolEvents(_chatService.getToolEvents(m.id));
+        if (events.isNotEmpty) {
+          _toolParts[m.id] = events
+              .map((e) => ToolUIPart(
+            id: (e['id'] ?? '').toString(),
+            toolName: (e['name'] ?? '').toString(),
+            arguments: (e['arguments'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
+            content: (e['content']?.toString().isNotEmpty == true) ? e['content'].toString() : null,
+            loading: !(e['content']?.toString().isNotEmpty == true),
+          ))
+              .toList();
+        }
                   // Restore reasoning segments
                   final segments = _deserializeReasoningSegments(m.reasoningSegmentsJson);
                   if (segments.isNotEmpty) {

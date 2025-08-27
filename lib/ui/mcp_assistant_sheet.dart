@@ -76,7 +76,7 @@ class _AssistantMcpSheet extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          zh ? '为该助手启用的服务（新建对话同样生效）' : 'Servers enabled for this assistant (applies to new chats)',
+                          zh ? '为该助手启用的服务' : 'Servers enabled for this assistant',
                           style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.6)),
                         ),
                       ],
