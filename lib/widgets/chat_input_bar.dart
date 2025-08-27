@@ -268,7 +268,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     : AppShadows.soft,
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xxs),
                 child: TextField(
                   controller: _controller,
                   focusNode: widget.focusNode,
