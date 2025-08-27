@@ -590,15 +590,83 @@ class ChatApiService {
                 'model': modelId,
                 'messages': currentMessages,
                 'stream': true,
+                if (temperature != null) 'temperature': temperature,
+                if (topP != null) 'top_p': topP,
+                if (maxTokens != null) 'max_tokens': maxTokens,
+                if (isReasoning && effort != 'off' && effort != 'auto') 'reasoning_effort': effort,
                 if (tools != null && tools.isNotEmpty) 'tools': tools,
                 if (tools != null && tools.isNotEmpty) 'tool_choice': 'auto',
               };
+              
+              // Apply the same vendor-specific reasoning settings as the original request
+              final off = _isOff(thinkingBudget);
+              if (host.contains('openrouter.ai')) {
+                if (off) {
+                  body2['reasoning'] = {'enabled': false};
+                } else if (isReasoning) {
+                  final obj = <String, dynamic>{'enabled': true};
+                  if (thinkingBudget != null && thinkingBudget > 0) obj['max_tokens'] = thinkingBudget;
+                  body2['reasoning'] = obj;
+                  body2.remove('reasoning_effort');
+                }
+              } else if (host.contains('dashscope') || host.contains('aliyun')) {
+                if (off) {
+                  body2['enable_thinking'] = false;
+                } else if (isReasoning) {
+                  body2['enable_thinking'] = true;
+                  if (thinkingBudget != null && thinkingBudget > 0) {
+                    body2['thinking_budget'] = thinkingBudget;
+                  }
+                }
+                body2.remove('reasoning_effort');
+              } else if (host.contains('ark.cn-beijing.volces.com') || host.contains('volc') || host.contains('ark')) {
+                body2['thinking'] = {'type': off ? 'disabled' : (isReasoning ? 'enabled' : 'disabled')};
+                body2.remove('reasoning_effort');
+              } else if (host.contains('intern-ai') || host.contains('intern') || host.contains('chat.intern-ai.org.cn')) {
+                if (off) {
+                  body2['thinking_mode'] = false;
+                } else if (isReasoning) {
+                  body2['thinking_mode'] = true;
+                }
+                body2.remove('reasoning_effort');
+              } else if (host.contains('siliconflow')) {
+                if (off) {
+                  body2['enable_thinking'] = false;
+                }
+                body2.remove('reasoning_effort');
+              } else if (host.contains('deepseek') || modelId.toLowerCase().contains('deepseek')) {
+                if (off) {
+                  body2['reasoning_content'] = false;
+                } else if (isReasoning) {
+                  body2['reasoning_content'] = true;
+                  if (thinkingBudget != null && thinkingBudget > 0) {
+                    body2['reasoning_budget'] = thinkingBudget;
+                  }
+                }
+              }
+              
+              // Ask for usage in streaming (when supported)
+              if (!host.contains('mistral.ai')) {
+                body2['stream_options'] = {'include_usage': true};
+              }
+              
+              // Apply custom body overrides
+              if (extraBody != null && extraBody.isNotEmpty) {
+                extraBody.forEach((k, v) {
+                  body2[k] = (v is String) ? _parseOverrideValue(v) : v;
+                });
+              }
+              
               final req2 = http.Request('POST', url);
-              req2.headers.addAll({
+              final headers2 = <String, String>{
                 'Authorization': 'Bearer ${config.apiKey}',
                 'Content-Type': 'application/json',
                 'Accept': 'text/event-stream',
-              });
+              };
+              // Apply custom headers
+              headers2.addAll(_customHeaders(config, modelId));
+              if (extraHeaders != null && extraHeaders.isNotEmpty) headers2.addAll(extraHeaders);
+              req2.headers.addAll(headers2);
               req2.body = jsonEncode(body2);
               final resp2 = await client.send(req2);
               if (resp2.statusCode < 200 || resp2.statusCode >= 300) {
