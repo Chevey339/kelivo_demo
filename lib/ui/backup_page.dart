@@ -19,8 +19,9 @@ class BackupPage extends StatefulWidget {
   State<BackupPage> createState() => _BackupPageState();
 }
 
-class _BackupPageState extends State<BackupPage> with SingleTickerProviderStateMixin {
-  late TabController _tab;
+class _BackupPageState extends State<BackupPage> {
+  int _currentIndex = 0;
+  late final PageController _pageCtrl;
   bool _showPassword = false;
   List<BackupFileItem> _remote = const <BackupFileItem>[];
   bool _loadingRemote = false;
@@ -33,12 +34,12 @@ class _BackupPageState extends State<BackupPage> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 2, vsync: this);
+    _pageCtrl = PageController(initialPage: _currentIndex);
   }
 
   @override
   void dispose() {
-    _tab.dispose();
+    _pageCtrl.dispose();
     _urlCtrl.dispose();
     _userCtrl.dispose();
     _passCtrl.dispose();
@@ -73,30 +74,46 @@ class _BackupPageState extends State<BackupPage> with SingleTickerProviderStateM
               onPressed: () => Navigator.of(context).maybePop(),
             ),
             title: Text(zh ? '备份与恢复' : 'Backup & Restore'),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(46),
-              child: Container(
-                alignment: Alignment.centerLeft,
-                child: TabBar(
-                  controller: _tab,
-                  indicatorColor: cs.primary,
-                  labelColor: cs.primary,
-                  unselectedLabelColor: cs.onSurface.withOpacity(0.6),
-                  tabs: [
-                    Tab(text: zh ? 'WebDAV 备份' : 'WebDAV'),
-                    Tab(text: zh ? '导入和导出' : 'Import/Export'),
-                  ],
-                ),
-              ),
-            ),
           ),
-          body: TabBarView(
-            controller: _tab,
+          body: PageView(
+            controller: _pageCtrl,
+            onPageChanged: (i) => setState(() => _currentIndex = i),
             children: [
               _buildWebDavTab(context, cs, settings, vm, cfg, zh),
               _buildImportExportTab(context, cs, vm, zh),
             ],
           ),
+          bottomNavigationBar: Builder(builder: (context) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return NavigationBar(
+              selectedIndex: _currentIndex,
+              onDestinationSelected: (i) {
+                setState(() => _currentIndex = i);
+                _pageCtrl.animateToPage(
+                  i,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                );
+              },
+              backgroundColor: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
+              elevation: 0,
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              indicatorColor: cs.primary.withOpacity(0.12),
+              height: 80, // 底部tab高度
+              destinations: [
+                NavigationDestination(
+                  icon: const Icon(Lucide.databaseBackup),
+                  selectedIcon: Icon(Lucide.databaseBackup, color: cs.primary),
+                  label: zh ? 'WebDAV 备份' : 'WebDAV',
+                ),
+                NavigationDestination(
+                  icon: const Icon(Lucide.Import2),
+                  selectedIcon: Icon(Lucide.Import2, color: cs.primary),
+                  label: zh ? '导入和导出' : 'Import/Export',
+                ),
+              ],
+            );
+          }),
         );
       }),
     );
@@ -313,7 +330,7 @@ class _BackupPageState extends State<BackupPage> with SingleTickerProviderStateM
         const SizedBox(height: 10),
         _ActionCard(
           color: cardColor,
-          icon: Lucide.Import,
+          icon: Lucide.Import2,
           title: zh ? '备份文件导入' : 'Import Backup File',
           subtitle: zh ? '导入本地备份文件' : 'Import a local backup file',
           onTap: doImportLocal,
