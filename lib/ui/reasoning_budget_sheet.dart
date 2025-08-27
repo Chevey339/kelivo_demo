@@ -182,30 +182,47 @@ class _ReasoningBudgetSheetState extends State<_ReasoningBudgetSheet> {
                           children: [
                             Text('自定义推理预算 (tokens)', style: Theme.of(context).textTheme.labelMedium),
                             const SizedBox(height: 8),
-                            TextField(
-                              controller: _controller,
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                hintText: '例如：2048 (-1 自动，0 关闭)',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                              onChanged: (v) {
-                                final n = int.tryParse(v.trim());
-                                if (n != null) {
-                                  // 实时保存并更新高亮
-                                  _select(n);
-                                } else {
-                                  setState(() {}); // 仅刷新“当前档位”
-                                }
-                              },
-                              onSubmitted: (v) {
-                                final n = int.tryParse(v.trim());
-                                if (n != null) {
-                                  _select(n);
-                                }
-                                Navigator.of(context).maybePop();
-                              },
-                            ),
+                            Builder(builder: (context) {
+                              final isDark = Theme.of(context).brightness == Brightness.dark;
+                              final cs2 = Theme.of(context).colorScheme;
+                              return TextField(
+                                controller: _controller,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  hintText: '例如：2048 (-1 自动，0 关闭)',
+                                  filled: true,
+                                  fillColor: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(color: Colors.transparent),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(color: Colors.transparent),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(color: cs2.primary.withOpacity(0.4)),
+                                  ),
+                                ),
+                                onChanged: (v) {
+                                  final n = int.tryParse(v.trim());
+                                  if (n != null) {
+                                    // 实时保存并更新高亮
+                                    _select(n);
+                                  } else {
+                                    setState(() {}); // 仅刷新“当前档位”
+                                  }
+                                },
+                                onSubmitted: (v) {
+                                  final n = int.tryParse(v.trim());
+                                  if (n != null) {
+                                    _select(n);
+                                  }
+                                  Navigator.of(context).maybePop();
+                                },
+                              );
+                            }),
                           ],
                         ),
                       ),
