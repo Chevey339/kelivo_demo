@@ -712,6 +712,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     String fullContent = '';
     int totalTokens = 0;
     TokenUsage? usage;
+    // Respect assistant streaming toggle: if off, buffer updates until done
+    final bool streamOutput = assistant?.streamOutput ?? true;
+    String _bufferedReasoning = '';
+    DateTime? _reasoningStartAt;
 
     try {
       // Prepare tools (Search tool + MCP tools)
@@ -840,31 +844,19 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             (chunk) async {
           // Capture reasoning deltas only when reasoning is enabled
           if ((chunk.reasoning ?? '').isNotEmpty && _isReasoningEnabled((assistant?.thinkingBudget) ?? settings.thinkingBudget)) {
-            final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
-            r.text += chunk.reasoning!;
-            r.startAt ??= DateTime.now();
-            r.finishedAt = null;
-            r.expanded = true; // auto expand while generating
-            _reasoning[assistantMessage.id] = r;
+            if (streamOutput) {
+              final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
+              r.text += chunk.reasoning!;
+              r.startAt ??= DateTime.now();
+              r.finishedAt = null;
+              r.expanded = true; // auto expand while generating
+              _reasoning[assistantMessage.id] = r;
 
-            // Add to reasoning segments for mixed display
-            final segments = _reasoningSegments[assistantMessage.id] ?? <_ReasoningSegmentData>[];
+              // Add to reasoning segments for mixed display
+              final segments = _reasoningSegments[assistantMessage.id] ?? <_ReasoningSegmentData>[];
 
-            if (segments.isEmpty) {
-              // First reasoning segment
-              final newSegment = _ReasoningSegmentData();
-              newSegment.text = chunk.reasoning!;
-              newSegment.startAt = DateTime.now();
-              newSegment.expanded = true;
-              newSegment.toolStartIndex = (_toolParts[assistantMessage.id]?.length ?? 0);
-              segments.add(newSegment);
-            } else {
-              // Check if we should start a new segment (after tool calls)
-              final hasToolsAfterLastSegment = (_toolParts[assistantMessage.id]?.isNotEmpty ?? false);
-              final lastSegment = segments.last;
-
-              if (hasToolsAfterLastSegment && lastSegment.finishedAt != null) {
-                // Start a new segment after tools
+              if (segments.isEmpty) {
+                // First reasoning segment
                 final newSegment = _ReasoningSegmentData();
                 newSegment.text = chunk.reasoning!;
                 newSegment.startAt = DateTime.now();
@@ -872,25 +864,43 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 newSegment.toolStartIndex = (_toolParts[assistantMessage.id]?.length ?? 0);
                 segments.add(newSegment);
               } else {
-                // Continue current segment
-                lastSegment.text += chunk.reasoning!;
-                lastSegment.startAt ??= DateTime.now();
+                // Check if we should start a new segment (after tool calls)
+                final hasToolsAfterLastSegment = (_toolParts[assistantMessage.id]?.isNotEmpty ?? false);
+                final lastSegment = segments.last;
+
+                if (hasToolsAfterLastSegment && lastSegment.finishedAt != null) {
+                  // Start a new segment after tools
+                  final newSegment = _ReasoningSegmentData();
+                  newSegment.text = chunk.reasoning!;
+                  newSegment.startAt = DateTime.now();
+                  newSegment.expanded = true;
+                  newSegment.toolStartIndex = (_toolParts[assistantMessage.id]?.length ?? 0);
+                  segments.add(newSegment);
+                } else {
+                  // Continue current segment
+                  lastSegment.text += chunk.reasoning!;
+                  lastSegment.startAt ??= DateTime.now();
+                }
               }
+              _reasoningSegments[assistantMessage.id] = segments;
+
+              // Save segments to database periodically
+              await _chatService.updateMessage(
+                assistantMessage.id,
+                reasoningSegmentsJson: _serializeReasoningSegments(segments),
+              );
+
+              if (mounted) setState(() {});
+              await _chatService.updateMessage(
+                assistantMessage.id,
+                reasoningText: r.text,
+                reasoningStartAt: r.startAt,
+              );
+            } else {
+              // Buffer reasoning only; commit on finish
+              _reasoningStartAt ??= DateTime.now();
+              _bufferedReasoning += chunk.reasoning!;
             }
-            _reasoningSegments[assistantMessage.id] = segments;
-
-            // Save segments to database periodically
-            await _chatService.updateMessage(
-              assistantMessage.id,
-              reasoningSegmentsJson: _serializeReasoningSegments(segments),
-            );
-
-            if (mounted) setState(() {});
-            await _chatService.updateMessage(
-              assistantMessage.id,
-              reasoningText: r.text,
-              reasoningStartAt: r.startAt,
-            );
           }
 
           // MCP tool call placeholders
@@ -1005,6 +1015,24 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               totalTokens = usage!.totalTokens;
             }
             await finish();
+            // If non-streaming, persist buffered reasoning once at the end
+            if (!streamOutput && _bufferedReasoning.isNotEmpty) {
+              final now = DateTime.now();
+              final startAt = _reasoningStartAt ?? now;
+              await _chatService.updateMessage(
+                assistantMessage.id,
+                reasoningText: _bufferedReasoning,
+                reasoningStartAt: startAt,
+                reasoningFinishedAt: now,
+              );
+              final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+              _reasoning[assistantMessage.id] = _ReasoningData()
+                ..text = _bufferedReasoning
+                ..startAt = startAt
+                ..finishedAt = now
+                ..expanded = !autoCollapse;
+              if (mounted) setState(() {});
+            }
             await _messageStreamSubscription?.cancel();
             _messageStreamSubscription = null;
             final r = _reasoning[assistantMessage.id];
@@ -1026,66 +1054,70 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               totalTokens = usage!.totalTokens;
             }
 
-            // If content has started, consider reasoning finished and collapse
-            if ((chunk.content).isNotEmpty) {
-              final r = _reasoning[assistantMessage.id];
-              if (r != null && r.startAt != null && r.finishedAt == null) {
-                r.finishedAt = DateTime.now();
-                final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
-                if (autoCollapse) {
-                  r.expanded = false; // auto collapse once main content starts
+            if (streamOutput) {
+              // If content has started, consider reasoning finished and collapse
+              if ((chunk.content).isNotEmpty) {
+                final r = _reasoning[assistantMessage.id];
+                if (r != null && r.startAt != null && r.finishedAt == null) {
+                  r.finishedAt = DateTime.now();
+                  final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+                  if (autoCollapse) {
+                    r.expanded = false; // auto collapse once main content starts
+                  }
+                  _reasoning[assistantMessage.id] = r;
+                  await _chatService.updateMessage(
+                    assistantMessage.id,
+                    reasoningText: r.text,
+                    reasoningFinishedAt: r.finishedAt,
+                  );
+                  if (mounted) setState(() {});
                 }
-                _reasoning[assistantMessage.id] = r;
-                await _chatService.updateMessage(
-                  assistantMessage.id,
-                  reasoningText: r.text,
-                  reasoningFinishedAt: r.finishedAt,
-                );
-                if (mounted) setState(() {});
-              }
 
-              // Also finish the current reasoning segment
-              final segments = _reasoningSegments[assistantMessage.id];
-              if (segments != null && segments.isNotEmpty && segments.last.finishedAt == null) {
-                segments.last.finishedAt = DateTime.now();
-                final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
-                if (autoCollapse) {
-                  segments.last.expanded = false;
-                }
-                _reasoningSegments[assistantMessage.id] = segments;
-                if (mounted) setState(() {});
-                // Persist closed segment state
-                await _chatService.updateMessage(
-                  assistantMessage.id,
-                  reasoningSegmentsJson: _serializeReasoningSegments(segments),
-                );
-              }
-            }
-
-            // Update UI with streaming content
-            if (mounted) {
-              setState(() {
-                final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
-                if (index != -1) {
-                  _messages[index] = _messages[index].copyWith(
-                    content: fullContent,
-                    totalTokens: totalTokens,
+                // Also finish the current reasoning segment
+                final segments = _reasoningSegments[assistantMessage.id];
+                if (segments != null && segments.isNotEmpty && segments.last.finishedAt == null) {
+                  segments.last.finishedAt = DateTime.now();
+                  final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+                  if (autoCollapse) {
+                    segments.last.expanded = false;
+                  }
+                  _reasoningSegments[assistantMessage.id] = segments;
+                  if (mounted) setState(() {});
+                  // Persist closed segment state
+                  await _chatService.updateMessage(
+                    assistantMessage.id,
+                    reasoningSegmentsJson: _serializeReasoningSegments(segments),
                   );
                 }
-              });
+              }
             }
 
-            // Persist partial content so it's saved even if interrupted
-            await _chatService.updateMessage(
-              assistantMessage.id,
-              content: fullContent,
-              totalTokens: totalTokens,
-            );
+            if (streamOutput) {
+              // Update UI with streaming content
+              if (mounted) {
+                setState(() {
+                  final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
+                  if (index != -1) {
+                    _messages[index] = _messages[index].copyWith(
+                      content: fullContent,
+                      totalTokens: totalTokens,
+                    );
+                  }
+                });
+              }
 
-            // 滚动到底部显示新内容
-            Future.delayed(const Duration(milliseconds: 50), () {
-              _scrollToBottom();
-            });
+              // Persist partial content so it's saved even if interrupted
+              await _chatService.updateMessage(
+                assistantMessage.id,
+                content: fullContent,
+                totalTokens: totalTokens,
+              );
+
+              // 滚动到底部显示新内容
+              Future.delayed(const Duration(milliseconds: 50), () {
+                _scrollToBottom();
+              });
+            }
           }
         },
         onError: (e) async {
@@ -1441,6 +1473,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     int totalTokens = 0;
     TokenUsage? usage;
 
+    // Respect assistant streaming toggle: if off, buffer updates until done
+    final bool streamOutput = assistant?.streamOutput ?? true;
+    String _bufferedReasoning2 = '';
+    DateTime? _reasoningStartAt2;
+
     Future<void> finish({bool generateTitle = false}) async {
       await _chatService.updateMessage(assistantMessage.id, content: fullContent, totalTokens: totalTokens, isStreaming: false);
       if (!mounted) return;
@@ -1470,23 +1507,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _messageStreamSubscription?.cancel();
     _messageStreamSubscription = stream.listen((chunk) async {
       if ((chunk.reasoning ?? '').isNotEmpty && enableReasoning) {
-        final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
-        r.text += chunk.reasoning!;
-        r.startAt ??= DateTime.now();
-        r.finishedAt = null;
-        r.expanded = true;
-        _reasoning[assistantMessage.id] = r;
-        final segments = _reasoningSegments[assistantMessage.id] ?? <_ReasoningSegmentData>[];
-        if (segments.isEmpty) {
-          final seg = _ReasoningSegmentData();
-          seg.text = chunk.reasoning!;
-          seg.startAt = DateTime.now();
-          seg.expanded = true;
-          seg.toolStartIndex = (_toolParts[assistantMessage.id]?.length ?? 0);
-          segments.add(seg);
-        } else {
-          final last = segments.last;
-          if ((_toolParts[assistantMessage.id]?.isNotEmpty ?? false) && last.finishedAt != null) {
+        if (streamOutput) {
+          final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
+          r.text += chunk.reasoning!;
+          r.startAt ??= DateTime.now();
+          r.finishedAt = null;
+          r.expanded = true;
+          _reasoning[assistantMessage.id] = r;
+          final segments = _reasoningSegments[assistantMessage.id] ?? <_ReasoningSegmentData>[];
+          if (segments.isEmpty) {
             final seg = _ReasoningSegmentData();
             seg.text = chunk.reasoning!;
             seg.startAt = DateTime.now();
@@ -1494,13 +1523,26 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             seg.toolStartIndex = (_toolParts[assistantMessage.id]?.length ?? 0);
             segments.add(seg);
           } else {
-            last.text += chunk.reasoning!;
-            last.startAt ??= DateTime.now();
+            final last = segments.last;
+            if ((_toolParts[assistantMessage.id]?.isNotEmpty ?? false) && last.finishedAt != null) {
+              final seg = _ReasoningSegmentData();
+              seg.text = chunk.reasoning!;
+              seg.startAt = DateTime.now();
+              seg.expanded = true;
+              seg.toolStartIndex = (_toolParts[assistantMessage.id]?.length ?? 0);
+              segments.add(seg);
+            } else {
+              last.text += chunk.reasoning!;
+              last.startAt ??= DateTime.now();
+            }
           }
+          _reasoningSegments[assistantMessage.id] = segments;
+          if (mounted) setState(() {});
+          await _chatService.updateMessage(assistantMessage.id, reasoningText: r.text, reasoningStartAt: r.startAt, reasoningSegmentsJson: _serializeReasoningSegments(segments));
+        } else {
+          _reasoningStartAt2 ??= DateTime.now();
+          _bufferedReasoning2 += chunk.reasoning!;
         }
-        _reasoningSegments[assistantMessage.id] = segments;
-        if (mounted) setState(() {});
-        await _chatService.updateMessage(assistantMessage.id, reasoningText: r.text, reasoningStartAt: r.startAt, reasoningSegmentsJson: _serializeReasoningSegments(segments));
       }
 
       if ((chunk.toolCalls ?? const []).isNotEmpty) {
@@ -1541,10 +1583,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
       if (chunk.content.isNotEmpty) {
         fullContent += chunk.content;
-        setState(() {
-          final i = _messages.indexWhere((m) => m.id == assistantMessage.id);
-          if (i != -1) _messages[i] = _messages[i].copyWith(content: fullContent);
-        });
+        if (streamOutput) {
+          setState(() {
+            final i = _messages.indexWhere((m) => m.id == assistantMessage.id);
+            if (i != -1) _messages[i] = _messages[i].copyWith(content: fullContent);
+          });
+        }
       }
 
       if (chunk.usage != null) {
@@ -1555,6 +1599,24 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       if (chunk.isDone) {
         if (chunk.totalTokens > 0) totalTokens = chunk.totalTokens;
         await finish();
+        // If non-streaming, write buffered reasoning once
+        if (!streamOutput && _bufferedReasoning2.isNotEmpty) {
+          final now = DateTime.now();
+          final startAt = _reasoningStartAt2 ?? now;
+          await _chatService.updateMessage(
+            assistantMessage.id,
+            reasoningText: _bufferedReasoning2,
+            reasoningStartAt: startAt,
+            reasoningFinishedAt: now,
+          );
+          final autoCollapse = context.read<SettingsProvider>().autoCollapseThinking;
+          _reasoning[assistantMessage.id] = _ReasoningData()
+            ..text = _bufferedReasoning2
+            ..startAt = startAt
+            ..finishedAt = now
+            ..expanded = !autoCollapse;
+          if (mounted) setState(() {});
+        }
         await _messageStreamSubscription?.cancel();
         _messageStreamSubscription = null;
       }
