@@ -606,6 +606,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _messages.add(assistantMessage);
     });
 
+    // Haptics on generate (if enabled)
+    try {
+      if (context.read<SettingsProvider>().hapticsOnGenerate) {
+        HapticFeedback.lightImpact();
+      }
+    } catch (_) {}
+
     // Reset tool parts for this new assistant message
     _toolParts.remove(assistantMessage.id);
 
@@ -1398,6 +1405,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _messages.add(assistantMessage);
       _isLoading = true;
     });
+
+    // Haptics on regenerate
+    try {
+      if (context.read<SettingsProvider>().hapticsOnGenerate) {
+        HapticFeedback.lightImpact();
+      }
+    } catch (_) {}
 
     // Initialize reasoning state only when enabled and model supports it
     final supportsReasoning = _isReasoningModel(providerKey, modelId);

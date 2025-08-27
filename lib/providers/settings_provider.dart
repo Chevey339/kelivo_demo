@@ -20,6 +20,7 @@ class SettingsProvider extends ChangeNotifier {
   static const String _displayShowTokenStatsKey = 'display_show_token_stats_v1';
   static const String _displayAutoCollapseThinkingKey = 'display_auto_collapse_thinking_v1';
   static const String _displayShowMessageNavKey = 'display_show_message_nav_v1';
+  static const String _displayHapticsOnGenerateKey = 'display_haptics_on_generate_v1';
   static const String _displayNewChatOnLaunchKey = 'display_new_chat_on_launch_v1';
   static const String _displayChatFontScaleKey = 'display_chat_font_scale_v1';
   static const String _translateModelKey = 'translate_model_v1';
@@ -132,6 +133,7 @@ class SettingsProvider extends ChangeNotifier {
     _showTokenStats = prefs.getBool(_displayShowTokenStatsKey) ?? true;
     _autoCollapseThinking = prefs.getBool(_displayAutoCollapseThinkingKey) ?? true;
     _showMessageNavButtons = prefs.getBool(_displayShowMessageNavKey) ?? true;
+    _hapticsOnGenerate = prefs.getBool(_displayHapticsOnGenerateKey) ?? false;
     _newChatOnLaunch = prefs.getBool(_displayNewChatOnLaunchKey) ?? true;
     _chatFontScale = prefs.getDouble(_displayChatFontScaleKey) ?? 1.0;
     
@@ -466,6 +468,17 @@ Please translate the <source_text> section:
     await prefs.setDouble(_displayChatFontScaleKey, _chatFontScale);
   }
 
+  // Display: haptics on message generation
+  bool _hapticsOnGenerate = false;
+  bool get hapticsOnGenerate => _hapticsOnGenerate;
+  Future<void> setHapticsOnGenerate(bool v) async {
+    if (_hapticsOnGenerate == v) return;
+    _hapticsOnGenerate = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_displayHapticsOnGenerateKey, v);
+  }
+
   // Search service settings
   Future<void> setSearchServices(List<SearchServiceOptions> services) async {
     _searchServices = List.from(services);
@@ -545,6 +558,7 @@ Please translate the <source_text> section:
     copy._showTokenStats = _showTokenStats;
     copy._autoCollapseThinking = _autoCollapseThinking;
     copy._showMessageNavButtons = _showMessageNavButtons;
+    copy._hapticsOnGenerate = _hapticsOnGenerate;
     copy._newChatOnLaunch = _newChatOnLaunch;
     copy._chatFontScale = _chatFontScale;
     return copy;

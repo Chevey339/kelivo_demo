@@ -14,7 +14,6 @@ class DisplaySettingsPage extends StatefulWidget {
 
 class _DisplaySettingsPageState extends State<DisplaySettingsPage> {
   bool showUpdates = true;
-  bool hapticsOnGenerate = false;
 
   @override
   Widget build(BuildContext context) {
@@ -105,8 +104,8 @@ class _DisplaySettingsPageState extends State<DisplaySettingsPage> {
             subtitle: zh
                 ? '生成消息时启用触觉反馈'
                 : 'Enable haptic feedback during generation',
-            value: hapticsOnGenerate,
-            onChanged: (v) => setState(() => hapticsOnGenerate = v),
+            value: context.watch<SettingsProvider>().hapticsOnGenerate,
+            onChanged: (v) => context.read<SettingsProvider>().setHapticsOnGenerate(v),
           ),
           _SwitchTile(
             icon: Lucide.MessageCirclePlus,
