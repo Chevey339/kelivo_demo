@@ -631,6 +631,14 @@ class ChatApiService {
                       final delta = c0['delta'] as Map?;
                       final txt = delta?['content'];
                       final rc = delta?['reasoning_content'] ?? delta?['reasoning'];
+                      final u = o['usage'];
+                      if (u != null) {
+                        final prompt = (u['prompt_tokens'] ?? 0) as int;
+                        final completion = (u['completion_tokens'] ?? 0) as int;
+                        final cached = (u['prompt_tokens_details']?['cached_tokens'] ?? 0) as int? ?? 0;
+                        usage = (usage ?? const TokenUsage()).merge(TokenUsage(promptTokens: prompt, completionTokens: completion, cachedTokens: cached));
+                        totalTokens = usage!.totalTokens;
+                      }
                       if (rc is String && rc.isNotEmpty) {
                         yield ChatStreamChunk(content: '', reasoning: rc, isDone: false, totalTokens: 0, usage: usage);
                       }
