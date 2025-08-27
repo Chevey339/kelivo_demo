@@ -90,4 +90,5 @@ class Lucide {
   static const IconData Import2 = lucide.LucideIcons.folderDown;
   static const IconData RotateCw = lucide.LucideIcons.rotateCw;
   static const IconData databaseBackup = lucide.LucideIcons.databaseBackup;
+  static const IconData chevronDown = lucide.LucideIcons.chevronDown;
 }

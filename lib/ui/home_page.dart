@@ -35,6 +35,7 @@ import 'reasoning_budget_sheet.dart';
 import 'search_settings_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart';
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
@@ -61,8 +62,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   final TextEditingController _inputController = TextEditingController();
   final ChatInputBarController _mediaController = ChatInputBarController();
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey _inputBarKey = GlobalKey();
   late final AnimationController _convoFadeController;
   late final Animation<double> _convoFade;
+  double _inputBarHeight = 72;
 
   late ChatService _chatService;
   Conversation? _currentConversation;
@@ -75,6 +78,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   final Map<String, List<_ReasoningSegmentData>> _reasoningSegments = <String, List<_ReasoningSegmentData>>{}; // assistantMessageId -> reasoning segments
   McpProvider? _mcpProvider;
   Set<String> _connectedMcpIds = <String>{};
+  bool _showJumpToBottom = false;
 
   // Deduplicate tool UI parts by id or by name+args when id is empty
   List<ToolUIPart> _dedupeToolPartsList(List<ToolUIPart> parts) {
@@ -322,6 +326,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     // Use the provided ChatService instance
     _chatService = context.read<ChatService>();
     _initChat();
+    _scrollController.addListener(_onScrollControllerChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureInputBar());
 
     // Attach MCP provider listener to auto-join new connected servers
     try {
@@ -339,6 +345,19 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         });
       }
     });
+  }
+
+  void _onScrollControllerChanged() {
+    try {
+      if (!_scrollController.hasClients) return;
+      // Only show when not near bottom
+      final pos = _scrollController.position;
+      final atBottom = pos.pixels >= (pos.maxScrollExtent - 24);
+      final shouldShow = !atBottom;
+      if (_showJumpToBottom != shouldShow) {
+        setState(() => _showJumpToBottom = shouldShow);
+      }
+    } catch (_) {}
   }
 
   Future<void> _initChat() async {
@@ -1747,9 +1766,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       }
       final max = _scrollController.position.maxScrollExtent;
       _scrollController.jumpTo(max);
+      if (_showJumpToBottom) {
+        setState(() => _showJumpToBottom = false);
+      }
     } catch (_) {
       // Ignore transient attachment errors
     }
+  }
+
+  void _measureInputBar() {
+    try {
+      final ctx = _inputBarKey.currentContext;
+      if (ctx == null) return;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null) return;
+      final h = box.size.height;
+      if ((_inputBarHeight - h).abs() > 1.0) {
+        setState(() => _inputBarHeight = h);
+      }
+    } catch (_) {}
   }
 
   // Ensure scroll reaches bottom even after widget tree transitions
@@ -2350,7 +2385,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 duration: const Duration(milliseconds: 280),
                 curve: Curves.easeOutCubic,
                 padding: EdgeInsets.only(bottom: _toolsOpen ? _sheetHeight : 0),
-                child: ChatInputBar(
+                child: NotificationListener<SizeChangedLayoutNotification>(
+                  onNotification: (n) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) => _measureInputBar());
+                    return false;
+                  },
+                  child: SizeChangedLayoutNotifier(
+                    child: ChatInputBar(
+                  key: _inputBarKey,
                   onMore: _toggleTools,
                   moreOpen: _toolsOpen,
                   searchEnabled: context.watch<SettingsProvider>().searchEnabled,
@@ -2402,6 +2444,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   loading: _isLoading,
                   showMcpButton: context.watch<McpProvider>().servers.isNotEmpty,
                   mcpActive: context.select<AssistantProvider, bool>((ap) => (ap.currentAssistant?.mcpServerIds.isNotEmpty ?? false)),
+                ),
+                  ),
                 ),
               ),
             ],
@@ -2494,6 +2538,62 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 ),
               ),
             ),
+
+          // Scroll-to-bottom button (bottom-right, above input bar)
+          Builder(builder: (context) {
+            final showSetting = context.watch<SettingsProvider>().showMessageNavButtons;
+            if (!showSetting) return const SizedBox.shrink();
+            final cs = Theme.of(context).colorScheme;
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final bottomOffset = (_toolsOpen ? _sheetHeight : 0) + _inputBarHeight + 12;
+            return Align(
+              alignment: Alignment.bottomRight,
+              child: SafeArea(
+                top: false,
+                child: IgnorePointer(
+                  ignoring: !_showJumpToBottom,
+                  child: AnimatedScale(
+                    scale: _showJumpToBottom ? 1.0 : 0.9,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      opacity: _showJumpToBottom ? 1 : 0,
+                      child: Padding(
+                        padding: EdgeInsets.only(right: 16, bottom: bottomOffset),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isDark ? Colors.white24 : const Color(0xFFE5E7EB), // light grey border
+                              width: 1,
+                            ),
+                            boxShadow: isDark ? [] : [
+                              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: Offset(0, 2)),
+                            ],
+                          ),
+                          child: Material(
+                            type: MaterialType.transparency,
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: _scrollToBottom,
+                              child: const Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Icon(Lucide.ChevronDown, size: 16, color: Colors.black87),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -2514,6 +2614,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _mcpProvider?.removeListener(_onMcpChanged);
     _inputFocus.dispose();
     _inputController.dispose();
+    _scrollController.removeListener(_onScrollControllerChanged);
     _scrollController.dispose();
     _messageStreamSubscription?.cancel();
     routeObserver.unsubscribe(this);

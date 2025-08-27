@@ -14,7 +14,6 @@ class DisplaySettingsPage extends StatefulWidget {
 
 class _DisplaySettingsPageState extends State<DisplaySettingsPage> {
   bool showUpdates = true;
-  bool showMessageNav = true;
   bool hapticsOnGenerate = false;
 
   @override
@@ -97,8 +96,8 @@ class _DisplaySettingsPageState extends State<DisplaySettingsPage> {
             subtitle: zh
                 ? '滚动时显示快速跳转按钮'
                 : 'Show quick jump buttons when scrolling',
-            value: showMessageNav,
-            onChanged: (v) => setState(() => showMessageNav = v),
+            value: context.watch<SettingsProvider>().showMessageNavButtons,
+            onChanged: (v) => context.read<SettingsProvider>().setShowMessageNavButtons(v),
           ),
           _SwitchTile(
             icon: Lucide.Vibrate,
