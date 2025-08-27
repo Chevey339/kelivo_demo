@@ -2562,32 +2562,32 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       opacity: _showJumpToBottom ? 1 : 0,
                       child: Padding(
                         padding: EdgeInsets.only(right: 16, bottom: bottomOffset),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isDark ? Colors.white24 : const Color(0xFFE5E7EB), // light grey border
-                              width: 1,
-                            ),
-                            boxShadow: isDark ? [] : [
-                              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: Offset(0, 2)),
-                            ],
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white10 : Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
+                            width: 1,
                           ),
-                          child: Material(
-                            type: MaterialType.transparency,
-                            shape: const CircleBorder(),
-                            child: InkWell(
-                              customBorder: const CircleBorder(),
-                              onTap: _scrollToBottom,
-                              child: const Padding(
-                                padding: EdgeInsets.all(6),
-                                child: Icon(Lucide.ChevronDown, size: 16, color: Colors.black87),
-                              ),
+                          boxShadow: isDark ? [] : [
+                            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: Offset(0, 2)),
+                          ],
+                        ),
+                        child: Material(
+                          type: MaterialType.transparency,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: _scrollToBottom,
+                            child: Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: Icon(Lucide.ChevronDown, size: 16, color: isDark ? Colors.white : Colors.black87),
                             ),
                           ),
                         ),
                       ),
+                    ),
                     ),
                   ),
                 ),
