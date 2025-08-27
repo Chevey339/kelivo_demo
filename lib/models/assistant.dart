@@ -18,6 +18,9 @@ class Assistant {
   final List<String> mcpServerIds; // bound MCP server IDs
   final String? background; // chat background (color/image ref)
   final bool deletable; // can be deleted by user
+  // Custom request overrides (per assistant)
+  final List<Map<String, String>> customHeaders; // [{name:'X-Header', value:'v'}]
+  final List<Map<String, String>> customBody; // [{key:'foo', value:'{"a":1}'}]
 
   const Assistant({
     required this.id,
@@ -37,6 +40,8 @@ class Assistant {
     this.mcpServerIds = const <String>[],
     this.background,
     this.deletable = true,
+    this.customHeaders = const <Map<String, String>>[],
+    this.customBody = const <Map<String, String>>[],
   });
 
   Assistant copyWith({
@@ -57,6 +62,8 @@ class Assistant {
     List<String>? mcpServerIds,
     String? background,
     bool? deletable,
+    List<Map<String, String>>? customHeaders,
+    List<Map<String, String>>? customBody,
     bool clearChatModel = false,
     bool clearAvatar = false,
     bool clearTemperature = false,
@@ -83,6 +90,8 @@ class Assistant {
       mcpServerIds: mcpServerIds ?? this.mcpServerIds,
       background: clearBackground ? null : (background ?? this.background),
       deletable: deletable ?? this.deletable,
+      customHeaders: customHeaders ?? this.customHeaders,
+      customBody: customBody ?? this.customBody,
     );
   }
 
@@ -100,11 +109,13 @@ class Assistant {
         'thinkingBudget': thinkingBudget,
         'maxTokens': maxTokens,
         'systemPrompt': systemPrompt,
-        'messageTemplate': messageTemplate,
-        'mcpServerIds': mcpServerIds,
-        'background': background,
-        'deletable': deletable,
-      };
+      'messageTemplate': messageTemplate,
+      'mcpServerIds': mcpServerIds,
+      'background': background,
+      'deletable': deletable,
+      'customHeaders': customHeaders,
+      'customBody': customBody,
+    };
 
   static Assistant fromJson(Map<String, dynamic> json) => Assistant(
         id: json['id'] as String,
@@ -124,6 +135,32 @@ class Assistant {
         mcpServerIds: (json['mcpServerIds'] as List?)?.cast<String>() ?? const <String>[],
         background: json['background'] as String?,
         deletable: json['deletable'] as bool? ?? true,
+        customHeaders: (() {
+          final raw = json['customHeaders'];
+          if (raw is List) {
+            return raw
+                .whereType<Map>()
+                .map((e) => {
+                      'name': (e['name'] ?? e['key'] ?? '').toString(),
+                      'value': (e['value'] ?? '').toString(),
+                    })
+                .toList();
+          }
+          return const <Map<String, String>>[];
+        })(),
+        customBody: (() {
+          final raw = json['customBody'];
+          if (raw is List) {
+            return raw
+                .whereType<Map>()
+                .map((e) => {
+                      'key': (e['key'] ?? e['name'] ?? '').toString(),
+                      'value': (e['value'] ?? '').toString(),
+                    })
+                .toList();
+          }
+          return const <Map<String, String>>[];
+        })(),
       );
 
   static String encodeList(List<Assistant> list) => jsonEncode(list.map((e) => e.toJson()).toList());

@@ -770,6 +770,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         };
       }
 
+      // Build assistant-level custom request overrides
+      Map<String, String>? aHeaders;
+      Map<String, dynamic>? aBody;
+      if ((assistant?.customHeaders.isNotEmpty ?? false)) {
+        aHeaders = {
+          for (final e in assistant!.customHeaders)
+            if ((e['name'] ?? '').trim().isNotEmpty) (e['name']!.trim()): (e['value'] ?? '')
+        };
+        if (aHeaders.isEmpty) aHeaders = null;
+      }
+      if ((assistant?.customBody.isNotEmpty ?? false)) {
+        aBody = {
+          for (final e in assistant!.customBody)
+            if ((e['key'] ?? '').trim().isNotEmpty)
+              (e['key']!.trim()): (e['value'] ?? '')
+        };
+        if (aBody.isEmpty) aBody = null;
+      }
+
       final stream = ChatApiService.sendMessageStream(
         config: config,
         modelId: modelId,
@@ -781,6 +800,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         maxTokens: assistant?.maxTokens,
         tools: toolDefs.isEmpty ? null : toolDefs,
         onToolCall: onToolCall,
+        extraHeaders: aHeaders,
+        extraBody: aBody,
       );
 
       Future<void> finish({bool generateTitle = true}) async {
@@ -1457,6 +1478,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       }
     } catch (_) {}
 
+    // Build assistant-level custom request overrides
+    Map<String, String>? aHeaders;
+    Map<String, dynamic>? aBody;
+    if ((assistant?.customHeaders.isNotEmpty ?? false)) {
+      aHeaders = {
+        for (final e in assistant!.customHeaders)
+          if ((e['name'] ?? '').trim().isNotEmpty) (e['name']!.trim()): (e['value'] ?? '')
+      };
+      if (aHeaders.isEmpty) aHeaders = null;
+    }
+    if ((assistant?.customBody.isNotEmpty ?? false)) {
+      aBody = {
+        for (final e in assistant!.customBody)
+          if ((e['key'] ?? '').trim().isNotEmpty)
+            (e['key']!.trim()): (e['value'] ?? '')
+      };
+      if (aBody.isEmpty) aBody = null;
+    }
+
     final stream = ChatApiService.sendMessageStream(
       config: settings.getProviderConfig(providerKey),
       modelId: modelId,
@@ -1467,6 +1507,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       maxTokens: assistant?.maxTokens,
       tools: toolDefs.isEmpty ? null : toolDefs,
       onToolCall: onToolCall,
+      extraHeaders: aHeaders,
+      extraBody: aBody,
     );
 
     String fullContent = '';

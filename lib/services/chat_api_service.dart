@@ -110,6 +110,8 @@ class ChatApiService {
     int? maxTokens,
     List<Map<String, dynamic>>? tools,
     Future<String> Function(String name, Map<String, dynamic> args)? onToolCall,
+    Map<String, String>? extraHeaders,
+    Map<String, dynamic>? extraBody,
   }) async* {
     final kind = ProviderConfig.classify(config.id);
     final client = _clientFor(config);
@@ -128,6 +130,8 @@ class ChatApiService {
           maxTokens: maxTokens,
           tools: tools,
           onToolCall: onToolCall,
+          extraHeaders: extraHeaders,
+          extraBody: extraBody,
         );
       } else if (kind == ProviderKind.claude) {
         yield* _sendClaudeStream(
@@ -142,6 +146,8 @@ class ChatApiService {
           maxTokens: maxTokens,
           tools: tools,
           onToolCall: onToolCall,
+          extraHeaders: extraHeaders,
+          extraBody: extraBody,
         );
       } else if (kind == ProviderKind.google) {
         yield* _sendGoogleStream(
@@ -156,6 +162,8 @@ class ChatApiService {
           maxTokens: maxTokens,
           tools: tools,
           onToolCall: onToolCall,
+          extraHeaders: extraHeaders,
+          extraBody: extraBody,
         );
       }
     } finally {
@@ -168,6 +176,8 @@ class ChatApiService {
     required ProviderConfig config,
     required String modelId,
     required String prompt,
+    Map<String, String>? extraHeaders,
+    Map<String, dynamic>? extraBody,
   }) async {
     final kind = ProviderConfig.classify(config.id);
     final client = _clientFor(config);
@@ -197,8 +207,14 @@ class ChatApiService {
           'Content-Type': 'application/json',
         };
         headers.addAll(_customHeaders(config, modelId));
+        if (extraHeaders != null && extraHeaders.isNotEmpty) headers.addAll(extraHeaders);
         final extra = _customBody(config, modelId);
         if (extra.isNotEmpty) (body as Map<String, dynamic>).addAll(extra);
+        if (extraBody != null && extraBody.isNotEmpty) {
+          (extraBody).forEach((k, v) {
+            (body as Map<String, dynamic>)[k] = (v is String) ? _parseOverrideValue(v) : v;
+          });
+        }
         final resp = await client.post(url, headers: headers, body: jsonEncode(body));
         if (resp.statusCode < 200 || resp.statusCode >= 300) {
           throw HttpException('HTTP ${resp.statusCode}: ${resp.body}');
@@ -234,8 +250,14 @@ class ChatApiService {
           'Content-Type': 'application/json',
         };
         headers.addAll(_customHeaders(config, modelId));
+        if (extraHeaders != null && extraHeaders.isNotEmpty) headers.addAll(extraHeaders);
         final extra = _customBody(config, modelId);
         if (extra.isNotEmpty) (body as Map<String, dynamic>).addAll(extra);
+        if (extraBody != null && extraBody.isNotEmpty) {
+          (extraBody).forEach((k, v) {
+            (body as Map<String, dynamic>)[k] = (v is String) ? _parseOverrideValue(v) : v;
+          });
+        }
         final resp = await client.post(url, headers: headers, body: jsonEncode(body));
         if (resp.statusCode < 200 || resp.statusCode >= 300) {
           throw HttpException('HTTP ${resp.statusCode}: ${resp.body}');
@@ -271,10 +293,16 @@ class ChatApiService {
           ],
           'generationConfig': {'temperature': 0.3},
         };
-        final headers = <String, String>{'Content-Type': 'application/json'};
-        headers.addAll(_customHeaders(config, modelId));
-        final extra = _customBody(config, modelId);
-        if (extra.isNotEmpty) (body as Map<String, dynamic>).addAll(extra);
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    headers.addAll(_customHeaders(config, modelId));
+    if (extraHeaders != null && extraHeaders.isNotEmpty) headers.addAll(extraHeaders);
+    final extra = _customBody(config, modelId);
+    if (extra.isNotEmpty) (body as Map<String, dynamic>).addAll(extra);
+    if (extraBody != null && extraBody.isNotEmpty) {
+      (extraBody).forEach((k, v) {
+        (body as Map<String, dynamic>)[k] = (v is String) ? _parseOverrideValue(v) : v;
+      });
+    }
         final resp = await client.post(Uri.parse(url), headers: headers, body: jsonEncode(body));
         if (resp.statusCode < 200 || resp.statusCode >= 300) {
           throw HttpException('HTTP ${resp.statusCode}: ${resp.body}');
@@ -308,7 +336,7 @@ class ChatApiService {
     ProviderConfig config,
     String modelId,
     List<Map<String, dynamic>> messages,
-    {List<String>? userImagePaths, int? thinkingBudget, double? temperature, double? topP, int? maxTokens, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall}
+    {List<String>? userImagePaths, int? thinkingBudget, double? temperature, double? topP, int? maxTokens, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall, Map<String, String>? extraHeaders, Map<String, dynamic>? extraBody}
   ) async* {
     final base = config.baseUrl.endsWith('/') 
         ? config.baseUrl.substring(0, config.baseUrl.length - 1) 
@@ -325,7 +353,7 @@ class ChatApiService {
 
     final effort = _effortForBudget(thinkingBudget);
     final host = Uri.tryParse(config.baseUrl)?.host.toLowerCase() ?? '';
-    Map<String, dynamic> body;
+        Map<String, dynamic> body;
     if (config.useResponseApi == true) {
       final input = <Map<String, dynamic>>[];
       for (int i = 0; i < messages.length; i++) {
@@ -446,6 +474,7 @@ class ChatApiService {
     };
     // Merge custom headers (override takes precedence)
     headers.addAll(_customHeaders(config, modelId));
+    if (extraHeaders != null && extraHeaders.isNotEmpty) headers.addAll(extraHeaders);
     request.headers.addAll(headers);
     // Ask for usage in streaming for chat-completions compatible hosts (when supported)
     if (config.useResponseApi != true) {
@@ -455,9 +484,14 @@ class ChatApiService {
       }
     }
     // Merge custom body keys (override takes precedence)
-    final extraBody = _customBody(config, modelId);
-    if (extraBody.isNotEmpty) {
-      (body as Map<String, dynamic>).addAll(extraBody);
+    final extraBodyCfg = _customBody(config, modelId);
+    if (extraBodyCfg.isNotEmpty) {
+      (body as Map<String, dynamic>).addAll(extraBodyCfg);
+    }
+    if (extraBody != null && extraBody.isNotEmpty) {
+      extraBody.forEach((k, v) {
+        (body as Map<String, dynamic>)[k] = (v is String) ? _parseOverrideValue(v) : v;
+      });
     }
     request.body = jsonEncode(body);
 
@@ -955,7 +989,7 @@ class ChatApiService {
     ProviderConfig config,
     String modelId,
     List<Map<String, dynamic>> messages,
-    {List<String>? userImagePaths, int? thinkingBudget, double? temperature, double? topP, int? maxTokens, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall}
+    {List<String>? userImagePaths, int? thinkingBudget, double? temperature, double? topP, int? maxTokens, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall, Map<String, String>? extraHeaders, Map<String, dynamic>? extraBody}
   ) async* {
     final base = config.baseUrl.endsWith('/') 
         ? config.baseUrl.substring(0, config.baseUrl.length - 1) 
@@ -1043,9 +1077,15 @@ class ChatApiService {
       'Accept': 'text/event-stream',
     };
     headers.addAll(_customHeaders(config, modelId));
+    if (extraHeaders != null && extraHeaders.isNotEmpty) headers.addAll(extraHeaders);
     request.headers.addAll(headers);
     final extraClaude = _customBody(config, modelId);
     if (extraClaude.isNotEmpty) (body as Map<String, dynamic>).addAll(extraClaude);
+    if (extraBody != null && extraBody.isNotEmpty) {
+      extraBody.forEach((k, v) {
+        (body as Map<String, dynamic>)[k] = (v is String) ? _parseOverrideValue(v) : v;
+      });
+    }
     request.body = jsonEncode(body);
 
     final response = await client.send(request);
@@ -1163,7 +1203,7 @@ class ChatApiService {
     ProviderConfig config,
     String modelId,
     List<Map<String, dynamic>> messages,
-    {List<String>? userImagePaths, int? thinkingBudget, double? temperature, double? topP, int? maxTokens, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall}
+    {List<String>? userImagePaths, int? thinkingBudget, double? temperature, double? topP, int? maxTokens, List<Map<String, dynamic>>? tools, Future<String> Function(String, Map<String, dynamic>)? onToolCall, Map<String, String>? extraHeaders, Map<String, dynamic>? extraBody}
   ) async* {
     // Implement SSE streaming via :streamGenerateContent with alt=sse
     // Build endpoint per Vertex vs Gemini
@@ -1270,9 +1310,15 @@ class ChatApiService {
           'Authorization': 'Bearer ${config.apiKey}',
       };
       headers.addAll(_customHeaders(config, modelId));
+      if (extraHeaders != null && extraHeaders.isNotEmpty) headers.addAll(extraHeaders);
       request.headers.addAll(headers);
       final extra = _customBody(config, modelId);
       if (extra.isNotEmpty) (body as Map<String, dynamic>).addAll(extra);
+      if (extraBody != null && extraBody.isNotEmpty) {
+        extraBody.forEach((k, v) {
+          (body as Map<String, dynamic>)[k] = (v is String) ? _parseOverrideValue(v) : v;
+        });
+      }
       request.body = jsonEncode(body);
 
       final resp = await client.send(request);
