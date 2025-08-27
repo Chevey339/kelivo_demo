@@ -79,6 +79,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   McpProvider? _mcpProvider;
   Set<String> _connectedMcpIds = <String>{};
   bool _showJumpToBottom = false;
+  bool _isUserScrolling = false;
+  Timer? _userScrollTimer;
 
   // Deduplicate tool UI parts by id or by name+args when id is empty
   List<ToolUIPart> _dedupeToolPartsList(List<ToolUIPart> parts) {
@@ -350,6 +352,22 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   void _onScrollControllerChanged() {
     try {
       if (!_scrollController.hasClients) return;
+      
+      // Detect user scrolling
+      if (_scrollController.position.userScrollDirection != ScrollDirection.idle) {
+        _isUserScrolling = true;
+        
+        // Cancel previous timer and set a new one
+        _userScrollTimer?.cancel();
+        _userScrollTimer = Timer(const Duration(milliseconds: 1500), () {
+          if (mounted) {
+            setState(() {
+              _isUserScrolling = false;
+            });
+          }
+        });
+      }
+      
       // Only show when not near bottom
       final pos = _scrollController.position;
       final atBottom = pos.pixels >= (pos.maxScrollExtent - 24);
@@ -1772,6 +1790,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   void _scrollToBottom() {
     try {
       if (!_scrollController.hasClients) return;
+      
+      // Don't auto-scroll if user is actively scrolling
+      if (_isUserScrolling) return;
+      
       // Prevent using controller while it is still attached to old/new list simultaneously
       if (_scrollController.positions.length != 1) {
         // Try again after microtask when the previous list detaches
@@ -1786,6 +1808,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     } catch (_) {
       // Ignore transient attachment errors
     }
+  }
+
+  void _forceScrollToBottom() {
+    // Force scroll to bottom when user explicitly clicks the button
+    _isUserScrolling = false;
+    _userScrollTimer?.cancel();
+    _scrollToBottom();
   }
 
   void _measureInputBar() {
@@ -2593,7 +2622,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           shape: const CircleBorder(),
                           child: InkWell(
                             customBorder: const CircleBorder(),
-                            onTap: _scrollToBottom,
+                            onTap: _forceScrollToBottom,
                             child: Padding(
                               padding: const EdgeInsets.all(6),
                               child: Icon(Lucide.ChevronDown, size: 16, color: isDark ? Colors.white : Colors.black87),
@@ -2631,6 +2660,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _scrollController.removeListener(_onScrollControllerChanged);
     _scrollController.dispose();
     _messageStreamSubscription?.cancel();
+    _userScrollTimer?.cancel();
     routeObserver.unsubscribe(this);
     super.dispose();
   }
