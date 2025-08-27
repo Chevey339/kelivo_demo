@@ -12,11 +12,13 @@ import 'providers/settings_provider.dart';
 import 'providers/mcp_provider.dart';
 import 'providers/tts_provider.dart';
 import 'providers/assistant_provider.dart';
+import 'providers/update_provider.dart';
 import 'services/chat_service.dart';
 import 'services/mcp_tool_service.dart';
 import 'utils/sandbox_path_resolver.dart';
 
 final RouteObserver<ModalRoute<dynamic>> routeObserver = RouteObserver<ModalRoute<dynamic>>();
+bool _didCheckUpdates = false; // one-time update check flag
 
 
 Future<void> main() async {
@@ -43,10 +45,18 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => McpProvider()),
         ChangeNotifierProvider(create: (_) => AssistantProvider()),
         ChangeNotifierProvider(create: (_) => TtsProvider()),
+        ChangeNotifierProvider(create: (_) => UpdateProvider()),
       ],
       child: Builder(
         builder: (context) {
           final settings = context.watch<SettingsProvider>();
+          // One-time app update check after first build
+          if (settings.showAppUpdates && !_didCheckUpdates) {
+            _didCheckUpdates = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              try { context.read<UpdateProvider>().checkForUpdates(); } catch (_) {}
+            });
+          }
           return DynamicColorBuilder(
             builder: (lightDynamic, darkDynamic) {
               final light = buildLightTheme(lightDynamic);

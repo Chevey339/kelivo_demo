@@ -11,6 +11,7 @@ import '../models/chat_item.dart';
 import '../providers/user_provider.dart';
 import '../ui/settings_page.dart';
 import '../providers/assistant_provider.dart';
+import '../providers/update_provider.dart';
 import '../models/assistant.dart';
 import '../ui/assistant_settings_edit_page.dart';
 import '../ui/chat_history_page.dart';
@@ -18,6 +19,7 @@ import 'package:flutter/services.dart';
 import 'dart:io' show File;
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:url_launcher/url_launcher.dart';
 
 class SideDrawer extends StatefulWidget {
   const SideDrawer({
@@ -115,6 +117,7 @@ class _SideDrawerState extends State<SideDrawer> {
         setState(() => _query = _searchController.text);
       }
     });
+    // Update check moved to app startup (main.dart)
   }
 
   void _showChatMenu(BuildContext context, ChatItem chat) async {
@@ -495,6 +498,77 @@ class _SideDrawerState extends State<SideDrawer> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                 children: [
+                  // Update banner under search box
+                  Builder(builder: (context) {
+                    final settings = context.watch<SettingsProvider>();
+                    final upd = context.watch<UpdateProvider>();
+                    if (!settings.showAppUpdates) return const SizedBox.shrink();
+                    final info = upd.available;
+                    if (upd.checking && info == null) {
+                      return const SizedBox.shrink();
+                    }
+                    if (info == null) return const SizedBox.shrink();
+                    final url = info.bestDownloadUrl();
+                    if (url == null || url.isEmpty) return const SizedBox.shrink();
+                    final ver = info.version;
+                    final build = info.build;
+                    final title = Localizations.localeOf(context).languageCode == 'zh'
+                        ? (build != null ? '发现新版本：$ver ($build)' : '发现新版本：$ver')
+                        : (build != null ? 'New version: $ver ($build)' : 'New version: $ver');
+                    final cs2 = Theme.of(context).colorScheme;
+                    final isDark2 = Theme.of(context).brightness == Brightness.dark;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Material(
+                        color: isDark2 ? Colors.white10 : const Color(0xFFF2F3F5),
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () async {
+                            final uri = Uri.parse(url);
+                            try {
+                              // Defer to url_launcher
+                              // ignore: deprecated_member_use
+                              await launchUrl(uri);
+                            } catch (_) {
+                              // Fallback: copy to clipboard
+                              Clipboard.setData(ClipboardData(text: url));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(Localizations.localeOf(context).languageCode == 'zh' ? '已复制下载链接' : 'Link copied')),
+                              );
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Lucide.BadgeInfo, size: 18, color: cs2.primary),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        title,
+                                        style: const TextStyle(fontWeight: FontWeight.w700),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if ((info.notes ?? '').trim().isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    info.notes!,
+                                    style: TextStyle(fontSize: 13, color: cs2.onSurface.withOpacity(0.8)),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
                   // 3. 聊天记录区（按日期分组，最近在前；垂直列表）
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 260),

@@ -13,7 +13,6 @@ class DisplaySettingsPage extends StatefulWidget {
 }
 
 class _DisplaySettingsPageState extends State<DisplaySettingsPage> {
-  bool showUpdates = true;
 
   @override
   Widget build(BuildContext context) {
@@ -86,8 +85,8 @@ class _DisplaySettingsPageState extends State<DisplaySettingsPage> {
             subtitle: zh
                 ? '显示应用更新通知'
                 : 'Show app update notifications',
-            value: showUpdates,
-            onChanged: (v) => setState(() => showUpdates = v),
+            value: context.watch<SettingsProvider>().showAppUpdates,
+            onChanged: (v) => context.read<SettingsProvider>().setShowAppUpdates(v),
           ),
           _SwitchTile(
             icon: Lucide.ChevronRight,
