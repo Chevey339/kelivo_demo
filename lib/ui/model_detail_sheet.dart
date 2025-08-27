@@ -57,8 +57,9 @@ class _ModelDetailSheet extends StatefulWidget {
 
 enum _TabKind { basic, advanced, tools }
 
-class _ModelDetailSheetState extends State<_ModelDetailSheet> {
+class _ModelDetailSheetState extends State<_ModelDetailSheet> with SingleTickerProviderStateMixin {
   _TabKind _tab = _TabKind.basic;
+  late final TabController _tabCtrl;
 
   late TextEditingController _idCtrl;
   late TextEditingController _nameCtrl;
@@ -77,6 +78,13 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
   @override
   void initState() {
     super.initState();
+    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl.addListener(() {
+      if (_tabCtrl.indexIsChanging) return;
+      setState(() {
+        _tab = (_tabCtrl.index == 0) ? _TabKind.basic : _TabKind.advanced;
+      });
+    });
     _idCtrl = TextEditingController(text: widget.modelId);
     final settings = context.read<SettingsProvider>();
     final cfg = settings.getProviderConfig(widget.providerKey);
@@ -129,6 +137,7 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
 
   @override
   void dispose() {
+    _tabCtrl.dispose();
     _idCtrl.dispose();
     _nameCtrl.dispose();
     super.dispose();
@@ -178,32 +187,36 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
       child: Row(
         children: [
           Expanded(child: Text(widget.isNew ? (zh ? '添加模型' : 'Add Model') : (zh ? '编辑模型' : 'Edit Model'), style: TextStyle(fontSize: 16, color: cs.onSurface, fontWeight: FontWeight.w600))),
-          IconButton(
-            icon: Icon(Lucide.X, size: 20, color: cs.onSurface.withOpacity(0.8)),
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
+          // Close button intentionally removed for both Add and Edit dialogs per spec.
         ],
       ),
     );
   }
 
   Widget _buildTabs(BuildContext context, bool zh) {
-    final items = [
-      (zh ? '基本设置' : 'Basic'),
-      (zh ? '高级设置' : 'Advanced'),
-      (zh ? '内置工具' : 'Tools'),
-    ];
+    // Match the TabBar style used in add_provider_sheet.dart (OpenAI/Google/Claude)
+    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-      child: Row(
-        children: [
-          for (int i = 0; i < items.length; i++)
-            _TabChip(
-              label: items[i],
-              selected: _tab.index == i,
-              onTap: () => setState(() => _tab = _TabKind.values[i]),
-            ),
-        ],
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF7F7F9),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: TabBar(
+          controller: _tabCtrl,
+          indicatorColor: cs.primary,
+          labelColor: cs.primary,
+          unselectedLabelColor: cs.onSurface.withOpacity(0.7),
+          dividerColor: Colors.transparent,
+          indicatorSize: TabBarIndicatorSize.tab,
+          tabs: [
+            Tab(text: zh ? '基本设置' : 'Basic'),
+            Tab(text: zh ? '高级设置' : 'Advanced'),
+          ],
+        ),
       ),
     );
   }
@@ -356,17 +369,13 @@ class _ModelDetailSheetState extends State<_ModelDetailSheet> {
             Text(
               zh ? '供应商重写：允许为特定模型自定义供应商设置。（暂未实现）' : 'Provider overrides: customize provider for a specific model.',
               style: TextStyle(color: cs.onSurface.withOpacity(0.8), fontSize: 13),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: () {},
-              icon: Icon(Lucide.Plus, size: 18),
-              label: Text(zh ? '添加供应商重写' : 'Add Provider Override'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: cs.primary,
-                foregroundColor: cs.onPrimary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 0,
+            Center(
+              child: _OutlinedAddButton(
+                label: zh ? '添加供应商重写' : 'Add Provider Override',
+                onTap: () {},
               ),
             ),
           ],
@@ -708,36 +717,38 @@ class _HeaderRow extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: TextField(
-              controller: kv.name,
-              decoration: InputDecoration(
-                hintText: 'Header',
-                filled: true,
-                fillColor: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.4))),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: kv.name,
+                  decoration: InputDecoration(
+                    hintText: 'Header Key',
+                    filled: true,
+                    fillColor: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.transparent)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.transparent)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.4))),
+                  ),
+                ),
               ),
+              IconButton(onPressed: onDelete, icon: const Icon(Lucide.Trash2))
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: kv.value,
+            decoration: InputDecoration(
+              hintText: 'Header Value',
+              filled: true,
+              fillColor: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.transparent)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.transparent)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Theme.of(context).colorScheme.primary.withOpacity(0.4))),
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: kv.value,
-              decoration: InputDecoration(
-                hintText: 'Value',
-                filled: true,
-                fillColor: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.4))),
-              ),
-            ),
-          ),
-          IconButton(onPressed: onDelete, icon: Icon(Lucide.Trash2, color: cs.onSurface.withOpacity(0.8)))
         ],
       ),
     );

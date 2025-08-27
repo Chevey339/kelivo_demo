@@ -9,6 +9,58 @@ import '../models/token_usage.dart';
 import '../utils/sandbox_path_resolver.dart';
 
 class ChatApiService {
+  // Helpers to read per-model overrides (headers/body) from ProviderConfig
+  static Map<String, dynamic> _modelOverride(ProviderConfig cfg, String modelId) {
+    final ov = cfg.modelOverrides[modelId];
+    if (ov is Map<String, dynamic>) return ov;
+    return const <String, dynamic>{};
+  }
+
+  static Map<String, String> _customHeaders(ProviderConfig cfg, String modelId) {
+    final ov = _modelOverride(cfg, modelId);
+    final list = (ov['headers'] as List?) ?? const <dynamic>[];
+    final out = <String, String>{};
+    for (final e in list) {
+      if (e is Map) {
+        final name = (e['name'] ?? e['key'] ?? '').toString().trim();
+        final value = (e['value'] ?? '').toString();
+        if (name.isNotEmpty) out[name] = value;
+      }
+    }
+    return out;
+  }
+
+  static dynamic _parseOverrideValue(String v) {
+    final s = v.trim();
+    if (s.isEmpty) return s;
+    if (s == 'true') return true;
+    if (s == 'false') return false;
+    if (s == 'null') return null;
+    final i = int.tryParse(s);
+    if (i != null) return i;
+    final d = double.tryParse(s);
+    if (d != null) return d;
+    if ((s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'))) {
+      try {
+        return jsonDecode(s);
+      } catch (_) {}
+    }
+    return v;
+  }
+
+  static Map<String, dynamic> _customBody(ProviderConfig cfg, String modelId) {
+    final ov = _modelOverride(cfg, modelId);
+    final list = (ov['body'] as List?) ?? const <dynamic>[];
+    final out = <String, dynamic>{};
+    for (final e in list) {
+      if (e is Map) {
+        final key = (e['key'] ?? e['name'] ?? '').toString().trim();
+        final val = (e['value'] ?? '').toString();
+        if (key.isNotEmpty) out[key] = _parseOverrideValue(val);
+      }
+    }
+    return out;
+  }
   static String _mimeFromPath(String path) {
     final lower = path.toLowerCase();
     if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
@@ -140,14 +192,14 @@ class ChatApiService {
                 ],
                 'temperature': 0.3,
               };
-        final resp = await client.post(
-          url,
-          headers: {
-            'Authorization': 'Bearer ${config.apiKey}',
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode(body),
-        );
+        final headers = <String, String>{
+          'Authorization': 'Bearer ${config.apiKey}',
+          'Content-Type': 'application/json',
+        };
+        headers.addAll(_customHeaders(config, modelId));
+        final extra = _customBody(config, modelId);
+        if (extra.isNotEmpty) (body as Map<String, dynamic>).addAll(extra);
+        final resp = await client.post(url, headers: headers, body: jsonEncode(body));
         if (resp.statusCode < 200 || resp.statusCode >= 300) {
           throw HttpException('HTTP ${resp.statusCode}: ${resp.body}');
         }
@@ -176,15 +228,15 @@ class ChatApiService {
             {'role': 'user', 'content': prompt}
           ],
         };
-        final resp = await client.post(
-          url,
-          headers: {
-            'x-api-key': config.apiKey,
-            'anthropic-version': '2023-06-01',
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode(body),
-        );
+        final headers = <String, String>{
+          'x-api-key': config.apiKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        };
+        headers.addAll(_customHeaders(config, modelId));
+        final extra = _customBody(config, modelId);
+        if (extra.isNotEmpty) (body as Map<String, dynamic>).addAll(extra);
+        final resp = await client.post(url, headers: headers, body: jsonEncode(body));
         if (resp.statusCode < 200 || resp.statusCode >= 300) {
           throw HttpException('HTTP ${resp.statusCode}: ${resp.body}');
         }
@@ -219,11 +271,11 @@ class ChatApiService {
           ],
           'generationConfig': {'temperature': 0.3},
         };
-        final resp = await client.post(
-          Uri.parse(url),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(body),
-        );
+        final headers = <String, String>{'Content-Type': 'application/json'};
+        headers.addAll(_customHeaders(config, modelId));
+        final extra = _customBody(config, modelId);
+        if (extra.isNotEmpty) (body as Map<String, dynamic>).addAll(extra);
+        final resp = await client.post(Uri.parse(url), headers: headers, body: jsonEncode(body));
         if (resp.statusCode < 200 || resp.statusCode >= 300) {
           throw HttpException('HTTP ${resp.statusCode}: ${resp.body}');
         }
@@ -387,17 +439,25 @@ class ChatApiService {
     }
 
     final request = http.Request('POST', url);
-    request.headers.addAll({
+    final headers = <String, String>{
       'Authorization': 'Bearer ${config.apiKey}',
       'Content-Type': 'application/json',
       'Accept': 'text/event-stream',
-    });
+    };
+    // Merge custom headers (override takes precedence)
+    headers.addAll(_customHeaders(config, modelId));
+    request.headers.addAll(headers);
     // Ask for usage in streaming for chat-completions compatible hosts (when supported)
     if (config.useResponseApi != true) {
       final h = Uri.tryParse(config.baseUrl)?.host.toLowerCase() ?? '';
       if (!h.contains('mistral.ai')) {
         (body as Map<String, dynamic>)['stream_options'] = {'include_usage': true};
       }
+    }
+    // Merge custom body keys (override takes precedence)
+    final extraBody = _customBody(config, modelId);
+    if (extraBody.isNotEmpty) {
+      (body as Map<String, dynamic>).addAll(extraBody);
     }
     request.body = jsonEncode(body);
 
@@ -976,12 +1036,16 @@ class ChatApiService {
     };
 
     final request = http.Request('POST', url);
-    request.headers.addAll({
+    final headers = <String, String>{
       'x-api-key': config.apiKey,
       'anthropic-version': '2023-06-01',
       'Content-Type': 'application/json',
       'Accept': 'text/event-stream',
-    });
+    };
+    headers.addAll(_customHeaders(config, modelId));
+    request.headers.addAll(headers);
+    final extraClaude = _customBody(config, modelId);
+    if (extraClaude.isNotEmpty) (body as Map<String, dynamic>).addAll(extraClaude);
     request.body = jsonEncode(body);
 
     final response = await client.send(request);
@@ -1199,12 +1263,16 @@ class ChatApiService {
       };
 
       final request = http.Request('POST', uri);
-      request.headers.addAll(<String, String>{
+      final headers = <String, String>{
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream',
         if (config.vertexAI == true && config.apiKey.isNotEmpty)
           'Authorization': 'Bearer ${config.apiKey}',
-      });
+      };
+      headers.addAll(_customHeaders(config, modelId));
+      request.headers.addAll(headers);
+      final extra = _customBody(config, modelId);
+      if (extra.isNotEmpty) (body as Map<String, dynamic>).addAll(extra);
       request.body = jsonEncode(body);
 
       final resp = await client.send(request);

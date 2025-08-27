@@ -198,6 +198,56 @@ class GoogleProvider extends BaseProvider {
 }
 
 class ProviderManager {
+  // Per-model override helpers (duplicated logic from ChatApiService)
+  static Map<String, dynamic> _modelOverride(ProviderConfig cfg, String modelId) {
+    final ov = cfg.modelOverrides[modelId];
+    if (ov is Map<String, dynamic>) return ov;
+    return const <String, dynamic>{};
+  }
+
+  static Map<String, String> _customHeaders(ProviderConfig cfg, String modelId) {
+    final ov = _modelOverride(cfg, modelId);
+    final list = (ov['headers'] as List?) ?? const <dynamic>[];
+    final out = <String, String>{};
+    for (final e in list) {
+      if (e is Map) {
+        final name = (e['name'] ?? e['key'] ?? '').toString().trim();
+        final value = (e['value'] ?? '').toString();
+        if (name.isNotEmpty) out[name] = value;
+      }
+    }
+    return out;
+  }
+
+  static dynamic _parseOverrideValue(String v) {
+    final s = v.trim();
+    if (s.isEmpty) return s;
+    if (s == 'true') return true;
+    if (s == 'false') return false;
+    if (s == 'null') return null;
+    final i = int.tryParse(s);
+    if (i != null) return i;
+    final d = double.tryParse(s);
+    if (d != null) return d;
+    if ((s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'))) {
+      try { return jsonDecode(s); } catch (_) {}
+    }
+    return v;
+  }
+
+  static Map<String, dynamic> _customBody(ProviderConfig cfg, String modelId) {
+    final ov = _modelOverride(cfg, modelId);
+    final list = (ov['body'] as List?) ?? const <dynamic>[];
+    final out = <String, dynamic>{};
+    for (final e in list) {
+      if (e is Map) {
+        final key = (e['key'] ?? e['name'] ?? '').toString().trim();
+        final val = (e['value'] ?? '').toString();
+        if (key.isNotEmpty) out[key] = _parseOverrideValue(val);
+      }
+    }
+    return out;
+  }
   static BaseProvider forConfig(ProviderConfig cfg) {
     final kind = ProviderConfig.classify(cfg.id);
     switch (kind) {
@@ -239,12 +289,16 @@ class ProviderManager {
                 'max_tokens': 8,
                 'stream': false,
               };
-        final res = await client.post(url,
-            headers: {
-              'Authorization': 'Bearer ${cfg.apiKey}',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode(body));
+        // Merge custom body overrides
+        final extra = _customBody(cfg, modelId);
+        if (extra.isNotEmpty) (body as Map<String, dynamic>).addAll(extra);
+        // Merge custom headers overrides
+        final headers = <String, String>{
+          'Authorization': 'Bearer ${cfg.apiKey}',
+          'Content-Type': 'application/json',
+        };
+        headers.addAll(_customHeaders(cfg, modelId));
+        final res = await client.post(url, headers: headers, body: jsonEncode(body));
         if (res.statusCode < 200 || res.statusCode >= 300) {
           throw HttpException('HTTP ${res.statusCode}: ${res.body}');
         }
@@ -262,13 +316,15 @@ class ProviderManager {
             }
           ]
         };
-        final res = await client.post(url,
-            headers: {
-              'x-api-key': cfg.apiKey,
-              'anthropic-version': ClaudeProvider.anthropicVersion,
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode(body));
+        final extra = _customBody(cfg, modelId);
+        if (extra.isNotEmpty) (body as Map<String, dynamic>).addAll(extra);
+        final headers = <String, String>{
+          'x-api-key': cfg.apiKey,
+          'anthropic-version': ClaudeProvider.anthropicVersion,
+          'Content-Type': 'application/json',
+        };
+        headers.addAll(_customHeaders(cfg, modelId));
+        final res = await client.post(url, headers: headers, body: jsonEncode(body));
         if (res.statusCode < 200 || res.statusCode >= 300) {
           throw HttpException('HTTP ${res.statusCode}: ${res.body}');
         }
@@ -301,6 +357,9 @@ class ProviderManager {
         if (cfg.vertexAI == true && cfg.apiKey.isNotEmpty) {
           headers['Authorization'] = 'Bearer ${cfg.apiKey}';
         }
+        headers.addAll(_customHeaders(cfg, modelId));
+        final extra = _customBody(cfg, modelId);
+        if (extra.isNotEmpty) (body as Map<String, dynamic>).addAll(extra);
         final res = await client.post(Uri.parse(url), headers: headers, body: jsonEncode(body));
         if (res.statusCode < 200 || res.statusCode >= 300) {
           throw HttpException('HTTP ${res.statusCode}: ${res.body}');
