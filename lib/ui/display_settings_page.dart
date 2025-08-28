@@ -5,6 +5,7 @@ import 'package:syncfusion_flutter_sliders/sliders.dart';
 import 'package:syncfusion_flutter_core/theme.dart';
 import '../providers/settings_provider.dart';
 import 'theme_settings_page.dart';
+import '../theme/palettes.dart';
 
 class DisplaySettingsPage extends StatefulWidget {
   const DisplaySettingsPage({super.key});
@@ -288,18 +289,8 @@ class _ThemeEntryCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     final settings = context.watch<SettingsProvider>();
-    String modeLabel;
-    switch (settings.themeMode) {
-      case ThemeMode.light:
-        modeLabel = zh ? '浅色' : 'Light';
-        break;
-      case ThemeMode.dark:
-        modeLabel = zh ? '深色' : 'Dark';
-        break;
-      case ThemeMode.system:
-      default:
-        modeLabel = zh ? '跟随系统' : 'System';
-    }
+    final palette = ThemePalettes.byId(settings.themePaletteId);
+    final subtitleText = zh ? palette.displayNameZh : palette.displayNameEn;
     return Material(
       color: cs.surfaceVariant.withOpacity(isDark ? 0.18 : 0.5),
       borderRadius: BorderRadius.circular(12),
@@ -330,10 +321,7 @@ class _ThemeEntryCard extends StatelessWidget {
                     Text(zh ? '主题设置' : 'Theme Settings',
                         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
-                    Text(
-                      zh ? '模式: $modeLabel' : 'Mode: $modeLabel',
-                      style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.6)),
-                    ),
+                    Text(subtitleText, style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.6))),
                   ],
                 ),
               ),
