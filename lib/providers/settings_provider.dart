@@ -14,6 +14,8 @@ class SettingsProvider extends ChangeNotifier {
   static const String _selectedModelKey = 'selected_model_v1';
   static const String _titleModelKey = 'title_model_v1';
   static const String _titlePromptKey = 'title_prompt_v1';
+  static const String _themePaletteKey = 'theme_palette_v1';
+  static const String _useDynamicColorKey = 'use_dynamic_color_v1';
   static const String _thinkingBudgetKey = 'thinking_budget_v1';
   static const String _displayShowUserAvatarKey = 'display_show_user_avatar_v1';
   static const String _displayShowModelIconKey = 'display_show_model_icon_v1';
@@ -37,6 +39,13 @@ class SettingsProvider extends ChangeNotifier {
 
   ThemeMode _themeMode = ThemeMode.system;
   ThemeMode get themeMode => _themeMode;
+  // Theme palette & dynamic color
+  String _themePaletteId = 'default';
+  String get themePaletteId => _themePaletteId;
+  bool _useDynamicColor = true; // when supported on Android
+  bool get useDynamicColor => _useDynamicColor;
+  bool _dynamicColorSupported = false; // runtime capability, not persisted
+  bool get dynamicColorSupported => _dynamicColorSupported;
 
   Map<String, ProviderConfig> _providerConfigs = {};
   Map<String, ProviderConfig> get providerConfigs => Map.unmodifiable(_providerConfigs);
@@ -80,6 +89,8 @@ class SettingsProvider extends ChangeNotifier {
       default:
         _themeMode = ThemeMode.system;
     }
+    _themePaletteId = prefs.getString(_themePaletteKey) ?? 'default';
+    _useDynamicColor = prefs.getBool(_useDynamicColorKey) ?? true;
     final cfgStr = prefs.getString(_providerConfigsKey);
     if (cfgStr != null && cfgStr.isNotEmpty) {
       try {
@@ -223,6 +234,28 @@ class SettingsProvider extends ChangeNotifier {
             ? 'dark'
             : 'system';
     await prefs.setString(_themeModeKey, v);
+  }
+
+  Future<void> setThemePalette(String id) async {
+    if (_themePaletteId == id) return;
+    _themePaletteId = id;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_themePaletteKey, id);
+  }
+
+  Future<void> setUseDynamicColor(bool v) async {
+    if (_useDynamicColor == v) return;
+    _useDynamicColor = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_useDynamicColorKey, v);
+  }
+
+  void setDynamicColorSupported(bool v) {
+    if (_dynamicColorSupported == v) return;
+    _dynamicColorSupported = v;
+    notifyListeners();
   }
 
   Future<void> toggleTheme() => setThemeMode(

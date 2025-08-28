@@ -4,6 +4,7 @@ import '../icons/lucide_adapter.dart';
 import 'package:syncfusion_flutter_sliders/sliders.dart';
 import 'package:syncfusion_flutter_core/theme.dart';
 import '../providers/settings_provider.dart';
+import 'theme_settings_page.dart';
 
 class DisplaySettingsPage extends StatefulWidget {
   const DisplaySettingsPage({super.key});
@@ -41,6 +42,12 @@ class _DisplaySettingsPageState extends State<DisplaySettingsPage> {
       ),
       body: ListView(
         children: [
+          // Theme settings entry card at the very top
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+            child: _ThemeEntryCard(),
+          ),
+          const SizedBox(height: 4),
           _SwitchTile(
             icon: Lucide.User,
             title: zh ? '显示用户头像' : 'Show User Avatar',
@@ -265,6 +272,72 @@ class _SwitchTile extends StatelessWidget {
                 ),
               ),
               Switch(value: value, onChanged: onChanged),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeEntryCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final zh = Localizations.localeOf(context).languageCode == 'zh';
+    final settings = context.watch<SettingsProvider>();
+    String modeLabel;
+    switch (settings.themeMode) {
+      case ThemeMode.light:
+        modeLabel = zh ? '浅色' : 'Light';
+        break;
+      case ThemeMode.dark:
+        modeLabel = zh ? '深色' : 'Dark';
+        break;
+      case ThemeMode.system:
+      default:
+        modeLabel = zh ? '跟随系统' : 'System';
+    }
+    return Material(
+      color: cs.surfaceVariant.withOpacity(isDark ? 0.18 : 0.5),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ThemeSettingsPage()),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                margin: const EdgeInsets.only(right: 12),
+                child: Icon(Lucide.Palette, size: 20, color: cs.primary),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(zh ? '主题设置' : 'Theme Settings',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(
+                      zh ? '模式: $modeLabel' : 'Mode: $modeLabel',
+                      style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.6)),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Lucide.ChevronRight, size: 18, color: cs.onSurface.withOpacity(0.6)),
             ],
           ),
         ),

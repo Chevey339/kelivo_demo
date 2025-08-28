@@ -138,6 +138,45 @@ ThemeData buildLightTheme(ColorScheme? dynamicScheme) {
   );
 }
 
+// New: Build themes from a provided static palette (with optional dynamic override)
+ThemeData buildLightThemeForScheme(ColorScheme staticScheme, {ColorScheme? dynamicScheme}) {
+  final scheme = (dynamicScheme?.harmonized()) ?? staticScheme;
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: scheme.surface,
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: scheme.inverseSurface,
+      contentTextStyle: TextStyle(color: scheme.onInverseSurface, fontSize: 14, fontWeight: FontWeight.w500),
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      actionTextColor: scheme.primary,
+      disabledActionTextColor: scheme.onInverseSurface.withOpacity(0.5),
+    ),
+    appBarTheme: AppBarTheme(
+      backgroundColor: scheme.surface,
+      surfaceTintColor: scheme.surface,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      foregroundColor: Colors.black,
+      titleTextStyle: const TextStyle(
+        color: Colors.black,
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+      ),
+      iconTheme: const IconThemeData(color: Colors.black),
+      actionsIconTheme: const IconThemeData(color: Colors.black),
+      systemOverlayStyle: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: scheme.surface,
+      ),
+    ),
+  );
+}
+
 ThemeData buildDarkTheme(ColorScheme? dynamicScheme) {
   final scheme = (dynamicScheme?.harmonized()) ?? const ColorScheme(
     brightness: Brightness.dark,
@@ -174,6 +213,44 @@ ThemeData buildDarkTheme(ColorScheme? dynamicScheme) {
   );
   // _logColorScheme('Dark ${dynamicScheme != null ? 'Dynamic' : 'Static'}', scheme);
 
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: scheme.surface,
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: scheme.inverseSurface,
+      contentTextStyle: TextStyle(color: scheme.onInverseSurface, fontSize: 14, fontWeight: FontWeight.w500),
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      actionTextColor: scheme.primary,
+      disabledActionTextColor: scheme.onInverseSurface.withOpacity(0.6),
+    ),
+    appBarTheme: AppBarTheme(
+      backgroundColor: scheme.surface,
+      surfaceTintColor: scheme.surface,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      foregroundColor: Colors.white,
+      titleTextStyle: const TextStyle(
+        color: Colors.white,
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+      ),
+      iconTheme: const IconThemeData(color: Colors.white),
+      actionsIconTheme: const IconThemeData(color: Colors.white),
+      systemOverlayStyle: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: scheme.surface,
+      ),
+    ),
+  );
+}
+
+ThemeData buildDarkThemeForScheme(ColorScheme staticScheme, {ColorScheme? dynamicScheme}) {
+  final scheme = (dynamicScheme?.harmonized()) ?? staticScheme;
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,

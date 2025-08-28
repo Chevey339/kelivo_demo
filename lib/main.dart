@@ -4,6 +4,7 @@ import 'ui/home_page.dart';
 import 'package:flutter/services.dart';
 // Theme is now managed in SettingsProvider
 import 'theme/theme_factory.dart';
+import 'theme/palettes.dart';
 import 'package:provider/provider.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'providers/chat_provider.dart';
@@ -69,8 +70,21 @@ class MyApp extends StatelessWidget {
               // } else {
               //   debugPrint('[DynamicColor] Dark dynamic not available');
               // }
-              final light = buildLightTheme(lightDynamic);
-              final dark = buildDarkTheme(darkDynamic);
+              final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+              // Update dynamic color capability for settings UI
+              settings.setDynamicColorSupported(isAndroid && (lightDynamic != null || darkDynamic != null));
+
+              final useDyn = isAndroid && settings.useDynamicColor;
+              final palette = ThemePalettes.byId(settings.themePaletteId);
+
+              final light = buildLightThemeForScheme(
+                palette.light,
+                dynamicScheme: useDyn ? lightDynamic : null,
+              );
+              final dark = buildDarkThemeForScheme(
+                palette.dark,
+                dynamicScheme: useDyn ? darkDynamic : null,
+              );
               // Log top-level colors likely used by widgets (card/bg/shadow approximations)
               // debugPrint('[Theme/App] Light scaffoldBg=${light.colorScheme.surface.value.toRadixString(16)} card≈${light.colorScheme.surface.value.toRadixString(16)} shadow=${light.colorScheme.shadow.value.toRadixString(16)}');
               // debugPrint('[Theme/App] Dark scaffoldBg=${dark.colorScheme.surface.value.toRadixString(16)} card≈${dark.colorScheme.surface.value.toRadixString(16)} shadow=${dark.colorScheme.shadow.value.toRadixString(16)}');
