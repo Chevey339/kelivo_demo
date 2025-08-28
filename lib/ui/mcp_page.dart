@@ -162,11 +162,13 @@ class McpPage extends StatelessWidget {
 
                 final card = Material(
                   color: Colors.transparent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  clipBehavior: Clip.antiAlias,
                   child: InkWell(
+                    customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     onTap: () async {
                       await showMcpServerEditSheet(context, serverId: s.id);
                     },
-                    borderRadius: BorderRadius.circular(14),
                     child: Ink(
                       decoration: BoxDecoration(
                         color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : cs.surface,

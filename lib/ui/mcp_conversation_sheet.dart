@@ -127,8 +127,10 @@ class _ConversationMcpSheet extends StatelessWidget {
 
                           return Material(
                             color: Colors.transparent,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            clipBehavior: Clip.antiAlias,
                             child: InkWell(
-                              borderRadius: BorderRadius.circular(14),
+                              customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               onTap: () {
                                 context.read<ChatService>().toggleConversationMcpServer(conversationId, s.id, !isSelected);
                               },
