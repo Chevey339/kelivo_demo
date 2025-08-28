@@ -1,6 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import '../icons/lucide_adapter.dart';
 import '../providers/settings_provider.dart';
 import 'model_detail_sheet.dart';
@@ -30,6 +33,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   // Google Vertex AI extras
   final _locationCtrl = TextEditingController();
   final _projectCtrl = TextEditingController();
+  final _saJsonCtrl = TextEditingController();
   bool _enabled = true;
   bool _useResp = false; // openai
   bool _vertexAI = false; // google
@@ -56,6 +60,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     _vertexAI = _cfg.vertexAI ?? false;
     _locationCtrl.text = _cfg.location ?? '';
     _projectCtrl.text = _cfg.projectId ?? '';
+    _saJsonCtrl.text = _cfg.serviceAccountJson ?? '';
     // proxy
     _proxyEnabled = _cfg.proxyEnabled ?? false;
     _proxyHostCtrl.text = _cfg.proxyHost ?? '';
@@ -73,6 +78,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     _pathCtrl.dispose();
     _locationCtrl.dispose();
     _projectCtrl.dispose();
+    _saJsonCtrl.dispose();
     _proxyHostCtrl.dispose();
     _proxyPortCtrl.dispose();
     _proxyUserCtrl.dispose();
@@ -221,20 +227,22 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         const SizedBox(height: 12),
         _inputRow(context, label: zh ? '名称' : 'Name', controller: _nameCtrl, hint: widget.displayName),
         const SizedBox(height: 12),
-        _inputRow(
-          context,
-          label: 'API Key',
-          controller: _keyCtrl,
-          hint: zh ? '留空则使用上层默认' : 'Leave empty to use default',
-          obscure: !_showApiKey,
-          suffix: IconButton(
-            tooltip: _showApiKey ? (zh ? '隐藏' : 'Hide') : (zh ? '显示' : 'Show'),
-            icon: Icon(_showApiKey ? Lucide.EyeOff : Lucide.Eye, color: cs.onSurface.withOpacity(0.7), size: 18),
-            onPressed: () => setState(() => _showApiKey = !_showApiKey),
+        if (!(_kind == ProviderKind.google && _vertexAI)) ...[
+          _inputRow(
+            context,
+            label: 'API Key',
+            controller: _keyCtrl,
+            hint: zh ? '留空则使用上层默认' : 'Leave empty to use default',
+            obscure: !_showApiKey,
+            suffix: IconButton(
+              tooltip: _showApiKey ? (zh ? '隐藏' : 'Hide') : (zh ? '显示' : 'Show'),
+              icon: Icon(_showApiKey ? Lucide.EyeOff : Lucide.Eye, color: cs.onSurface.withOpacity(0.7), size: 18),
+              onPressed: () => setState(() => _showApiKey = !_showApiKey),
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        _inputRow(context, label: 'API Base URL', controller: _baseCtrl, hint: ProviderConfig.defaultsFor(widget.keyName, displayName: widget.displayName).baseUrl),
+          const SizedBox(height: 12),
+          _inputRow(context, label: 'API Base URL', controller: _baseCtrl, hint: ProviderConfig.defaultsFor(widget.keyName, displayName: widget.displayName).baseUrl),
+        ],
         if (_kind == ProviderKind.openai) ...[
           const SizedBox(height: 12),
           _inputRow(
@@ -255,6 +263,20 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
             _inputRow(context, label: zh ? '区域 Location' : 'Location', controller: _locationCtrl, hint: 'us-central1'),
             const SizedBox(height: 12),
             _inputRow(context, label: zh ? '项目 ID' : 'Project ID', controller: _projectCtrl, hint: 'my-project-id'),
+            const SizedBox(height: 12),
+            _multilineRow(
+              context,
+              label: zh ? '服务账号 JSON（粘贴或导入）' : 'Service Account JSON (paste or import)',
+              controller: _saJsonCtrl,
+              hint: '{\n  "type": "service_account", ...\n}',
+              actions: [
+                TextButton.icon(
+                  onPressed: _importServiceAccountJson,
+                  icon: Icon(Lucide.Upload, size: 16),
+                  label: Text(zh ? '导入 JSON' : 'Import JSON'),
+                ),
+              ],
+            ),
           ],
         ],
         const SizedBox(height: 16),
@@ -602,6 +624,13 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   Future<void> _save() async {
     final settings = context.read<SettingsProvider>();
     final old = settings.getProviderConfig(widget.keyName, defaultName: widget.displayName);
+    String projectId = _projectCtrl.text.trim();
+    if ((_kind == ProviderKind.google) && _vertexAI && projectId.isEmpty) {
+      try {
+        final obj = jsonDecode(_saJsonCtrl.text) as Map<String, dynamic>;
+        projectId = (obj['project_id'] as String?)?.trim() ?? '';
+      } catch (_) {}
+    }
     final updated = old.copyWith(
       enabled: _enabled,
       name: _nameCtrl.text.trim().isEmpty ? widget.displayName : _nameCtrl.text.trim(),
@@ -611,7 +640,8 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
       useResponseApi: _kind == ProviderKind.openai ? _useResp : old.useResponseApi,
       vertexAI: _kind == ProviderKind.google ? _vertexAI : old.vertexAI,
       location: _kind == ProviderKind.google ? _locationCtrl.text.trim() : old.location,
-      projectId: _kind == ProviderKind.google ? _projectCtrl.text.trim() : old.projectId,
+      projectId: _kind == ProviderKind.google ? projectId : old.projectId,
+      serviceAccountJson: _kind == ProviderKind.google ? _saJsonCtrl.text.trim() : old.serviceAccountJson,
       // preserve models and modelOverrides and proxy fields implicitly via copyWith
     );
     await settings.setProviderConfig(widget.keyName, updated);
@@ -619,6 +649,86 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(zh ? '已保存' : 'Saved')));
     setState(() {});
+  }
+
+  Widget _multilineRow(
+    BuildContext context, {
+    required String label,
+    required TextEditingController controller,
+    String? hint,
+    List<Widget>? actions,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(0.8)))),
+            if (actions != null) ...actions,
+          ],
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          maxLines: 8,
+          minLines: 4,
+          decoration: InputDecoration(
+            hintText: hint,
+            filled: true,
+            alignLabelWithHint: true,
+            fillColor: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.transparent)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.4))),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _importServiceAccountJson() async {
+    try {
+      // Lazy import to avoid hard dependency errors in web
+      // ignore: avoid_dynamic_calls
+      // ignore: import_of_legacy_library_into_null_safe
+      // Using file_picker which is already in pubspec
+      // import placed at top-level of this file
+      final picker = await _pickJsonFile();
+      if (picker == null) return;
+      _saJsonCtrl.text = picker;
+      // Auto-fill projectId if available
+      try {
+        final obj = jsonDecode(_saJsonCtrl.text) as Map<String, dynamic>;
+        final pid = (obj['project_id'] as String?)?.trim();
+        if ((pid ?? '').isNotEmpty && _projectCtrl.text.trim().isEmpty) {
+          _projectCtrl.text = pid!;
+        }
+      } catch (_) {}
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<String?> _pickJsonFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        allowMultiple: false,
+      );
+      if (result == null || result.files.isEmpty) return null;
+      final file = result.files.single;
+      final path = file.path;
+      if (path == null) return null;
+      final text = await File(path).readAsString();
+      return text;
+    } catch (e) {
+      return null;
+    }
   }
 
   Future<void> _openTestDialog() async {

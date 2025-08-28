@@ -625,6 +625,8 @@ class ProviderConfig {
   final bool? vertexAI; // google only
   final String? location; // google vertex ai only
   final String? projectId; // google vertex ai only
+  // Google Vertex AI via service account JSON (paste or import)
+  final String? serviceAccountJson; // google vertex ai only
   final List<String> models; // placeholder for future model management
   // Per-model overrides (by model id)
   // {'<modelId>': {'name': String?, 'type': 'chat'|'embedding', 'input': ['text','image'], 'output': [...], 'abilities': ['tool','reasoning']}}
@@ -647,6 +649,7 @@ class ProviderConfig {
     this.vertexAI,
     this.location,
     this.projectId,
+    this.serviceAccountJson,
     this.models = const [],
     this.modelOverrides = const {},
     this.proxyEnabled,
@@ -667,6 +670,7 @@ class ProviderConfig {
     bool? vertexAI,
     String? location,
     String? projectId,
+    String? serviceAccountJson,
     List<String>? models,
     Map<String, dynamic>? modelOverrides,
     bool? proxyEnabled,
@@ -685,6 +689,7 @@ class ProviderConfig {
         vertexAI: vertexAI ?? this.vertexAI,
         location: location ?? this.location,
         projectId: projectId ?? this.projectId,
+        serviceAccountJson: serviceAccountJson ?? this.serviceAccountJson,
         models: models ?? this.models,
         modelOverrides: modelOverrides ?? this.modelOverrides,
         proxyEnabled: proxyEnabled ?? this.proxyEnabled,
@@ -705,6 +710,7 @@ class ProviderConfig {
         'vertexAI': vertexAI,
         'location': location,
         'projectId': projectId,
+        'serviceAccountJson': serviceAccountJson,
         'models': models,
         'modelOverrides': modelOverrides,
         'proxyEnabled': proxyEnabled,
@@ -725,6 +731,7 @@ class ProviderConfig {
         vertexAI: json['vertexAI'] as bool?,
         location: json['location'] as String?,
         projectId: json['projectId'] as String?,
+        serviceAccountJson: json['serviceAccountJson'] as String?,
         models: (json['models'] as List?)?.map((e) => e.toString()).toList() ?? const [],
         modelOverrides: (json['modelOverrides'] as Map?)?.map((k, v) => MapEntry(k.toString(), v)) ?? const {},
         proxyEnabled: json['proxyEnabled'] as bool?,
@@ -776,6 +783,7 @@ class ProviderConfig {
           vertexAI: false,
           location: '',
           projectId: '',
+          serviceAccountJson: '',
           models: const [],
           modelOverrides: const {},
           proxyEnabled: false,

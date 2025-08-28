@@ -7,6 +7,7 @@ import '../providers/settings_provider.dart';
 import '../providers/model_provider.dart';
 import '../models/token_usage.dart';
 import '../utils/sandbox_path_resolver.dart';
+import 'google_service_account_auth.dart';
 
 class ChatApiService {
   // Helpers to read per-model overrides (headers/body) from ProviderConfig
@@ -302,7 +303,7 @@ class ChatApiService {
         if (config.vertexAI == true && (config.location?.isNotEmpty == true) && (config.projectId?.isNotEmpty == true)) {
           final loc = config.location!;
           final proj = config.projectId!;
-          url = 'https://$loc-aiplatform.googleapis.com/v1/projects/$proj/locations/$loc/publishers/google/models/$modelId:generateContent';
+          url = 'https://aiplatform.googleapis.com/v1/projects/$proj/locations/$loc/publishers/google/models/$modelId:generateContent';
         } else {
           final base = config.baseUrl.endsWith('/')
               ? config.baseUrl.substring(0, config.baseUrl.length - 1)
@@ -321,6 +322,15 @@ class ChatApiService {
           'generationConfig': {'temperature': 0.3},
         };
     final headers = <String, String>{'Content-Type': 'application/json'};
+    // Add Bearer for Vertex via service account JSON
+    if (config.vertexAI == true) {
+      final token = await _maybeVertexAccessToken(config);
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+      final proj = (config.projectId ?? '').trim();
+      if (proj.isNotEmpty) headers['X-Goog-User-Project'] = proj;
+    }
     headers.addAll(_customHeaders(config, modelId));
     if (extraHeaders != null && extraHeaders.isNotEmpty) headers.addAll(extraHeaders);
     final extra = _customBody(config, modelId);
@@ -1378,7 +1388,7 @@ class ChatApiService {
     if (config.vertexAI == true && (config.location?.isNotEmpty == true) && (config.projectId?.isNotEmpty == true)) {
       final loc = config.location!.trim();
       final proj = config.projectId!.trim();
-      baseUrl = 'https://$loc-aiplatform.googleapis.com/v1/projects/$proj/locations/$loc/publishers/google/models/$modelId:streamGenerateContent';
+      baseUrl = 'https://aiplatform.googleapis.com/v1/projects/$proj/locations/$loc/publishers/google/models/$modelId:streamGenerateContent';
     } else {
       final base = config.baseUrl.endsWith('/')
           ? config.baseUrl.substring(0, config.baseUrl.length - 1)
@@ -1475,9 +1485,15 @@ class ChatApiService {
       final headers = <String, String>{
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream',
-        if (config.vertexAI == true && config.apiKey.isNotEmpty)
-          'Authorization': 'Bearer ${config.apiKey}',
       };
+      if (config.vertexAI == true) {
+        final token = await _maybeVertexAccessToken(config);
+        if (token != null && token.isNotEmpty) {
+          headers['Authorization'] = 'Bearer $token';
+        }
+        final proj = (config.projectId ?? '').trim();
+        if (proj.isNotEmpty) headers['X-Goog-User-Project'] = proj;
+      }
       headers.addAll(_customHeaders(config, modelId));
       if (extraHeaders != null && extraHeaders.isNotEmpty) headers.addAll(extraHeaders);
       request.headers.addAll(headers);
@@ -1532,6 +1548,7 @@ class ChatApiService {
             if (candidates is List && candidates.isNotEmpty) {
               String textDelta = '';
               String reasoningDelta = '';
+              String? finishReason; // detect stream completion from server
               for (final cand in candidates) {
                 if (cand is! Map) continue;
                 final content = cand['content'];
@@ -1585,6 +1602,9 @@ class ChatApiService {
                     calls.add({'id': id, 'name': name, 'args': args, 'result': resText});
                   }
                 }
+                // Capture explicit finish reason if present
+                final fr = cand['finishReason'];
+                if (fr is String && fr.isNotEmpty) finishReason = fr;
               }
 
               if (reasoningDelta.isNotEmpty) {
@@ -1592,6 +1612,16 @@ class ChatApiService {
               }
               if (textDelta.isNotEmpty) {
                 yield ChatStreamChunk(content: textDelta, isDone: false, totalTokens: totalTokens, usage: usage);
+              }
+
+              // If server signaled finish, close image markdown and end stream immediately
+              if (finishReason != null && calls.isEmpty) {
+                if (_imageOpen) {
+                  yield ChatStreamChunk(content: ')', isDone: false, totalTokens: totalTokens, usage: usage);
+                  _imageOpen = false;
+                }
+                yield ChatStreamChunk(content: '', isDone: true, totalTokens: totalTokens, usage: usage);
+                return;
               }
             }
           } catch (_) {
@@ -1636,6 +1666,25 @@ class ChatApiService {
       }
       // Continue while(true) for next round
     }
+  }
+
+  // Returns OAuth token for Vertex AI when serviceAccountJson is configured; otherwise null.
+  static Future<String?> _maybeVertexAccessToken(ProviderConfig cfg) async {
+    if (cfg.vertexAI == true) {
+      final jsonStr = (cfg.serviceAccountJson ?? '').trim();
+      if (jsonStr.isEmpty) {
+        // Fallback: some users may paste a temporary OAuth token into apiKey
+        if (cfg.apiKey.isNotEmpty) return cfg.apiKey;
+        return null;
+      }
+      try {
+        return await GoogleServiceAccountAuth.getAccessTokenFromJson(jsonStr);
+      } catch (_) {
+        // On failure, do not crash streaming; let server return 401 and surface error upstream
+        return null;
+      }
+    }
+    return null;
   }
 }
 

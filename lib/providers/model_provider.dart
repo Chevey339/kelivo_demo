@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'settings_provider.dart';
+import '../services/google_service_account_auth.dart';
 
 enum ModelType { chat, embedding }
 enum Modality { text, image }
@@ -157,7 +158,7 @@ class GoogleProvider extends BaseProvider {
     if (cfg.vertexAI == true && (cfg.location?.isNotEmpty == true) && (cfg.projectId?.isNotEmpty == true)) {
       final loc = cfg.location!;
       final proj = cfg.projectId!;
-      return 'https://$loc-aiplatform.googleapis.com/v1/projects/$proj/locations/$loc/publishers/google/models';
+      return 'https://aiplatform.googleapis.com/v1/projects/$proj/locations/$loc/publishers/google/models';
     }
     final base = cfg.baseUrl.endsWith('/') ? cfg.baseUrl.substring(0, cfg.baseUrl.length - 1) : cfg.baseUrl;
     if (cfg.apiKey.isNotEmpty) {
@@ -171,9 +172,22 @@ class GoogleProvider extends BaseProvider {
     final client = _Http.clientFor(cfg);
     try {
       final url = _buildUrl(cfg);
-      final res = await client.get(Uri.parse(url), headers: {
-        if (cfg.vertexAI == true && cfg.apiKey.isNotEmpty) 'Authorization': 'Bearer ${cfg.apiKey}',
-      });
+      final headers = <String, String>{};
+      if (cfg.vertexAI == true) {
+        final jsonStr = (cfg.serviceAccountJson ?? '').trim();
+        if (jsonStr.isNotEmpty) {
+          try {
+            final token = await GoogleServiceAccountAuth.getAccessTokenFromJson(jsonStr);
+            headers['Authorization'] = 'Bearer $token';
+            final proj = (cfg.projectId ?? '').trim();
+            if (proj.isNotEmpty) headers['X-Goog-User-Project'] = proj;
+          } catch (_) {}
+        } else if (cfg.apiKey.isNotEmpty) {
+          // Fallback: treat apiKey as a bearer token if user pasted one
+          headers['Authorization'] = 'Bearer ${cfg.apiKey}';
+        }
+      }
+      final res = await client.get(Uri.parse(url), headers: headers);
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final obj = jsonDecode(res.body) as Map<String, dynamic>;
         final arr = (obj['models'] as List?) ?? [];
@@ -339,7 +353,7 @@ class ProviderManager {
         if (cfg.vertexAI == true && (cfg.location?.isNotEmpty == true) && (cfg.projectId?.isNotEmpty == true)) {
           final loc = cfg.location!;
           final proj = cfg.projectId!;
-          url = 'https://$loc-aiplatform.googleapis.com/v1/projects/$proj/locations/$loc/publishers/google/models/$modelId:generateContent';
+          url = 'https://aiplatform.googleapis.com/v1/projects/$proj/locations/$loc/publishers/google/models/$modelId:generateContent';
         } else {
           final base = cfg.baseUrl.endsWith('/') ? cfg.baseUrl.substring(0, cfg.baseUrl.length - 1) : cfg.baseUrl;
           url = '$base/models/$modelId:generateContent';
@@ -369,8 +383,16 @@ class ProviderManager {
             },
         };
         final headers = <String, String>{'Content-Type': 'application/json'};
-        if (cfg.vertexAI == true && cfg.apiKey.isNotEmpty) {
-          headers['Authorization'] = 'Bearer ${cfg.apiKey}';
+        if (cfg.vertexAI == true) {
+          final jsonStr = (cfg.serviceAccountJson ?? '').trim();
+          if (jsonStr.isNotEmpty) {
+            try {
+              final token = await GoogleServiceAccountAuth.getAccessTokenFromJson(jsonStr);
+              headers['Authorization'] = 'Bearer $token';
+            } catch (_) {}
+          } else if (cfg.apiKey.isNotEmpty) {
+            headers['Authorization'] = 'Bearer ${cfg.apiKey}';
+          }
         }
         headers.addAll(_customHeaders(cfg, modelId));
         final extra = _customBody(cfg, modelId);
