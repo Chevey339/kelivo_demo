@@ -2661,6 +2661,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               alignment: Alignment.bottomRight,
               child: SafeArea(
                 top: false,
+                bottom: false, // avoid double bottom inset so button hugs input bar
                 child: IgnorePointer(
                   ignoring: !_showJumpToBottom,
                   child: AnimatedScale(
