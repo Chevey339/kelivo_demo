@@ -1423,10 +1423,10 @@ class ChatApiService {
       contents.add({'role': role, 'parts': parts});
     }
 
-    final isReasoning = ModelRegistry
-        .infer(ModelInfo(id: modelId, displayName: modelId))
-        .abilities
-        .contains(ModelAbility.reasoning);
+    // Effective model features (includes user overrides)
+    final effective = _effectiveModelInfo(config, modelId);
+    final isReasoning = effective.abilities.contains(ModelAbility.reasoning);
+    final wantsImageOutput = effective.output.contains(Modality.image);
     final off = _isOff(thinkingBudget);
     // Map OpenAI tools to Gemini functionDeclarations
     List<Map<String, dynamic>>? geminiTools;
@@ -1456,6 +1456,8 @@ class ChatApiService {
         if (temperature != null) 'temperature': temperature,
         if (topP != null) 'topP': topP,
         if (maxTokens != null) 'maxOutputTokens': maxTokens,
+        // Enable IMAGE+TEXT output modalities when model is configured to output images
+        if (wantsImageOutput) 'responseModalities': ['TEXT', 'IMAGE'],
         if (isReasoning)
           'thinkingConfig': {
             'includeThoughts': off ? false : true,
@@ -1498,6 +1500,10 @@ class ChatApiService {
       String buffer = '';
       // Collect any function calls in this round
       final List<Map<String, dynamic>> calls = <Map<String, dynamic>>[]; // {id,name,args,res}
+
+      // Track a streaming inline image (append base64 progressively)
+      bool _imageOpen = false; // true after we emit the data URL prefix
+      String _imageMime = 'image/png';
 
       await for (final chunk in stream) {
         buffer += chunk;
@@ -1543,6 +1549,21 @@ class ChatApiService {
                       textDelta += t;
                     }
                   }
+                  // Parse inline image data from Gemini (inlineData)
+                  // Response shape: { inlineData: { mimeType: 'image/png', data: '...base64...' } }
+                  final inline = (p['inlineData'] ?? p['inline_data']);
+                  if (inline is Map) {
+                    final mime = (inline['mimeType'] ?? inline['mime_type'] ?? 'image/png').toString();
+                    final data = (inline['data'] ?? '').toString();
+                    if (data.isNotEmpty) {
+                      _imageMime = mime.isNotEmpty ? mime : 'image/png';
+                      if (!_imageOpen) {
+                        textDelta += '\n\n![image](data:${_imageMime};base64,';
+                        _imageOpen = true;
+                      }
+                      textDelta += data;
+                    }
+                  }
                   final fc = p['functionCall'];
                   if (fc is Map) {
                     final name = (fc['name'] ?? '').toString();
@@ -1577,6 +1598,12 @@ class ChatApiService {
             // ignore malformed chunk
           }
         }
+      }
+
+      // If we streamed an inline image but never closed the markdown, close it now
+      if (_imageOpen) {
+        yield ChatStreamChunk(content: ')', isDone: false, totalTokens: totalTokens, usage: usage);
+        _imageOpen = false;
       }
 
       if (calls.isEmpty) {

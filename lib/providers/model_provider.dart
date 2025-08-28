@@ -62,6 +62,10 @@ class ModelRegistry {
     if (vision.hasMatch(id)) {
       if (!inMods.contains(Modality.image)) inMods.add(Modality.image);
     }
+    // Heuristic: image-generation models can output images
+    if (id.contains('image-generation')) {
+      if (!outMods.contains(Modality.image)) outMods.add(Modality.image);
+    }
     if (tool.hasMatch(id) && !ab.contains(ModelAbility.tool)) ab.add(ModelAbility.tool);
     if (reasoning.hasMatch(id) && !ab.contains(ModelAbility.reasoning)) ab.add(ModelAbility.reasoning);
     return base.copyWith(input: inMods, output: outMods, abilities: ab);
@@ -343,6 +347,13 @@ class ProviderManager {
             url = '$url?key=${Uri.encodeQueryComponent(cfg.apiKey)}';
           }
         }
+        // Check if this model is configured to output images (via overrides)
+        bool wantsImageOutput = false;
+        final ov = _modelOverride(cfg, modelId);
+        if (ov['output'] is List) {
+          final outList = (ov['output'] as List).map((e) => e.toString().toLowerCase()).toList();
+          wantsImageOutput = outList.contains('image');
+        }
         final body = {
           'contents': [
             {
@@ -351,7 +362,11 @@ class ProviderManager {
                 {'text': 'hello'}
               ]
             }
-          ]
+          ],
+          if (wantsImageOutput)
+            'generationConfig': {
+              'responseModalities': ['TEXT', 'IMAGE'],
+            },
         };
         final headers = <String, String>{'Content-Type': 'application/json'};
         if (cfg.vertexAI == true && cfg.apiKey.isNotEmpty) {
