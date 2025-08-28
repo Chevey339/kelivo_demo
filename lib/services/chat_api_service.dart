@@ -1437,6 +1437,8 @@ class ChatApiService {
     final effective = _effectiveModelInfo(config, modelId);
     final isReasoning = effective.abilities.contains(ModelAbility.reasoning);
     final wantsImageOutput = effective.output.contains(Modality.image);
+    bool _expectImage = wantsImageOutput;
+    bool _receivedImage = false;
     final off = _isOff(thinkingBudget);
     // Map OpenAI tools to Gemini functionDeclarations
     List<Map<String, dynamic>>? geminiTools;
@@ -1579,6 +1581,25 @@ class ChatApiService {
                         _imageOpen = true;
                       }
                       textDelta += data;
+                      _receivedImage = true;
+                    }
+                  }
+                  // Parse fileData: { fileUri: 'https://...', mimeType: 'image/png' }
+                  final fileData = (p['fileData'] ?? p['file_data']);
+                  if (fileData is Map) {
+                    final mime = (fileData['mimeType'] ?? fileData['mime_type'] ?? 'image/png').toString();
+                    final uri = (fileData['fileUri'] ?? fileData['file_uri'] ?? fileData['uri'] ?? '').toString();
+                    if (uri.startsWith('http')) {
+                      try {
+                        final b64 = await _downloadRemoteAsBase64(client, config, uri);
+                        _imageMime = mime.isNotEmpty ? mime : 'image/png';
+                        if (!_imageOpen) {
+                          textDelta += '\n\n![image](data:${_imageMime};base64,';
+                          _imageOpen = true;
+                        }
+                        textDelta += b64;
+                        _receivedImage = true;
+                      } catch (_) {}
                     }
                   }
                   final fc = p['functionCall'];
@@ -1615,7 +1636,7 @@ class ChatApiService {
               }
 
               // If server signaled finish, close image markdown and end stream immediately
-              if (finishReason != null && calls.isEmpty) {
+              if (finishReason != null && calls.isEmpty && (!_expectImage || _receivedImage)) {
                 if (_imageOpen) {
                   yield ChatStreamChunk(content: ')', isDone: false, totalTokens: totalTokens, usage: usage);
                   _imageOpen = false;
@@ -1638,6 +1659,10 @@ class ChatApiService {
 
       if (calls.isEmpty) {
         // No tool calls; this round finished
+        if (_imageOpen) {
+          yield ChatStreamChunk(content: ')', isDone: false, totalTokens: totalTokens, usage: usage);
+          _imageOpen = false;
+        }
         yield ChatStreamChunk(content: '', isDone: true, totalTokens: totalTokens, usage: usage);
         return;
       }
@@ -1668,6 +1693,25 @@ class ChatApiService {
     }
   }
 
+  static Future<String> _downloadRemoteAsBase64(http.Client client, ProviderConfig config, String url) async {
+    final req = http.Request('GET', Uri.parse(url));
+    // Add Vertex auth if enabled
+    if (config.vertexAI == true) {
+      try {
+        final token = await _maybeVertexAccessToken(config);
+        if (token != null && token.isNotEmpty) req.headers['Authorization'] = 'Bearer $token';
+      } catch (_) {}
+      final proj = (config.projectId ?? '').trim();
+      if (proj.isNotEmpty) req.headers['X-Goog-User-Project'] = proj;
+    }
+    final resp = await client.send(req);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      final err = await resp.stream.bytesToString();
+      throw HttpException('HTTP ${resp.statusCode}: $err');
+    }
+    final bytes = await resp.stream.fold<List<int>>(<int>[], (acc, b) { acc.addAll(b); return acc; });
+    return base64Encode(bytes);
+  }
   // Returns OAuth token for Vertex AI when serviceAccountJson is configured; otherwise null.
   static Future<String?> _maybeVertexAccessToken(ProviderConfig cfg) async {
     if (cfg.vertexAI == true) {
