@@ -1733,8 +1733,10 @@ class _McpTab extends StatelessWidget {
 
         return Material(
           color: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          clipBehavior: Clip.antiAlias,
           child: InkWell(
-            borderRadius: BorderRadius.circular(14),
+            customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             onTap: () async {
               final set = a.mcpServerIds.toSet();
               if (isSelected) set.remove(s.id); else set.add(s.id);
