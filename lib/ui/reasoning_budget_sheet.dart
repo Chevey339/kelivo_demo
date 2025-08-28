@@ -152,7 +152,10 @@ class _ReasoningBudgetSheetState extends State<_ReasoningBudgetSheet> {
                     children: [
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        child: Text('思维链强度', style: Theme.of(context).textTheme.titleMedium),
+                        child: Text(
+                          '思维链强度',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                        ),
                       ),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),

@@ -86,15 +86,12 @@ class _SearchSettingsSheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Icon(Lucide.Earth, size: 18, color: cs.primary),
-                    const SizedBox(width: 8),
-                    Text(
-                      zh ? '搜索设置' : 'Search Settings',
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                  ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 0),
+                  child: Text(
+                    zh ? '搜索设置' : 'Search Settings',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 // Toggle card
