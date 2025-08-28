@@ -32,6 +32,7 @@ import 'message_edit_page.dart';
 import 'message_export_sheet.dart';
 import 'mcp_assistant_sheet.dart';
 import 'reasoning_budget_sheet.dart';
+import 'more_page.dart';
 import 'search_settings_sheet.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
@@ -311,6 +312,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _toolsOpen = !_toolsOpen;
       if (opening) _dismissKeyboard();
     });
+  }
+
+  void _openMorePage() {
+    _dismissKeyboard();
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MorePage()),
+    );
   }
 
   void _dismissKeyboard() {
@@ -2018,7 +2026,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         ),
         actions: [
           IconButton(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MorePage()),
+              );
+            },
             icon: const Icon(Lucide.Menu, size: 22),
           ),
           IconButton(
@@ -2434,7 +2446,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     return false;
                   },
                   child: SizeChangedLayoutNotifier(
-                    child: ChatInputBar(
+                  child: ChatInputBar(
                   key: _inputBarKey,
                   onMore: _toggleTools,
                   moreOpen: _toolsOpen,
