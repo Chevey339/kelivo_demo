@@ -315,6 +315,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     });
   }
 
+  bool _isToolModel(String providerKey, String modelId) {
+    final settings = context.read<SettingsProvider>();
+    final cfg = settings.getProviderConfig(providerKey);
+    final ov = cfg.modelOverrides[modelId] as Map?;
+    if (ov != null) {
+      final abilities = (ov['abilities'] as List?)?.map((e) => e.toString()).toList() ?? const [];
+      if (abilities.map((e) => e.toLowerCase()).contains('tool')) return true;
+    }
+    final inferred = ModelRegistry.infer(ModelInfo(id: modelId, displayName: modelId));
+    return inferred.abilities.contains(ModelAbility.tool);
+  }
+
   void _openMorePage() {
     _dismissKeyboard();
     Navigator.of(context).push(
@@ -784,7 +796,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       final mcp = context.read<McpProvider>();
       final toolSvc = context.read<McpToolService>();
       final tools = toolSvc.listAvailableToolsForAssistant(mcp, context.read<AssistantProvider>(), assistant?.id);
-      if (tools.isNotEmpty) {
+      final supportsTools = _isToolModel(providerKey, modelId);
+      if (supportsTools && tools.isNotEmpty) {
         toolDefs.addAll(tools.map((t) {
           final props = <String, dynamic>{
             for (final p in t.params) p.name: {'type': 'string'},
@@ -919,7 +932,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       _messageStreamSubscription = stream.listen(
             (chunk) async {
           // Capture reasoning deltas only when reasoning is enabled
-          if ((chunk.reasoning ?? '').isNotEmpty && _isReasoningEnabled((assistant?.thinkingBudget) ?? settings.thinkingBudget)) {
+          if ((chunk.reasoning ?? '').isNotEmpty && supportsReasoning && _isReasoningEnabled((assistant?.thinkingBudget) ?? settings.thinkingBudget)) {
             if (streamOutput) {
               final r = _reasoning[assistantMessage.id] ?? _ReasoningData();
               r.text += chunk.reasoning!;
@@ -1508,7 +1521,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       final mcp = context.read<McpProvider>();
       final toolSvc = context.read<McpToolService>();
       final tools = toolSvc.listAvailableToolsForAssistant(mcp, context.read<AssistantProvider>(), assistant?.id);
-      if (tools.isNotEmpty) {
+      final supportsTools = _isToolModel(providerKey, modelId);
+      if (supportsTools && tools.isNotEmpty) {
         toolDefs.addAll(tools.map((t) {
           final props = <String, dynamic>{for (final p in t.params) p.name: {'type': 'string'}};
           final required = [for (final p in t.params.where((e) => e.required)) p.name];
@@ -2450,7 +2464,39 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     return false;
                   },
                   child: SizeChangedLayoutNotifier(
-                  child: ChatInputBar(
+                  child: Builder(builder: (context) {
+                    // Enforce model capabilities: disable MCP selection if model doesn't support tools
+                    final settings = context.watch<SettingsProvider>();
+                    final pk = settings.currentModelProvider;
+                    final mid = settings.currentModelId;
+                    if (pk != null && mid != null) {
+                      final ap = context.read<AssistantProvider>();
+                      final a = ap.currentAssistant;
+                      // Enforce tool ability: clear MCP bindings when unsupported
+                      final supportsTools = _isToolModel(pk, mid);
+                      if (!supportsTools && (a?.mcpServerIds.isNotEmpty ?? false)) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          final aa = ap.currentAssistant;
+                          if (aa != null && aa.mcpServerIds.isNotEmpty) {
+                            ap.updateAssistant(aa.copyWith(mcpServerIds: const <String>[]));
+                          }
+                        });
+                      }
+                      // Enforce reasoning ability: set thinkingBudget OFF when unsupported
+                      final supportsReasoning = _isReasoningModel(pk, mid);
+                      if (!supportsReasoning && a != null) {
+                        final enabledNow = _isReasoningEnabled(a.thinkingBudget ?? settings.thinkingBudget);
+                        if (enabledNow) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) async {
+                            final aa = ap.currentAssistant;
+                            if (aa != null) {
+                              await ap.updateAssistant(aa.copyWith(thinkingBudget: 0));
+                            }
+                          });
+                        }
+                      }
+                    }
+                    return ChatInputBar(
                   key: _inputBarKey,
                   onMore: _toggleTools,
                   moreOpen: _toolsOpen,
@@ -2501,9 +2547,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     _dismissKeyboard();
                   },
                   loading: _isLoading,
-                  showMcpButton: context.watch<McpProvider>().servers.isNotEmpty,
+                  showMcpButton: (() {
+                    final pk = settings.currentModelProvider;
+                    final mid = settings.currentModelId;
+                    if (pk == null || mid == null) return false;
+                    return _isToolModel(pk, mid) && context.watch<McpProvider>().servers.isNotEmpty;
+                  })(),
                   mcpActive: context.select<AssistantProvider, bool>((ap) => (ap.currentAssistant?.mcpServerIds.isNotEmpty ?? false)),
-                ),
+                );
+                    }),
                   ),
                 ),
               ),

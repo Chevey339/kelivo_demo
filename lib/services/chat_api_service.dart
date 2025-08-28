@@ -61,6 +61,33 @@ class ChatApiService {
     }
     return out;
   }
+
+  // Resolve effective model info by respecting per-model overrides; fallback to inference
+  static ModelInfo _effectiveModelInfo(ProviderConfig cfg, String modelId) {
+    final base = ModelRegistry.infer(ModelInfo(id: modelId, displayName: modelId));
+    final ov = _modelOverride(cfg, modelId);
+    ModelType? type;
+    final t = (ov['type'] as String?) ?? '';
+    if (t == 'embedding') type = ModelType.embedding; else if (t == 'chat') type = ModelType.chat;
+    List<Modality>? input;
+    if (ov['input'] is List) {
+      input = [for (final e in (ov['input'] as List)) (e.toString() == 'image' ? Modality.image : Modality.text)];
+    }
+    List<Modality>? output;
+    if (ov['output'] is List) {
+      output = [for (final e in (ov['output'] as List)) (e.toString() == 'image' ? Modality.image : Modality.text)];
+    }
+    List<ModelAbility>? abilities;
+    if (ov['abilities'] is List) {
+      abilities = [for (final e in (ov['abilities'] as List)) (e.toString() == 'reasoning' ? ModelAbility.reasoning : ModelAbility.tool)];
+    }
+    return base.copyWith(
+      type: type ?? base.type,
+      input: input ?? base.input,
+      output: output ?? base.output,
+      abilities: abilities ?? base.abilities,
+    );
+  }
   static String _mimeFromPath(String path) {
     final lower = path.toLowerCase();
     if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
@@ -346,8 +373,7 @@ class ChatApiService {
         : (config.chatPath ?? '/chat/completions');
     final url = Uri.parse('$base$path');
 
-    final isReasoning = ModelRegistry
-        .infer(ModelInfo(id: modelId, displayName: modelId))
+    final isReasoning = _effectiveModelInfo(config, modelId)
         .abilities
         .contains(ModelAbility.reasoning);
 
@@ -430,39 +456,79 @@ class ChatApiService {
     if (config.useResponseApi != true) {
       final off = _isOff(thinkingBudget);
       if (host.contains('openrouter.ai')) {
-        // OpenRouter uses `reasoning.enabled/max_tokens`
-        if (off) {
-          (body as Map<String, dynamic>)['reasoning'] = {'enabled': false};
-        } else if (isReasoning) {
-          final obj = <String, dynamic>{'enabled': true};
-          if (thinkingBudget != null && thinkingBudget > 0) obj['max_tokens'] = thinkingBudget;
-          (body as Map<String, dynamic>)['reasoning'] = obj;
-          // Remove generic effort to avoid conflicts
+        if (isReasoning) {
+          // OpenRouter uses `reasoning.enabled/max_tokens`
+          if (off) {
+            (body as Map<String, dynamic>)['reasoning'] = {'enabled': false};
+          } else {
+            final obj = <String, dynamic>{'enabled': true};
+            if (thinkingBudget != null && thinkingBudget > 0) obj['max_tokens'] = thinkingBudget;
+            (body as Map<String, dynamic>)['reasoning'] = obj;
+          }
+          (body as Map<String, dynamic>).remove('reasoning_effort');
+        } else {
+          (body as Map<String, dynamic>).remove('reasoning');
           (body as Map<String, dynamic>).remove('reasoning_effort');
         }
       } else if (host.contains('dashscope') || host.contains('aliyun')) {
         // Aliyun DashScope: enable_thinking + thinking_budget
-        (body as Map<String, dynamic>)['enable_thinking'] = off ? false : (isReasoning ? true : null);
-        if (!off && isReasoning && thinkingBudget != null && thinkingBudget > 0) {
-          (body as Map<String, dynamic>)['thinking_budget'] = thinkingBudget;
+        if (isReasoning) {
+          (body as Map<String, dynamic>)['enable_thinking'] = !off;
+          if (!off && thinkingBudget != null && thinkingBudget > 0) {
+            (body as Map<String, dynamic>)['thinking_budget'] = thinkingBudget;
+          } else {
+            (body as Map<String, dynamic>).remove('thinking_budget');
+          }
+        } else {
+          (body as Map<String, dynamic>).remove('enable_thinking');
+          (body as Map<String, dynamic>).remove('thinking_budget');
         }
         (body as Map<String, dynamic>).remove('reasoning_effort');
       } else if (host.contains('ark.cn-beijing.volces.com') || host.contains('volc') || host.contains('ark')) {
         // Volc Ark: thinking: { type: enabled|disabled }
-        (body as Map<String, dynamic>)['thinking'] = {
-          'type': off ? 'disabled' : (isReasoning ? 'enabled' : 'disabled'),
-        };
+        if (isReasoning) {
+          (body as Map<String, dynamic>)['thinking'] = {'type': off ? 'disabled' : 'enabled'};
+        } else {
+          (body as Map<String, dynamic>).remove('thinking');
+        }
         (body as Map<String, dynamic>).remove('reasoning_effort');
       } else if (host.contains('intern-ai') || host.contains('intern') || host.contains('chat.intern-ai.org.cn')) {
         // InternLM (InternAI): thinking_mode boolean switch
-        (body as Map<String, dynamic>)['thinking_mode'] = off ? false : (isReasoning ? true : null);
-        (body as Map<String, dynamic>).remove('reasoning_effort');
-      } else if (host.contains('siliconflow')) {
-        // SiliconFlow: OFF -> enable_thinking: false; otherwise omit (provider decides)
-        if (off) {
-          (body as Map<String, dynamic>)['enable_thinking'] = false;
+        if (isReasoning) {
+          (body as Map<String, dynamic>)['thinking_mode'] = !off;
+        } else {
+          (body as Map<String, dynamic>).remove('thinking_mode');
         }
         (body as Map<String, dynamic>).remove('reasoning_effort');
+      } else if (host.contains('siliconflow')) {
+        // SiliconFlow: OFF -> enable_thinking: false; otherwise omit
+        if (isReasoning) {
+          if (off) {
+            (body as Map<String, dynamic>)['enable_thinking'] = false;
+          } else {
+            (body as Map<String, dynamic>).remove('enable_thinking');
+          }
+        } else {
+          (body as Map<String, dynamic>).remove('enable_thinking');
+        }
+        (body as Map<String, dynamic>).remove('reasoning_effort');
+      } else if (host.contains('deepseek') || modelId.toLowerCase().contains('deepseek')) {
+        if (isReasoning) {
+          if (off) {
+            (body as Map<String, dynamic>)['reasoning_content'] = false;
+            (body as Map<String, dynamic>).remove('reasoning_budget');
+          } else {
+            (body as Map<String, dynamic>)['reasoning_content'] = true;
+            if (thinkingBudget != null && thinkingBudget > 0) {
+              (body as Map<String, dynamic>)['reasoning_budget'] = thinkingBudget;
+            } else {
+              (body as Map<String, dynamic>).remove('reasoning_budget');
+            }
+          }
+        } else {
+          (body as Map<String, dynamic>).remove('reasoning_content');
+          (body as Map<String, dynamic>).remove('reasoning_budget');
+        }
       }
     }
 
@@ -601,47 +667,73 @@ class ChatApiService {
               // Apply the same vendor-specific reasoning settings as the original request
               final off = _isOff(thinkingBudget);
               if (host.contains('openrouter.ai')) {
-                if (off) {
-                  body2['reasoning'] = {'enabled': false};
-                } else if (isReasoning) {
-                  final obj = <String, dynamic>{'enabled': true};
-                  if (thinkingBudget != null && thinkingBudget > 0) obj['max_tokens'] = thinkingBudget;
-                  body2['reasoning'] = obj;
+                if (isReasoning) {
+                  if (off) {
+                    body2['reasoning'] = {'enabled': false};
+                  } else {
+                    final obj = <String, dynamic>{'enabled': true};
+                    if (thinkingBudget != null && thinkingBudget > 0) obj['max_tokens'] = thinkingBudget;
+                    body2['reasoning'] = obj;
+                  }
+                  body2.remove('reasoning_effort');
+                } else {
+                  body2.remove('reasoning');
                   body2.remove('reasoning_effort');
                 }
               } else if (host.contains('dashscope') || host.contains('aliyun')) {
-                if (off) {
-                  body2['enable_thinking'] = false;
-                } else if (isReasoning) {
-                  body2['enable_thinking'] = true;
-                  if (thinkingBudget != null && thinkingBudget > 0) {
+                if (isReasoning) {
+                  body2['enable_thinking'] = !off;
+                  if (!off && thinkingBudget != null && thinkingBudget > 0) {
                     body2['thinking_budget'] = thinkingBudget;
+                  } else {
+                    body2.remove('thinking_budget');
                   }
+                } else {
+                  body2.remove('enable_thinking');
+                  body2.remove('thinking_budget');
                 }
                 body2.remove('reasoning_effort');
               } else if (host.contains('ark.cn-beijing.volces.com') || host.contains('volc') || host.contains('ark')) {
-                body2['thinking'] = {'type': off ? 'disabled' : (isReasoning ? 'enabled' : 'disabled')};
+                if (isReasoning) {
+                  body2['thinking'] = {'type': off ? 'disabled' : 'enabled'};
+                } else {
+                  body2.remove('thinking');
+                }
                 body2.remove('reasoning_effort');
               } else if (host.contains('intern-ai') || host.contains('intern') || host.contains('chat.intern-ai.org.cn')) {
-                if (off) {
-                  body2['thinking_mode'] = false;
-                } else if (isReasoning) {
-                  body2['thinking_mode'] = true;
+                if (isReasoning) {
+                  body2['thinking_mode'] = !off;
+                } else {
+                  body2.remove('thinking_mode');
                 }
                 body2.remove('reasoning_effort');
               } else if (host.contains('siliconflow')) {
-                if (off) {
-                  body2['enable_thinking'] = false;
+                if (isReasoning) {
+                  if (off) {
+                    body2['enable_thinking'] = false;
+                  } else {
+                    body2.remove('enable_thinking');
+                  }
+                } else {
+                  body2.remove('enable_thinking');
                 }
                 body2.remove('reasoning_effort');
               } else if (host.contains('deepseek') || modelId.toLowerCase().contains('deepseek')) {
-                if (off) {
-                  body2['reasoning_content'] = false;
-                } else if (isReasoning) {
-                  body2['reasoning_content'] = true;
-                  if (thinkingBudget != null && thinkingBudget > 0) {
-                    body2['reasoning_budget'] = thinkingBudget;
+                if (isReasoning) {
+                  if (off) {
+                    body2['reasoning_content'] = false;
+                    body2.remove('reasoning_budget');
+                  } else {
+                    body2['reasoning_content'] = true;
+                    if (thinkingBudget != null && thinkingBudget > 0) {
+                      body2['reasoning_budget'] = thinkingBudget;
+                    } else {
+                      body2.remove('reasoning_budget');
+                    }
                   }
+                } else {
+                  body2.remove('reasoning_content');
+                  body2.remove('reasoning_budget');
                 }
               }
               
@@ -1072,8 +1164,7 @@ class ChatApiService {
         : config.baseUrl;
     final url = Uri.parse('$base/messages');
 
-    final isReasoning = ModelRegistry
-        .infer(ModelInfo(id: modelId, displayName: modelId))
+    final isReasoning = _effectiveModelInfo(config, modelId)
         .abilities
         .contains(ModelAbility.reasoning);
 
