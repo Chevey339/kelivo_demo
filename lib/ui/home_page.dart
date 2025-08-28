@@ -43,6 +43,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../services/search_tool_service.dart';
+import '../utils/markdown_media_sanitizer.dart';
 
 
 class HomePage extends StatefulWidget {
@@ -857,9 +858,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       );
 
       Future<void> finish({bool generateTitle = true}) async {
+        // Replace extremely long inline base64 images with local files to avoid jank
+        final processedContent = await MarkdownMediaSanitizer.replaceInlineBase64Images(fullContent);
         await _chatService.updateMessage(
           assistantMessage.id,
-          content: fullContent,
+          content: processedContent,
           totalTokens: totalTokens,
           isStreaming: false,
         );
@@ -868,7 +871,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
           if (index != -1) {
             _messages[index] = _messages[index].copyWith(
-              content: fullContent,
+              content: processedContent,
               totalTokens: totalTokens,
               isStreaming: false,
             );
@@ -1580,12 +1583,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     DateTime? _reasoningStartAt2;
 
     Future<void> finish({bool generateTitle = false}) async {
-      await _chatService.updateMessage(assistantMessage.id, content: fullContent, totalTokens: totalTokens, isStreaming: false);
+      final processedContent = await MarkdownMediaSanitizer.replaceInlineBase64Images(fullContent);
+      await _chatService.updateMessage(assistantMessage.id, content: processedContent, totalTokens: totalTokens, isStreaming: false);
       if (!mounted) return;
       setState(() {
         final index = _messages.indexWhere((m) => m.id == assistantMessage.id);
         if (index != -1) {
-          _messages[index] = _messages[index].copyWith(content: fullContent, totalTokens: totalTokens, isStreaming: false);
+          _messages[index] = _messages[index].copyWith(content: processedContent, totalTokens: totalTokens, isStreaming: false);
         }
         _isLoading = false;
       });
