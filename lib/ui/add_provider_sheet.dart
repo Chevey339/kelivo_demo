@@ -1,7 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../icons/lucide_adapter.dart';
+import 'package:file_picker/file_picker.dart';
 
 Future<String?> showAddProviderSheet(BuildContext context) async {
   final cs = Theme.of(context).colorScheme;
@@ -42,6 +45,7 @@ class _AddProviderSheetState extends State<_AddProviderSheet>
   bool _googleVertex = false;
   late final TextEditingController _googleLocation = TextEditingController(text: 'us-central1');
   late final TextEditingController _googleProject = TextEditingController();
+  late final TextEditingController _googleSaJson = TextEditingController();
 
   // Claude
   bool _claudeEnabled = true;
@@ -128,9 +132,9 @@ class _AddProviderSheetState extends State<_AddProviderSheet>
         const SizedBox(height: 10),
         _inputRow(label: zh ? '名称' : 'Name', controller: _googleName),
         const SizedBox(height: 10),
-        _inputRow(label: 'API Key', controller: _googleKey),
-        const SizedBox(height: 10),
         if (!_googleVertex) ...[
+          _inputRow(label: 'API Key', controller: _googleKey),
+          const SizedBox(height: 10),
           _inputRow(label: 'API Base Url', controller: _googleBase),
           const SizedBox(height: 10),
         ],
@@ -144,6 +148,19 @@ class _AddProviderSheetState extends State<_AddProviderSheet>
           _inputRow(label: zh ? '位置' : 'Location', controller: _googleLocation, hint: 'us-central1'),
           const SizedBox(height: 10),
           _inputRow(label: zh ? '项目ID' : 'Project ID', controller: _googleProject),
+          const SizedBox(height: 10),
+          _multilineRow(
+            label: zh ? '服务账号 JSON（粘贴或导入）' : 'Service Account JSON (paste or import)',
+            controller: _googleSaJson,
+            hint: '{\n  "type": "service_account", ...\n}',
+            actions: [
+              TextButton.icon(
+                onPressed: _importGoogleServiceAccount,
+                icon: const Icon(Icons.upload_file, size: 16),
+                label: Text(zh ? '导入 JSON' : 'Import JSON'),
+              ),
+            ],
+          ),
         ],
       ],
     );
@@ -211,11 +228,12 @@ class _AddProviderSheetState extends State<_AddProviderSheet>
         id: keyName,
         enabled: _googleEnabled,
         name: display,
-        apiKey: _googleKey.text.trim(),
+        apiKey: _googleVertex ? '' : _googleKey.text.trim(),
         baseUrl: _googleVertex ? 'https://aiplatform.googleapis.com' : (_googleBase.text.trim().isEmpty ? 'https://generativelanguage.googleapis.com/v1beta' : _googleBase.text.trim()),
         vertexAI: _googleVertex,
         location: _googleVertex ? (_googleLocation.text.trim().isEmpty ? 'us-central1' : _googleLocation.text.trim()) : '',
         projectId: _googleVertex ? _googleProject.text.trim() : '',
+        serviceAccountJson: _googleVertex ? _googleSaJson.text.trim() : null,
         models: const [],
         modelOverrides: const {},
         proxyEnabled: false,
@@ -382,5 +400,60 @@ class _AddProviderSheetState extends State<_AddProviderSheet>
         ),
       ),
     );
+  }
+
+  Widget _multilineRow({required String label, required TextEditingController controller, String? hint, List<Widget>? actions}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(0.8)))),
+            if (actions != null) ...actions,
+          ],
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          maxLines: 8,
+          minLines: 4,
+          decoration: InputDecoration(
+            hintText: hint,
+            filled: true,
+            fillColor: isDark ? Colors.white10 : const Color(0xFFF2F3F5),
+            border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)), borderSide: BorderSide(color: Colors.transparent)),
+            enabledBorder: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)), borderSide: BorderSide(color: Colors.transparent)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: cs.primary.withOpacity(0.4))),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _importGoogleServiceAccount() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        allowMultiple: false,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final path = file.path;
+      if (path == null) return;
+      final text = await File(path).readAsString();
+      _googleSaJson.text = text;
+      try {
+        final obj = jsonDecode(text) as Map<String, dynamic>;
+        final pid = (obj['project_id'] as String?)?.trim();
+        if ((pid ?? '').isNotEmpty && _googleProject.text.trim().isEmpty) {
+          _googleProject.text = pid!;
+        }
+      } catch (_) {}
+      if (mounted) setState(() {});
+    } catch (_) {}
   }
 }
