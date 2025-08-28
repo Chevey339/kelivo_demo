@@ -40,7 +40,8 @@ class SandboxPathResolver {
     final String raw = path.startsWith('file://') ? path.substring(7) : path;
 
     // Only attempt to fix known app-internal folders
-    const candidates = ['/Documents/upload/', '/Documents/avatars/'];
+    // Note: inline base64 images are persisted under Documents/images
+    const candidates = ['/Documents/upload/', '/Documents/avatars/', '/Documents/images/'];
     final hasCandidate = candidates.any((c) => raw.contains(c));
     if (!hasCandidate) return raw;
 
@@ -61,4 +62,3 @@ class SandboxPathResolver {
     return raw;
   }
 }
-
