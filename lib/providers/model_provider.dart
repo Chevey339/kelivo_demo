@@ -63,7 +63,7 @@ class ModelRegistry {
       if (!inMods.contains(Modality.image)) inMods.add(Modality.image);
     }
     // Heuristic: image-generation models can output images
-    if (id.contains('image-generation')) {
+    if (id.contains('image')) {
       if (!outMods.contains(Modality.image)) outMods.add(Modality.image);
     }
     if (tool.hasMatch(id) && !ab.contains(ModelAbility.tool)) ab.add(ModelAbility.tool);
