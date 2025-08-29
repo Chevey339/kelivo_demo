@@ -133,7 +133,7 @@ class SettingsPage extends StatelessWidget {
           SettingRow(
             icon: Lucide.Monitor,
             title: Localizations.localeOf(context).languageCode == 'zh' ? '显示设置' : 'Display',
-            subtitle: Localizations.localeOf(context).languageCode == 'zh' ? '界面与字号等外观设置' : 'Appearance and text size',
+            subtitle: Localizations.localeOf(context).languageCode == 'zh' ? '界面主题与字号等外观设置' : 'Appearance and text size',
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const DisplaySettingsPage()),

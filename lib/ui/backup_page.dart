@@ -453,62 +453,68 @@ class _RemoteListSheet extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final zh = Localizations.localeOf(context).languageCode == 'zh';
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 42, height: 4, decoration: BoxDecoration(color: cs.outlineVariant, borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Text(zh ? '远端备份' : 'Remote Backups', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                const Spacer(),
-                if (loading) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Flexible(
-              child: (items.isEmpty)
-                  ? Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(zh ? '暂无备份' : 'No backups', style: TextStyle(color: cs.onSurface.withOpacity(0.6))),
-              )
-                  : ListView.builder(
-                shrinkWrap: true,
-                itemCount: items.length,
-                itemBuilder: (ctx, i) {
-                  final it = items[i];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Material(
-                      color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF7F7F9),
-                      borderRadius: BorderRadius.circular(12),
-                      child: ListTile(
-                        title: Text(it.displayName, maxLines: 3, overflow: TextOverflow.ellipsis),
-                        subtitle: Text('${it.size} bytes'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Lucide.Import, size: 18),
-                              tooltip: zh ? '恢复' : 'Restore',
-                              onPressed: () => onRestore(it),
-                            ),
-                            IconButton(
-                              icon: const Icon(Lucide.Trash2, size: 18),
-                              tooltip: zh ? '删除' : 'Delete',
-                              onPressed: () => onDelete(it),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
+      top: false,
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        builder: (ctx, controller) => Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+          child: Column(
+            children: [
+              Container(width: 42, height: 4, decoration: BoxDecoration(color: cs.outlineVariant, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(zh ? '远端备份' : 'Remote Backups', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  if (loading) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              Expanded(
+                child: (items.isEmpty)
+                    ? Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(zh ? '暂无备份' : 'No backups', style: TextStyle(color: cs.onSurface.withOpacity(0.6))),
+                      )
+                    : ListView.builder(
+                        controller: controller,
+                        itemCount: items.length,
+                        itemBuilder: (ctx, i) {
+                          final it = items[i];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Material(
+                              color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF7F7F9),
+                              borderRadius: BorderRadius.circular(12),
+                              child: ListTile(
+                                title: Text(it.displayName, maxLines: 3, overflow: TextOverflow.ellipsis),
+                                subtitle: Text('${it.size} bytes'),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Lucide.Import, size: 18),
+                                      tooltip: zh ? '恢复' : 'Restore',
+                                      onPressed: () => onRestore(it),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Lucide.Trash2, size: 18),
+                                      tooltip: zh ? '删除' : 'Delete',
+                                      onPressed: () => onDelete(it),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
