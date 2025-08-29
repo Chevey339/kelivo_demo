@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'ui/home_page.dart';
+import 'features/home/pages/home_page.dart';
 import 'package:flutter/services.dart';
 // Theme is now managed in SettingsProvider
 import 'theme/theme_factory.dart';
 import 'theme/palettes.dart';
 import 'package:provider/provider.dart';
 import 'package:dynamic_color/dynamic_color.dart';
-import 'providers/chat_provider.dart';
-import 'providers/user_provider.dart';
-import 'providers/settings_provider.dart';
-import 'providers/mcp_provider.dart';
-import 'providers/tts_provider.dart';
-import 'providers/assistant_provider.dart';
-import 'providers/update_provider.dart';
-import 'services/chat_service.dart';
-import 'services/mcp_tool_service.dart';
+import 'core/providers/chat_provider.dart';
+import 'core/providers/user_provider.dart';
+import 'core/providers/settings_provider.dart';
+import 'core/providers/mcp_provider.dart';
+import 'core/providers/tts_provider.dart';
+import 'core/providers/assistant_provider.dart';
+import 'core/providers/update_provider.dart';
+import 'core/services/chat/chat_service.dart';
+import 'core/services/mcp/mcp_tool_service.dart';
 import 'utils/sandbox_path_resolver.dart';
 
 final RouteObserver<ModalRoute<dynamic>> routeObserver = RouteObserver<ModalRoute<dynamic>>();
