@@ -60,12 +60,17 @@ class ModelRegistry {
     final inMods = <Modality>[...base.input];
     final outMods = <Modality>[...base.output];
     final ab = <ModelAbility>[...base.abilities];
+    // If model id contains 'image', treat it as an image model:
+    // - Input and output both include image
+    // - No tool or reasoning abilities
+    if (id.contains('image')) {
+      if (!inMods.contains(Modality.image)) inMods.add(Modality.image);
+      if (!outMods.contains(Modality.image)) outMods.add(Modality.image);
+      ab.removeWhere((x) => x == ModelAbility.tool || x == ModelAbility.reasoning);
+      return base.copyWith(input: inMods, output: outMods, abilities: ab);
+    }
     if (vision.hasMatch(id)) {
       if (!inMods.contains(Modality.image)) inMods.add(Modality.image);
-    }
-    // Heuristic: image-generation models can output images
-    if (id.contains('image')) {
-      if (!outMods.contains(Modality.image)) outMods.add(Modality.image);
     }
     if (tool.hasMatch(id) && !ab.contains(ModelAbility.tool)) ab.add(ModelAbility.tool);
     if (reasoning.hasMatch(id) && !ab.contains(ModelAbility.reasoning)) ab.add(ModelAbility.reasoning);
@@ -361,12 +366,14 @@ class ProviderManager {
             url = '$url?key=${Uri.encodeQueryComponent(cfg.apiKey)}';
           }
         }
-        // Check if this model is configured to output images (via overrides)
+        // Determine if model outputs images (override wins; otherwise inference)
         bool wantsImageOutput = false;
         final ov = _modelOverride(cfg, modelId);
         if (ov['output'] is List) {
           final outList = (ov['output'] as List).map((e) => e.toString().toLowerCase()).toList();
           wantsImageOutput = outList.contains('image');
+        } else {
+          wantsImageOutput = ModelRegistry.infer(ModelInfo(id: modelId, displayName: modelId)).output.contains(Modality.image);
         }
         final body = {
           'contents': [
