@@ -1989,6 +1989,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     return Scaffold(
       key: _scaffoldKey,
       resizeToAvoidBottomInset: true,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         systemOverlayStyle: (Theme.of(context).brightness == Brightness.dark)
             ? const SystemUiOverlayStyle(
@@ -2001,6 +2002,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           statusBarIconBrightness: Brightness.dark,
           statusBarBrightness: Brightness.light,
         ),
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           icon: const Icon(Lucide.ListTree, size: 22),
@@ -2142,10 +2147,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       ),
       body: Stack(
         children: [
-          // Assistant-specific chat background
+          // Assistant-specific chat background + gradient overlay to improve readability
           Builder(builder: (context) {
             final bg = context.watch<AssistantProvider>().currentAssistant?.background;
             if (bg == null || bg.trim().isEmpty) return const SizedBox.shrink();
+            final cs = Theme.of(context).colorScheme;
             ImageProvider provider;
             if (bg.startsWith('http')) {
               provider = NetworkImage(bg);
@@ -2153,19 +2159,45 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               provider = FileImage(File(bg));
             }
             return Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  image: DecorationImage(
-                    image: provider,
-                    fit: BoxFit.cover,
-                    colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.04), BlendMode.srcATop),
+              child: Stack(
+                children: [
+                  // Background image
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        image: DecorationImage(
+                          image: provider,
+                          fit: BoxFit.cover,
+                          colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.04), BlendMode.srcATop),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  // Vertical gradient overlay (top ~20% -> bottom ~50%) using theme background color
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              cs.background.withOpacity(0.20),
+                              cs.background.withOpacity(0.50),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             );
           }),
           // Main column content
-          Column(
+          Padding(
+            padding: EdgeInsets.only(top: kToolbarHeight + MediaQuery.of(context).padding.top),
+            child: Column(
             children: [
               // Chat messages list (animate when switching topic)
               Expanded(
@@ -2560,6 +2592,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 ),
               ),
             ],
+            ),
           ),
 
           // Backdrop to close sheet on tap
