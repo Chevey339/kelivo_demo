@@ -191,7 +191,7 @@ Future<File?> _renderWidgetDirectly(
         key: boundaryKey,
         child: Container(
           width: width,
-          color: Colors.transparent,
+          color: Theme.of(ctx).colorScheme.background,
           child: Material(
             type: MaterialType.transparency,
             child: content,
@@ -820,7 +820,7 @@ class _ExportedMessageCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: cs.background,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: cs.outlineVariant.withOpacity(0.35)),
+          // removed outer border per UX
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -943,12 +943,12 @@ class _ExportedChatImage extends StatelessWidget {
       ),
       child: ClipRect(
         child: Container(
-          margin: const EdgeInsets.all(16),
-          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.all(6),
+          padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: cs.background,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: cs.outlineVariant.withOpacity(0.35)),
+            // removed outer border per UX
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
