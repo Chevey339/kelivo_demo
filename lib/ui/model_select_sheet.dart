@@ -6,6 +6,7 @@ import '../providers/model_provider.dart';
 import '../icons/lucide_adapter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'model_detail_sheet.dart';
+import 'provider_detail_page.dart';
 
 class ModelSelection {
   final String providerKey;
@@ -286,6 +287,15 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: OutlinedButton.icon(
         onPressed: () async { await _jumpToProvider(key); },
+        onLongPress: () async {
+          // Open provider detail page for quick edits
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ProviderDetailPage(keyName: key, displayName: name),
+            ),
+          );
+          if (mounted) setState(() {});
+        },
         icon: _BrandAvatar(name: name, size: 16),
         label: Text(name, style: const TextStyle(fontSize: 12)),
         style: OutlinedButton.styleFrom(
