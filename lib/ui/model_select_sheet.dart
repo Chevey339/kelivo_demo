@@ -5,6 +5,7 @@ import '../providers/settings_provider.dart';
 import '../providers/model_provider.dart';
 import '../icons/lucide_adapter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'model_detail_sheet.dart';
 
 class ModelSelection {
   final String providerKey;
@@ -241,6 +242,11 @@ class _ModelSelectSheetState extends State<_ModelSelectSheet> {
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: () => Navigator.of(context).pop(ModelSelection(m.providerKey, m.id)),
+          onLongPress: () async {
+            // Edit model overrides in-place; refresh list after closing
+            await showModelDetailSheet(context, providerKey: m.providerKey, modelId: m.id);
+            if (mounted) setState(() {});
+          },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
