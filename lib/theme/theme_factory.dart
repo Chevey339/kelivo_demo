@@ -129,10 +129,12 @@ ThemeData buildLightTheme(ColorScheme? dynamicScheme) {
       ),
       iconTheme: const IconThemeData(color: Colors.black),
       actionsIconTheme: const IconThemeData(color: Colors.black),
-      systemOverlayStyle: SystemUiOverlayStyle(
+      systemOverlayStyle: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.dark,
-        systemNavigationBarColor: scheme.surface,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarContrastEnforced: false,
       ),
     ),
   );
@@ -240,10 +242,12 @@ ThemeData buildDarkTheme(ColorScheme? dynamicScheme) {
       ),
       iconTheme: const IconThemeData(color: Colors.white),
       actionsIconTheme: const IconThemeData(color: Colors.white),
-      systemOverlayStyle: SystemUiOverlayStyle(
+      systemOverlayStyle: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
-        systemNavigationBarColor: scheme.surface,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarContrastEnforced: false,
       ),
     ),
   );

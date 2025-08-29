@@ -117,6 +117,7 @@ class MyApp extends StatelessWidget {
                           systemNavigationBarColor: Colors.transparent,
                           systemNavigationBarIconBrightness: Brightness.light,
                           systemNavigationBarDividerColor: Colors.transparent,
+                          systemNavigationBarContrastEnforced: false,
                         )
                       : const SystemUiOverlayStyle(
                           statusBarColor: Colors.transparent,
@@ -125,6 +126,7 @@ class MyApp extends StatelessWidget {
                           systemNavigationBarColor: Colors.transparent,
                           systemNavigationBarIconBrightness: Brightness.dark,
                           systemNavigationBarDividerColor: Colors.transparent,
+                          systemNavigationBarContrastEnforced: false,
                         );
                   return AnnotatedRegion<SystemUiOverlayStyle>(
                     value: overlay,
