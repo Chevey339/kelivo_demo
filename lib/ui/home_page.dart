@@ -2247,6 +2247,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           final vers = (byGroup[gid] ?? const <ChatMessage>[]).toList()..sort((a,b)=>a.version.compareTo(b.version));
                           final selectedIdx = _versionSelections[gid] ?? (vers.isNotEmpty ? vers.length - 1 : 0);
                           final total = vers.length;
+                          final showMsgNav = context.watch<SettingsProvider>().showMessageNavButtons;
+                          final effectiveTotal = showMsgNav ? total : 1;
+                          final effectiveIndex = showMsgNav ? selectedIdx : 0;
 
                           return Column(
                             mainAxisSize: MainAxisSize.min,
@@ -2277,15 +2280,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                       ),
                                       child: ChatMessageWidget(
                                   message: message,
-                                  versionIndex: selectedIdx,
-                                  versionCount: total,
-                                  onPrevVersion: (selectedIdx > 0) ? () async {
+                                  versionIndex: effectiveIndex,
+                                  versionCount: effectiveTotal,
+                                  onPrevVersion: (showMsgNav && selectedIdx > 0) ? () async {
                                     final next = selectedIdx - 1;
                                     _versionSelections[gid] = next;
                                     await _chatService.setSelectedVersion(_currentConversation!.id, gid, next);
                                     if (mounted) setState(() {});
                                   } : null,
-                                  onNextVersion: (selectedIdx < total - 1) ? () async {
+                                  onNextVersion: (showMsgNav && selectedIdx < total - 1) ? () async {
                                     final next = selectedIdx + 1;
                                     _versionSelections[gid] = next;
                                     await _chatService.setSelectedVersion(_currentConversation!.id, gid, next);
@@ -2686,7 +2689,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           // Scroll-to-bottom button (bottom-right, above input bar)
           Builder(builder: (context) {
             final showSetting = context.watch<SettingsProvider>().showMessageNavButtons;
-            if (!showSetting) return const SizedBox.shrink();
+            // Hide nav button in brand-new chats with no messages
+            if (!showSetting || _messages.isEmpty) return const SizedBox.shrink();
             final cs = Theme.of(context).colorScheme;
             final isDark = Theme.of(context).brightness == Brightness.dark;
             final bottomOffset = (_toolsOpen ? _sheetHeight : 0) + _inputBarHeight + 12;
